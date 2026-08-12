@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose a provider-availability workflow improvement.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Operational problem
+      description: What decision or workflow needs improvement?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the user-visible behavior and affected roles.
+    validations:
+      required: true
+  - type: textarea
+    id: governance
+    attributes:
+      label: Data and governance considerations
+      description: Note permissions, audit, privacy, importer, or retention impacts.

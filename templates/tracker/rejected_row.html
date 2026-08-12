@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Rejected Import Row — Provider Tracker{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">Protected data-quality detail</span><h1>{{ row.source_sheet }} row {{ row.source_row }}</h1><p>{{ row.batch.source_name }} · {{ row.entity_type|title }}</p></div><a class="button secondary" href="{% url 'imports' %}">Back to Import Center</a></div>
+<div class="security-note"><strong>Restricted source data</strong><p>This row may contain operational information. Do not copy it into public issues, logs, screenshots, or fixtures.</p></div><div class="detail-grid"><section class="panel"><span class="eyebrow">Issues</span><h2>Why this row was quarantined</h2><div class="tag-list">{% for issue in row.issue_codes %}<span class="badge danger">{{ issue }}</span>{% endfor %}</div></section><section class="panel"><span class="eyebrow">Normalized preview</span><h2>Safe parsed fields</h2><pre>{{ row.normalized_data|pprint }}</pre></section></div><section class="panel"><span class="eyebrow">Original row</span><h2>Authorized review only</h2><pre>{{ row.raw_data|pprint }}</pre></section>
+{% endblock %}

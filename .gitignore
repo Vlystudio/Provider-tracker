@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Databases, caches, logs, and generated artifacts
+*.sqlite3
+*.db
+*.log
+logs/
+staticfiles/
+uploads/
+exports/
+work/
+*.dump
+
+# Source workbooks and imported operational data
+*.xlsx
+*.xlsm
+*.xls
+private-data/
+imported-raw/
+
+# Tooling and editor state
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+AGENTS.md
+node_modules
