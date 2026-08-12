@@ -1,0 +1,63 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Provider availability operations platform">
+  <title>{% block title %}Provider Tracker{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
+  <script defer src="{% static 'js/app.js' %}"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  {% if user.is_authenticated %}
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <a href="{% url 'dashboard' %}" class="brand" aria-label="Provider Tracker dashboard">
+        <span class="brand-mark" aria-hidden="true">PT</span>
+        <span><strong>Provider Tracker</strong><small>Availability operations</small></span>
+      </a>
+      <nav class="nav-list">
+        {% if 'dashboard' in allowed_nav %}<a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"><span>Overview</span>Dashboard</a>{% endif %}
+        {% if 'new_call' in allowed_nav %}<a href="{% url 'new_call' %}" class="{% if request.resolver_match.url_name == 'new_call' %}active{% endif %}"><span>Workflow</span>New Call</a>{% endif %}
+        {% if 'provider_search' in allowed_nav %}<a href="{% url 'provider_search' %}" class="{% if request.resolver_match.url_name == 'provider_search' %}active{% endif %}"><span>Network</span>Provider Search</a>{% endif %}
+        {% if 'call_log' in allowed_nav %}<a href="{% url 'call_log' %}" class="{% if request.resolver_match.url_name == 'call_log' %}active{% endif %}"><span>History</span>Call Log</a>{% endif %}
+        {% if 'authorization_summary' in allowed_nav %}<a href="{% url 'authorization_summary' %}" class="{% if 'authorization' in request.resolver_match.url_name %}active{% endif %}"><span>Outcomes</span>Authorization Summary</a>{% endif %}
+        {% if 'review_queue' in allowed_nav %}<a href="{% url 'review_queue' %}" class="{% if request.resolver_match.url_name == 'review_queue' %}active{% endif %}"><span>Follow-up</span>Review Queue</a>{% endif %}
+        {% if 'facilities' in allowed_nav %}<a href="{% url 'facilities' %}" class="{% if 'facility' in request.resolver_match.url_name %}active{% endif %}"><span>Directory</span>Facilities</a>{% endif %}
+        {% if 'reports' in allowed_nav %}<a href="{% url 'reports' %}" class="{% if request.resolver_match.url_name == 'reports' %}active{% endif %}"><span>Insights</span>Reports</a>{% endif %}
+        {% if 'automations' in allowed_nav %}<a href="{% url 'automations' %}" class="{% if request.resolver_match.url_name == 'automations' %}active{% endif %}"><span>Operations</span>Automation Center</a>{% endif %}
+        {% if 'imports' in allowed_nav %}<a href="{% url 'imports' %}" class="{% if request.resolver_match.url_name == 'imports' %}active{% endif %}"><span>Governance</span>Import Center</a>{% endif %}
+        {% if 'administration' in allowed_nav %}<a href="{% url 'administration' %}" class="{% if request.resolver_match.url_name == 'administration' %}active{% endif %}"><span>Settings</span>Administration</a>{% endif %}
+        {% if 'audit' in allowed_nav %}<a href="{% url 'audit_history' %}" class="{% if request.resolver_match.url_name == 'audit_history' %}active{% endif %}"><span>Controls</span>Audit History</a>{% endif %}
+      </nav>
+      <div class="sidebar-footer">
+        <a href="{% url 'comparison' %}">Why web, not Excel?</a>
+        <div class="user-chip"><span>{{ user.profile.initials|default:"U" }}</span><div><strong>{{ user.profile.display_name|default:user.username }}</strong><small>{{ user.profile.get_role_display }}</small></div></div>
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="text-button" type="submit">Sign out</button></form>
+      </div>
+    </aside>
+    <header class="mobile-header">
+      <a href="{% url 'dashboard' %}" class="brand"><span class="brand-mark">PT</span><strong>Provider Tracker</strong></a>
+      <button type="button" class="menu-button" aria-controls="mobile-nav" aria-expanded="false" data-menu-toggle>Menu</button>
+    </header>
+    <nav id="mobile-nav" class="mobile-nav" hidden>
+      {% if 'dashboard' in allowed_nav %}<a href="{% url 'dashboard' %}">Dashboard</a>{% endif %}
+      {% if 'new_call' in allowed_nav %}<a href="{% url 'new_call' %}">New Call</a>{% endif %}
+      {% if 'provider_search' in allowed_nav %}<a href="{% url 'provider_search' %}">Provider Search</a>{% endif %}
+      {% if 'call_log' in allowed_nav %}<a href="{% url 'call_log' %}">Call Log</a>{% endif %}
+      {% if 'review_queue' in allowed_nav %}<a href="{% url 'review_queue' %}">Review Queue</a>{% endif %}
+      {% if 'reports' in allowed_nav %}<a href="{% url 'reports' %}">Reports</a>{% endif %}
+    </nav>
+    <main id="main-content" class="main-content" tabindex="-1">
+      {% if messages %}<div class="message-stack" aria-live="polite">{% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% else %}
+    <main id="main-content" tabindex="-1">{% block public_content %}{% endblock %}</main>
+  {% endif %}
+</body>
+</html>

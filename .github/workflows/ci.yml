@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feature/python-rebuild]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      DJANGO_DEBUG: "true"
+      DEMO_MODE: "true"
+      DJANGO_SECRET_KEY: ci-only-not-for-deployment
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Format
+        run: ruff format --check .
+      - name: Lint
+        run: ruff check .
+      - name: Django system checks
+        run: python manage.py check
+      - name: Migration consistency
+        run: python manage.py makemigrations --check
+      - name: Migrate and test
+        run: |
+          python manage.py migrate
+          pytest
+      - name: Collect static files
+        run: python manage.py collectstatic --noinput
+      - name: Dependency audit
+        run: pip-audit -r requirements.txt
+      - name: Container build
+        run: docker build --tag provider-tracker:ci .
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

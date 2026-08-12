@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+__pycache__
+*.py[cod]
+*.sqlite3
+*.xlsx
+*.xlsm
+.env
+.env.*
+!.env.example
+work
+uploads
+exports
+staticfiles
+.pytest_cache
+.ruff_cache
