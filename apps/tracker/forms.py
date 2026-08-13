@@ -175,6 +175,7 @@ class CallLogFilterForm(StyledFormMixin, forms.Form):
         callers = (
             ProviderCall.objects.select_related("caller")
             .values_list("caller_id", "caller__username")
+            .order_by("caller__username", "caller_id")
             .distinct()
         )
         self.fields["caller"].choices = [("", "Any caller"), *callers]
@@ -227,6 +228,7 @@ class ReportFilterForm(StyledFormMixin, forms.Form):
         callers = (
             ProviderCall.objects.select_related("caller")
             .values_list("caller_id", "caller__username")
+            .order_by("caller__username", "caller_id")
             .distinct()
         )
         self.fields["caller"].choices = [("", "Any caller"), *callers]

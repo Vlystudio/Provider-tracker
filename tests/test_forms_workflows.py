@@ -4,7 +4,12 @@ import pytest
 from django.urls import reverse
 
 from apps.accounts.models import UserProfile
-from apps.tracker.forms import AuthorizationCallForm, ProviderSearchForm
+from apps.tracker.forms import (
+    AuthorizationCallForm,
+    CallLogFilterForm,
+    ProviderSearchForm,
+    ReportFilterForm,
+)
 from apps.tracker.models import AuditEvent, DuplicateCallGroup, ProviderCall, ReviewTask
 from apps.tracker.services.workflows import create_authorization_call
 
@@ -70,6 +75,28 @@ def test_server_recalculates_browser_outcome(domain):
     )
     assert call.result_code == "does_not_meet_availability_guidelines"
     assert call.result_phrase != "forged"
+
+
+@pytest.mark.django_db
+def test_caller_filters_list_each_user_once(domain):
+    for index in range(2):
+        ProviderCall.objects.create(
+            authorization=domain["authorization"],
+            facility=domain["facility"],
+            specialty=domain["specialty"],
+            diagnosis=domain["diagnosis"],
+            caller=domain["users"]["ura_user"],
+            call_at=domain["now"] - timedelta(hours=index),
+            accepting_new_patients="yes",
+            can_treat_diagnosis="yes",
+            can_schedule_within_four_weeks="yes",
+            import_fingerprint=f"caller-filter-{index}",
+        )
+
+    for form_class in (CallLogFilterForm, ReportFilterForm):
+        choices = list(form_class().fields["caller"].choices)
+        caller_values = [value for value, _label in choices if value]
+        assert caller_values == [domain["users"]["ura_user"].pk]
 
 
 @pytest.mark.django_db
