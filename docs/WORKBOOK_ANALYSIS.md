@@ -39,5 +39,5 @@ Blank coordinate cells remain blank. They are not converted to numeric zero. The
 - The importer reads only selected XML sheet entries and clears rows from memory as it goes.
 - Compressed uploads default to 100 MB, expanded content to 512 MB, and each source sheet to 100,000 rows.
 - Invalid paths, containers, metadata, workbook types, or required sheets fail before a database write.
-- Cached result phrases may be kept for comparison, but the site always calculates the saved result.
+- Cached result phrases may be retained for reconciliation, but the site always calculates the saved result.
 - Preview and import do not modify either source workbook.

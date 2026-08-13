@@ -22,7 +22,7 @@ Lower-priority facility rows can fill a missing phone number or location, but th
 
 ## Value cleanup
 
-The importer repairs nonbreaking spaces and known encoding problems, makes pipe spacing consistent, treats `Unkown` as `Unknown`, handles `NA` and `N/A` the same way, keeps ZIP codes at five characters, and stores both the original and cleaned phone number. A result copied from a workbook is used only for comparison; the site calculates the saved result.
+The importer repairs nonbreaking spaces and known encoding problems, makes pipe spacing consistent, treats `Unkown` as `Unknown`, handles `NA` and `N/A` the same way, keeps ZIP codes at five characters, and stores both the original and cleaned phone number. A result copied from a workbook is retained only for reconciliation; the site calculates the saved result.
 
 ## Rejected rows
 
