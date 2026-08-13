@@ -27,7 +27,7 @@ exports/
 work/
 *.dump
 
-# Source workbooks and imported operational data
+# Source workbooks and imported work data
 *.xlsx
 *.xlsm
 *.xls

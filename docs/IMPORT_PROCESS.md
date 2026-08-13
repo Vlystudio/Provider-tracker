@@ -2,30 +2,32 @@
 
 ## Preview
 
-Preview validates the container, recognizes required sheets, hashes the file, streams selected XML rows, normalizes headers and values, stages row outcomes in memory, reconciles source priority, and returns a redacted summary. It performs no canonical database writes and never modifies the workbook.
+A preview checks the file container and required sheets, calculates the file hash, reads selected XML rows, cleans the headers and values, matches records from the available sources, and returns a summary with private details removed. It does not write to the database or change the workbook.
 
-## Apply
+## Import
 
-Apply repeats the same deterministic plan inside a database transaction. Source hash + importer version prevents repeated batches; call fingerprints prevent repeated operational evidence. Row results retain source sheet, row, fingerprint, status, normalized values, raw evidence, and issue codes behind administrator/auditor permissions.
+Importing runs the same checks again inside a database transaction. The file hash and importer version prevent the same batch from being added twice. Call fingerprints prevent duplicate calls. Administrators and auditors can review the source sheet, row number, fingerprint, status, parsed values, original values, and issue codes.
 
-## Source precedence
+## Source order
 
-1. Admin weekly call log.
-2. Admin facility and mapping masters.
-3. User weekly call log.
-4. Admin monthly archive.
-5. User facility and mapping copies.
+When the same record appears more than once, this order is used:
 
-Lower-priority facility rows may fill missing contact or location fields but do not rename the preferred record.
+1. Admin weekly call log
+2. Admin facility and mapping lists
+3. User weekly call log
+4. Admin monthly archive
+5. User facility and mapping copies
 
-## Normalization
+Lower-priority facility rows can fill a missing phone number or location, but they do not rename the preferred record.
 
-The importer repairs nonbreaking spaces and encoding artifacts, normalizes pipe spacing, treats `Unkown` as `Unknown`, treats `NA` and `N/A` consistently, preserves ZIPs as five characters, and stores both original and normalized phone values. Cached result text is comparison evidence only.
+## Value cleanup
 
-## Quarantine conditions
+The importer repairs nonbreaking spaces and known encoding problems, makes pipe spacing consistent, treats `Unkown` as `Unknown`, handles `NA` and `N/A` the same way, keeps ZIP codes at five characters, and stores both the original and cleaned phone number. A result copied from a workbook is used only for comparison; the site calculates the saved result.
 
-Missing facility or timestamp, invalid ZIP coordinates, incomplete mappings, malformed archive blocks, unsafe archives, excessive sizes, missing sheets, and invalid containers are rejected safely. Canonical calls with a facility missing from the masters use a review-required placeholder only during explicit apply.
+## Rejected rows
 
-## UI intake
+Rows are rejected when a facility or call time is missing, coordinates are invalid, a mapping is incomplete, an archive section is malformed, or the workbook fails a file safety or size check. During an explicit import, a call whose facility is missing from the facility lists can use a clearly marked placeholder that must be reviewed.
 
-Import Center accepts `.xlsx` and `.xlsm`, sanitizes displayed filenames, limits uploads to 100 MB, offers preview and explicit apply actions, shows hashes/counts/issues/history, and restricts row detail to administrators and auditors.
+## Import page
+
+The Data Import page accepts `.xlsx` and `.xlsm` files up to 100 MB. It cleans displayed filenames, supports preview and import actions, shows counts and issues, and limits original row details to administrators and auditors.

@@ -1,59 +1,70 @@
 # IT Deployment Handoff
 
-This repository is the complete deployable application. It is MIT-licensed, contains only fictional demonstration data, and does not depend on private workbooks at runtime. The application owner does not need to operate the infrastructure. IT can clone the repository, provide production configuration, connect the database, and deploy it using standard container tooling.
+This repository has everything needed to deploy Provider Tracker. It contains fictional sample data and does not need the original workbooks at runtime.
 
-## Supported production topology
+## What IT needs
 
-- Django/Gunicorn web container
-- Celery worker and scheduler containers
-- PostgreSQL 14 or newer with the PostGIS extension enabled
+- A host that can run Docker Compose
+- PostgreSQL 14 or newer with PostGIS enabled
 - Redis 7 or newer
-- organization-managed TLS reverse proxy or ingress
-- organization-managed identity, secrets, monitoring, backup, and recovery controls
+- A TLS reverse proxy or ingress
+- A place to store secrets
+- Database backups, logs, and monitoring
 
-PostgreSQL/PostGIS is the supported SQL backend. Microsoft SQL Server is not a drop-in substitute because geographic search and migrations use PostGIS. Supporting SQL Server would require a separately reviewed database adapter and spatial-query implementation.
+PostgreSQL/PostGIS is the supported production database. SQL Server cannot be substituted without new database and distance-search code.
 
-## Fastest IT deployment
+## Connect the database
 
-The application-only Compose file is intended for an organization-managed PostgreSQL/PostGIS database:
+Create an empty PostgreSQL database and an application user, then:
+
+1. Enable the `postgis` extension with a database administrator account.
+2. Give the application user the permissions Django needs to create and use its schema.
+3. Allow database traffic only from the application.
+4. Require TLS for the database connection.
+5. Store the password in the deployment secret store or a private `.env.production` file.
+
+The required settings are:
+
+```text
+POSTGRES_HOST
+POSTGRES_PORT
+POSTGRES_DB
+POSTGRES_USER
+POSTGRES_PASSWORD
+POSTGRES_SSLMODE
+```
+
+Django migrations create the tables. Migration `0002_postgis_location` adds the geographic point and GiST index used by provider search.
+
+## Deploy
+
+Linux:
 
 ```bash
 git clone https://github.com/Vlystudio/Provider-tracker.git
 cd Provider-tracker
 cp .env.production.example .env.production
-# Fill in .env.production using the organization's secret-management process.
+# Fill in .env.production using the organization's secret process.
 ./scripts/deploy.sh external
 ```
 
-Windows deployment hosts can run:
+Windows:
 
 ```powershell
 Copy-Item .env.production.example .env.production
-# Fill in .env.production using the organization's secret-management process.
+# Fill in .env.production using the organization's secret process.
 .\scripts\deploy.ps1 -Mode external
 ```
 
-The script validates the Compose configuration, builds the image, runs Django's production checks, applies database migrations, starts the services, and prints service status. It never loads demo accounts or fictional seed data.
+The script checks the Compose file, builds the image, runs Django's production checks, applies migrations, starts the web and job services, and prints their status. It does not load sample accounts or sample data.
 
-## Database contract
+## First setup
 
-IT supplies an empty PostgreSQL database and an application login. Before first deployment:
-
-1. Enable the `postgis` extension in the target database using a database administrator account.
-2. Grant the application login connect, schema usage/create, and table/sequence privileges needed for Django migrations and normal reads/writes.
-3. Restrict inbound database networking to the application runtime.
-4. Require TLS and set `POSTGRES_SSLMODE=require` or `verify-full` according to organizational policy.
-5. Put the password in the deployment platform's secret store or the private `.env.production` file; never commit it.
-
-The application uses these variables: `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_SSLMODE`. Django migrations own the application schema. The generated geographic point and GiST index are created by migration `0002_postgis_location`.
-
-## First deployment checklist
-
-1. Set a random `DJANGO_SECRET_KEY` of at least 50 characters.
-2. Set the exact public hostname in `DJANGO_ALLOWED_HOSTS`.
-3. Set the exact HTTPS origin in `CSRF_TRUSTED_ORIGINS`.
+1. Set a random `DJANGO_SECRET_KEY` with at least 50 characters.
+2. Put the public hostname in `DJANGO_ALLOWED_HOSTS`.
+3. Put the exact HTTPS origin in `CSRF_TRUSTED_ORIGINS`.
 4. Keep `DJANGO_DEBUG=false` and `DEMO_MODE=false`.
-5. Configure TLS at the reverse proxy. Set `TRUST_PROXY_SSL_HEADER=true` only when that trusted proxy overwrites `X-Forwarded-Proto`.
+5. Configure TLS at the reverse proxy. Only set `TRUST_PROXY_SSL_HEADER=true` when the trusted proxy replaces `X-Forwarded-Proto`.
 6. Run the deployment script.
 7. Create the first administrator:
 
@@ -61,38 +72,38 @@ The application uses these variables: `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRE
    docker compose --env-file .env.production -f docker-compose.external-db.yml exec web python manage.py createsuperuser
    ```
 
-8. Verify `/health/live/` returns HTTP 200 and `/health/ready/` returns HTTP 200.
-9. Configure monitoring against `/health/ready/` and centralized collection of container stdout/stderr.
-10. Complete organizational security, privacy, accessibility, retention, and production-approval reviews before loading operational data.
+8. Check that `/health/live/` and `/health/ready/` both return HTTP 200.
+9. Monitor `/health/ready/` and collect the container logs.
+10. Finish the organization's security, privacy, accessibility, retention, and release reviews before loading real data.
 
-## Routine operations
+## Updates and logs
 
-Upgrade:
+Update the application:
 
 ```bash
 git pull --ff-only
 ./scripts/deploy.sh external
 ```
 
-View status and logs:
+Check services and recent logs:
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.external-db.yml ps
 docker compose --env-file .env.production -f docker-compose.external-db.yml logs --tail 200 web worker beat
 ```
 
-Stop without deleting data:
+Stop the containers without deleting the database:
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.external-db.yml down
 ```
 
-Database backups should use the organization's managed backup service. A `pg_dump` helper is also provided at `scripts/backup_database.ps1`; restore tests must be scheduled and documented by IT.
+## Backups and rollback
 
-## Rollback
+Use the organization's managed database backup service. A `pg_dump` helper is included at `scripts/backup_database.ps1`. Schedule restore tests as well as backups.
 
-Application rollback is performed by checking out the previously approved Git tag or commit and creating the containers again. Database migrations are forward-oriented; take a verified database backup before every release and have a reviewed data-restoration plan before rolling back a schema-changing release.
+Before each release, take a verified database backup. To roll back the application, check out the last approved tag or commit and build the containers again. Database migrations are forward-oriented, so schema rollback should use a reviewed restoration plan.
 
-## Owner handoff boundary
+## Responsibilities after handoff
 
-The repository supplies application code, schema migrations, container definitions, health endpoints, tests, documentation, and safe configuration examples. IT owns hosting, DNS, certificates, network controls, database and Redis services, secrets, identity integration, backups, monitoring, incident response, upgrades, and production authorization. No private workbook or operational record is required to evaluate or deploy the code.
+The repository provides the application code, migrations, containers, health checks, tests, documentation, and configuration examples. IT is responsible for hosting, DNS, TLS certificates, network rules, database and Redis services, secrets, sign-in integration, backups, monitoring, incident response, updates, and production approval.

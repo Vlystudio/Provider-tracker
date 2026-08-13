@@ -1,41 +1,43 @@
-# Ten-Minute Demonstration Guide
+# Demo Guide
 
-## 0:00–1:00 — Purpose
+Use only the fictional records loaded by `seed_demo`.
 
-Open the landing page and explain that the demonstration replaces split admin/user workbooks with one source of truth. Use only the fictional records provided by `seed_demo`.
+## Start
 
-## 1:00–2:00 — Dashboard
+Open the home page and sign in as `admin.demo`. Explain that calls, facilities, follow-ups, and reports now live in the same site.
 
-Sign in as `admin.demo`. Show the current-week period, completed-call denominator, outcomes, reviews, duplicate warnings, import issues, facilities needing attention, recent authorizations, and upcoming rules.
+## Dashboard
 
-## 2:00–3:00 — Provider search
+Show this week's calls and results, items to review, recent authorizations, and upcoming scheduled jobs.
 
-Open Provider Search. Use ZIP `02108`, radius 25 miles, and diagnosis `F41.1`. Point out distance, latest evidence, availability, schedule, result, quality warning, and next-step recommendation.
+## Provider search
 
-## 3:00–4:30 — Guided call
+Open Provider Search. Use ZIP `02108`, a 25-mile radius, and diagnosis `F41.1`. Show the distance, latest call, availability, schedule, and suggested next step.
 
-Start a call from a result. Enter a new fictional authorization such as `DEMO-LIVE-100`, keep member ZIP `02108`, select the clinical context, choose positive accepting/treating/scheduling values, and save. Show the live preview, then explain that the server recalculates it independently.
+## Add a call
 
-## 4:30–5:30 — Authorization summary
+Start from one of the search results. Use a fictional authorization such as `DEMO-LIVE-100`, keep member ZIP `02108`, fill in the call fields, and save. The result preview updates while the form is being completed, and the server checks it again when the call is saved.
 
-The save confirmation opens the authorization summary. Show all call attempts, the narrative stop-after-second-success rule, copy action, print view, and PDF export.
+## Authorization summary
 
-## 5:30–6:30 — Review queue
+After saving, show the call list, copy button, print view, and PDF export. The summary stops after the second successful provider call.
 
-Open Review Queue. Show overdue-first ordering and the newly created seven-day follow-up. Resolve a fictional task with notes and a resolution.
+## Review queue
 
-## 6:30–7:30 — Reports
+Open Review Queue. Overdue work is listed first. Open a sample task and save a resolution.
 
-Open Reports as the administrator or report-viewer role. Show the new call in total and success denominators, adjust the period, export Excel, and save a reproducible snapshot.
+## Reports
 
-## 7:30–8:30 — Automation
+Open Reports. Change the dates, show the new call in the totals, export Excel, and save the report.
 
-Open Automation Center and run a rule. Show idempotent reuse when the same schedule window runs again, affected count, outcome, and history.
+## Scheduled jobs
 
-## 8:30–9:15 — Audit and imports
+Open Scheduled Jobs and run one job. Running the same job twice for the same period reuses the first result.
 
-Open Audit History and locate the call, review, report, and automation events. In Import Center, explain preview/apply, hashes, rejected-row quarantine, and why cached formulas are not canonical.
+## Change history and imports
 
-## 9:15–10:00 — Comparison and close
+Open Change History to find the call, review, report, and job entries. In Data Import, show the workbook preview and rejected-row list. A preview does not add records or change the source file.
 
-Open Excel vs Web Application. Summarize targeted calculations, server pagination, named fields, concurrent access, automation, reproducible reporting, and complete history. Close by distinguishing the usable local demonstration from the additional privacy, identity, infrastructure, and organizational work required for production.
+## Finish
+
+Open Why Use the Site? and show the basic difference between the workbooks and the site. Remind viewers that the local demo is ready for evaluation, while IT still needs to complete security, identity, infrastructure, and production approval before using real data.

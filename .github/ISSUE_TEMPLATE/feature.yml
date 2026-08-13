@@ -1,13 +1,13 @@
 name: Feature request
-description: Propose a provider-availability workflow improvement.
+description: Suggest an improvement to Provider Tracker.
 title: "[Feature]: "
 labels: [enhancement]
 body:
   - type: textarea
     id: problem
     attributes:
-      label: Operational problem
-      description: What decision or workflow needs improvement?
+      label: What needs improvement?
+      description: What is difficult or missing today?
     validations:
       required: true
   - type: textarea
@@ -18,7 +18,7 @@ body:
     validations:
       required: true
   - type: textarea
-    id: governance
+    id: data
     attributes:
-      label: Data and governance considerations
-      description: Note permissions, audit, privacy, importer, or retention impacts.
+      label: Data and access notes
+      description: Note any permissions, privacy, import, history, or retention changes.

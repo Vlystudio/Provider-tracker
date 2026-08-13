@@ -1,28 +1,28 @@
 {% extends "base.html" %}
-{% block title %}Provider Tracker — One reliable source{% endblock %}
+{% block title %}Provider Tracker{% endblock %}
 {% block public_content %}
 <div class="landing-shell">
-  <header class="landing-nav"><a class="brand dark" href="/"><span class="brand-mark">PT</span><span><strong>Provider Tracker</strong><small>URA availability operations</small></span></a><a href="{% url 'login' %}" class="button secondary">Staff sign in</a></header>
+  <header class="landing-nav"><a class="brand dark" href="/"><span class="brand-mark">PT</span><span><strong>Provider Tracker</strong><small>Provider availability</small></span></a><a href="{% url 'login' %}" class="button secondary">Staff sign in</a></header>
   <section class="hero">
     <div class="hero-copy">
-      <span class="eyebrow">A clearer way to manage provider access</span>
-      <h1>One live view of every provider call, follow-up, and outcome.</h1>
-      <p>Replace split workbooks and fragile formulas with validated workflows, searchable evidence, automatic review queues, and a complete audit trail.</p>
-      <div class="hero-actions"><a class="button primary" href="{% url 'login' %}">Sign in securely</a><a class="button ghost" href="#demo-accounts">Explore the demo</a></div>
-      <div class="trust-row"><span>Validated inputs</span><span>Role-based access</span><span>Live reporting</span></div>
+      <span class="eyebrow">Provider availability tracker</span>
+      <h1>Keep provider calls and follow-ups in one place.</h1>
+      <p>Search facilities, record calls, check availability, and see what still needs attention. Everyone with access works from the same information.</p>
+      <div class="hero-actions"><a class="button primary" href="{% url 'login' %}">Staff sign in</a>{% if demo_mode %}<a class="button ghost" href="#demo-accounts">Try the demo</a>{% endif %}</div>
+      <div class="trust-row"><span>Call tracking</span><span>Provider search</span><span>Reports</span></div>
     </div>
-    <div class="hero-preview" aria-label="Example operations overview">
-      <div class="preview-head"><span>Weekly operations</span><span class="status-dot">Live</span></div>
-      <div class="preview-grid"><div><small>Calls this week</small><strong>48</strong></div><div><small>Success rate</small><strong>62.5%</strong></div><div><small>Open reviews</small><strong>9</strong></div></div>
-      <div class="preview-list"><div><span class="avatar">NR</span><p><strong>North River Behavioral Health</strong><small>Verified 18 minutes ago</small></p><span class="badge success">Meets</span></div><div><span class="avatar amber">SH</span><p><strong>Summit Health Center</strong><small>Follow-up due today</small></p><span class="badge warning">Due</span></div><div><span class="avatar slate">LV</span><p><strong>Lakeview Medical Group</strong><small>Coordinate review</small></p><span class="badge neutral">Review</span></div></div>
+    <div class="hero-preview" aria-label="Example dashboard">
+      <div class="preview-head"><span>This week</span><span class="status-dot">Updated</span></div>
+      <div class="preview-grid"><div><small>Calls</small><strong>48</strong></div><div><small>Met guidelines</small><strong>62.5%</strong></div><div><small>Open reviews</small><strong>9</strong></div></div>
+      <div class="preview-list"><div><span class="avatar">NR</span><p><strong>North River Behavioral Health</strong><small>Called 18 minutes ago</small></p><span class="badge success">Meets</span></div><div><span class="avatar amber">SH</span><p><strong>Summit Health Center</strong><small>Follow-up due today</small></p><span class="badge warning">Due</span></div><div><span class="avatar slate">LV</span><p><strong>Lakeview Medical Group</strong><small>Location needs review</small></p><span class="badge neutral">Review</span></div></div>
     </div>
   </section>
-  <section class="benefit-strip"><article><span>01</span><h2>One source of truth</h2><p>Facilities, calls, and authorization outcomes stay connected in one canonical database.</p></article><article><span>02</span><h2>Guided work</h2><p>Business rules run consistently on the server and show clear next steps.</p></article><article><span>03</span><h2>Ready to explain</h2><p>Every report states its period, denominator, provenance, and audit history.</p></article></section>
-  {% if demo_mode %}<section id="demo-accounts" class="demo-section"><div><span class="eyebrow">Demonstration mode</span><h2>See each role’s focused workspace.</h2><p>These one-click accounts exist only in local demo mode and are refused by production settings.</p></div><div class="demo-grid">
-    <form method="post" action="{% url 'demo_login' 'ura' %}">{% csrf_token %}<button><strong>URA User</strong><span>Enter calls, search providers, resolve follow-ups</span></button></form>
-    <form method="post" action="{% url 'demo_login' 'administrator' %}">{% csrf_token %}<button><strong>Administrator</strong><span>Manage imports, automation, configuration</span></button></form>
-    <form method="post" action="{% url 'demo_login' 'viewer' %}">{% csrf_token %}<button><strong>Report Viewer</strong><span>Explore operational reporting and outcomes</span></button></form>
-    <form method="post" action="{% url 'demo_login' 'auditor' %}">{% csrf_token %}<button><strong>Auditor</strong><span>Review governance, imports, and event history</span></button></form>
+  <section class="benefit-strip"><article><span>01</span><h2>Calls stay connected</h2><p>Facilities, calls, and authorization results are stored together.</p></article><article><span>02</span><h2>Next steps are clear</h2><p>The site applies the same rules each time and adds follow-up work when needed.</p></article><article><span>03</span><h2>Reports use current data</h2><p>Each report shows the dates covered and how its totals were calculated.</p></article></section>
+  {% if demo_mode %}<section id="demo-accounts" class="demo-section"><div><span class="eyebrow">Local demo</span><h2>Try the site with a sample role.</h2><p>These accounts use made-up data and are available only when the site is running in demo mode.</p></div><div class="demo-grid">
+    <form method="post" action="{% url 'demo_login' 'ura' %}">{% csrf_token %}<button><strong>URA User</strong><span>Record calls, search providers, and finish follow-ups</span></button></form>
+    <form method="post" action="{% url 'demo_login' 'administrator' %}">{% csrf_token %}<button><strong>Administrator</strong><span>Manage users, imports, settings, and scheduled jobs</span></button></form>
+    <form method="post" action="{% url 'demo_login' 'viewer' %}">{% csrf_token %}<button><strong>Report Viewer</strong><span>View call totals and availability results</span></button></form>
+    <form method="post" action="{% url 'demo_login' 'auditor' %}">{% csrf_token %}<button><strong>Auditor</strong><span>Review imports and change history</span></button></form>
   </div></section>{% endif %}
 </div>
 {% endblock %}
