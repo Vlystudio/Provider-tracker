@@ -1,0 +1,88 @@
+.table-panel {
+  padding: 0;
+  overflow: visible;
+}
+.table-panel > .section-heading {
+  padding: 18px 18px 0;
+}
+.table-wrap {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th {
+  padding: 11px 13px;
+  color: var(--slate-500);
+  background: var(--slate-100);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+  white-space: nowrap;
+}
+td {
+  padding: 12px 13px;
+  color: var(--slate-700);
+  border-top: 1px solid var(--slate-100);
+  font-size: 13px;
+  vertical-align: top;
+}
+td strong,
+td small {
+  display: block;
+}
+td strong {
+  color: var(--slate-900);
+}
+td small {
+  margin-top: 2px;
+  color: var(--slate-500);
+  font-size: 12px;
+}
+.detail-row td {
+  padding-top: 0;
+  background: #fafbfc;
+}
+.row-detail {
+  position: relative;
+}
+.row-detail summary {
+  color: var(--teal-700);
+  font-weight: 700;
+}
+.row-detail > div {
+  position: absolute;
+  right: 0;
+  z-index: 10;
+  width: 300px;
+  padding: 14px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 12px 28px #0b17291f;
+}
+.row-detail p {
+  margin: 3px 0 10px;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  color: var(--slate-500);
+  border-top: 1px solid var(--slate-100);
+  font-size: 13px;
+}
+.pagination div {
+  display: flex;
+  gap: 8px;
+}
+.pagination a {
+  padding: 6px 10px;
+  color: var(--slate-700);
+  border: 1px solid var(--slate-300);
+  border-radius: 5px;
+}

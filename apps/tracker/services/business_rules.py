@@ -41,6 +41,7 @@ def normalize_key(value) -> str:
 
 
 def normalize_header(value) -> str:
+    """Collapse workbook header variations into one importer lookup key."""
     return re.sub(r"[^a-z0-9]+", "", normalize_key(value))
 
 
@@ -84,6 +85,7 @@ def stable_hash(*parts) -> str:
 def calculate_result(
     *, did_not_leave_vm, accepting, can_treat, schedule, urgent_referral_required=False
 ) -> Result:
+    """Apply the approved outcome rules in precedence order."""
     if did_not_leave_vm:
         code = "unable_to_contact"
     elif accepting != "yes" or can_treat != "yes":
@@ -155,6 +157,7 @@ def is_fdm_eligible(call, *, mapping_confirmed, as_of=None):
 
 
 def authorization_narrative(authorization, calls=None):
+    """Summarize outreach through the second successful provider outcome."""
     calls = list(
         calls
         if calls is not None

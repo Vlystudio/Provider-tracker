@@ -1,28 +1,56 @@
 {% extends "base.html" %}
 {% block title %}Provider Tracker{% endblock %}
 {% block public_content %}
-<div class="landing-shell">
-  <header class="landing-nav"><a class="brand dark" href="/"><span class="brand-mark">PT</span><span><strong>Provider Tracker</strong><small>Provider availability</small></span></a><a href="{% url 'login' %}" class="button secondary">Staff sign in</a></header>
-  <section class="hero">
-    <div class="hero-copy">
-      <span class="eyebrow">Provider availability tracker</span>
-      <h1>Keep provider calls and follow-ups in one place.</h1>
-      <p>Search facilities, record calls, check availability, and see what still needs attention. Everyone with access works from the same information.</p>
-      <div class="hero-actions"><a class="button primary" href="{% url 'login' %}">Staff sign in</a>{% if demo_mode %}<a class="button ghost" href="#demo-accounts">Try the demo</a>{% endif %}</div>
-      <div class="trust-row"><span>Call tracking</span><span>Provider search</span><span>Reports</span></div>
-    </div>
-    <div class="hero-preview" aria-label="Example dashboard">
-      <div class="preview-head"><span>This week</span><span class="status-dot">Updated</span></div>
-      <div class="preview-grid"><div><small>Calls</small><strong>48</strong></div><div><small>Met guidelines</small><strong>62.5%</strong></div><div><small>Open reviews</small><strong>9</strong></div></div>
-      <div class="preview-list"><div><span class="avatar">NR</span><p><strong>North River Behavioral Health</strong><small>Called 18 minutes ago</small></p><span class="badge success">Meets</span></div><div><span class="avatar amber">SH</span><p><strong>Summit Health Center</strong><small>Follow-up due today</small></p><span class="badge warning">Due</span></div><div><span class="avatar slate">LV</span><p><strong>Lakeview Medical Group</strong><small>Location needs review</small></p><span class="badge neutral">Review</span></div></div>
-    </div>
-  </section>
-  <section class="benefit-strip"><article><span>01</span><h2>Calls stay connected</h2><p>Facilities, calls, and authorization results are stored together.</p></article><article><span>02</span><h2>Next steps are clear</h2><p>The site applies the same rules each time and adds follow-up work when needed.</p></article><article><span>03</span><h2>Reports use current data</h2><p>Each report shows the dates covered and how its totals were calculated.</p></article></section>
-  {% if demo_mode %}<section id="demo-accounts" class="demo-section"><div><span class="eyebrow">Local demo</span><h2>Try the site with a sample role.</h2><p>These accounts use made-up data and are available only when the site is running in demo mode.</p></div><div class="demo-grid">
-    <form method="post" action="{% url 'demo_login' 'ura' %}">{% csrf_token %}<button><strong>URA User</strong><span>Record calls, search providers, and finish follow-ups</span></button></form>
-    <form method="post" action="{% url 'demo_login' 'administrator' %}">{% csrf_token %}<button><strong>Administrator</strong><span>Manage users, imports, settings, and scheduled jobs</span></button></form>
-    <form method="post" action="{% url 'demo_login' 'viewer' %}">{% csrf_token %}<button><strong>Report Viewer</strong><span>View call totals and availability results</span></button></form>
-    <form method="post" action="{% url 'demo_login' 'auditor' %}">{% csrf_token %}<button><strong>Auditor</strong><span>Review imports and change history</span></button></form>
-  </div></section>{% endif %}
-</div>
+  <div class="public-shell">
+    <header class="public-header">
+      <a class="brand brand-public" href="{% url 'landing' %}">
+        <span class="brand-mark" aria-hidden="true">PT</span>
+        <span>
+          <strong>Provider Tracker</strong>
+          <small>URA operations</small>
+        </span>
+      </a>
+      <a href="{% url 'login' %}" class="button secondary">Staff sign in</a>
+    </header>
+    <section class="entry-intro">
+      <div>
+        <span class="section-label">Provider availability</span>
+        <h1>Provider Availability Tracker</h1>
+        <p>Record provider calls, review current availability, and manage follow-up work.</p>
+        <a class="button primary" href="{% url 'login' %}">Staff sign in</a>
+      </div>
+      <dl class="entry-tasks" aria-label="Available staff tasks">
+        <div><dt>Find a provider</dt><dd>Search by ZIP and clinical need.</dd></div>
+        <div><dt>Record a call</dt><dd>Save availability and next steps.</dd></div>
+        <div><dt>Review open work</dt><dd>See follow-ups, imports, and reports.</dd></div>
+      </dl>
+    </section>
+    {% if demo_mode %}
+      <section id="demo-accounts" class="demo-access" aria-labelledby="demo-heading">
+        <div>
+          <span class="section-label">Local demo</span>
+          <h2 id="demo-heading">Open a sample account</h2>
+          <p>Sample accounts use made-up data and are available only in demo mode.</p>
+        </div>
+        <div class="demo-list">
+          <form method="post" action="{% url 'demo_login' 'ura' %}">
+            {% csrf_token %}
+            <button><strong>URA User</strong><span>Calls, provider search, and follow-ups</span></button>
+          </form>
+          <form method="post" action="{% url 'demo_login' 'administrator' %}">
+            {% csrf_token %}
+            <button><strong>Administrator</strong><span>Users, imports, and automations</span></button>
+          </form>
+          <form method="post" action="{% url 'demo_login' 'viewer' %}">
+            {% csrf_token %}
+            <button><strong>Report Viewer</strong><span>Call totals and availability results</span></button>
+          </form>
+          <form method="post" action="{% url 'demo_login' 'auditor' %}">
+            {% csrf_token %}
+            <button><strong>Auditor</strong><span>Imports and change history</span></button>
+          </form>
+        </div>
+      </section>
+    {% endif %}
+  </div>
 {% endblock %}

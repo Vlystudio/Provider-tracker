@@ -24,7 +24,7 @@ def report_metrics(*, start=None, end=None, line_of_business=None, specialty=Non
     successful = calls.filter(result_code__in=SUCCESS_CODES).count()
     unable = calls.filter(result_code="unable_to_contact").count()
     urgent = calls.filter(result_code="meets_availability_guidelines_urgent").count()
-    by_week = list(
+    by_day = list(
         calls.extra(select={"period": "date(call_at)"})
         .values("period")
         .annotate(total=Count("id"), successful=Count("id", filter=Q(result_code__in=SUCCESS_CODES)))
@@ -42,7 +42,8 @@ def report_metrics(*, start=None, end=None, line_of_business=None, specialty=Non
         "unable_rate": round(unable / total * 100, 1) if total else 0,
         "urgent_referral_successes": urgent,
         "open_reviews": ReviewTask.objects.exclude(status__in=["resolved", "dismissed"]).count(),
-        "by_week": by_week,
+        "by_day": by_day,
+        "chart_days": by_day[-10:],
         "by_specialty": by_specialty,
     }
 

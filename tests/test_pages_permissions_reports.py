@@ -24,7 +24,6 @@ ROLE_PAGES = {
         "imports",
         "administration",
         "audit_history",
-        "comparison",
     },
     UserProfile.Role.URA_USER: {
         "dashboard",
@@ -34,7 +33,6 @@ ROLE_PAGES = {
         "authorization_summary",
         "review_queue",
         "facilities",
-        "comparison",
     },
     UserProfile.Role.REPORT_VIEWER: {
         "dashboard",
@@ -43,7 +41,6 @@ ROLE_PAGES = {
         "authorization_summary",
         "facilities",
         "reports",
-        "comparison",
     },
     UserProfile.Role.AUDITOR: {
         "dashboard",
@@ -53,7 +50,6 @@ ROLE_PAGES = {
         "reports",
         "imports",
         "audit_history",
-        "comparison",
     },
 }
 
@@ -199,9 +195,50 @@ def test_exports_are_downloadable(client, domain):
 @pytest.mark.django_db
 def test_empty_and_validation_states_render(client, domain):
     client.force_login(domain["users"][UserProfile.Role.URA_USER])
-    empty = client.get(reverse("call_log"))
+    empty = client.get(reverse("call_log"), {"facility": "No matching facility"})
     invalid = client.get(reverse("provider_search"), {"member_postal_code": "02108", "radius": 25})
     missing = client.get("/facilities/00000000-0000-0000-0000-000000000000/")
     assert b"No calls match" in empty.content
     assert b"Choose exactly one diagnosis" in invalid.content
     assert missing.status_code == 404
+
+
+@pytest.mark.django_db
+def test_retired_pitch_route_and_links_are_absent(client, domain):
+    client.force_login(domain["users"][UserProfile.Role.ADMINISTRATOR])
+    retired_path = "/" + "-".join(("excel", "vs", "web")) + "/"
+    response = client.get(retired_path)
+    navigation = client.get(reverse("dashboard"))
+    assert response.status_code == 404
+    assert b"Excel" + b" vs Web" not in navigation.content
+    assert b"About " + b"the site" not in navigation.content
+
+
+@pytest.mark.django_db
+def test_landing_page_is_a_practical_sign_in(client):
+    response = client.get(reverse("landing"))
+    assert response.status_code == 200
+    assert b"Provider Availability Tracker" in response.content
+    assert b"Record provider calls" in response.content
+    assert b"Staff sign in" in response.content
+    assert b"Why use " + b"the site" not in response.content
+
+
+@pytest.mark.django_db
+def test_provider_search_uses_accessible_secondary_filters(client, domain):
+    client.force_login(domain["users"][UserProfile.Role.URA_USER])
+    response = client.get(reverse("provider_search"))
+    html = response.content.decode()
+    assert "<details" in html
+    assert "<summary>More filters</summary>" in html
+    assert html.index("Member ZIP") < html.index("More filters")
+    assert html.index("Facility type") > html.index("More filters")
+
+
+@pytest.mark.django_db
+def test_reports_include_a_table_alternative_for_the_chart(client, domain):
+    client.force_login(domain["users"][UserProfile.Role.REPORT_VIEWER])
+    response = client.get(reverse("reports"))
+    assert b"Daily totals for the selected period" in response.content
+    assert b"<th>Date</th>" in response.content
+    assert b"<th>Calls</th>" in response.content

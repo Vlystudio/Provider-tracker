@@ -1,8 +1,90 @@
 {% extends "base.html" %}
 {% block title %}Provider Search — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">Provider search</span><h1>Find a provider</h1><p>Enter the member ZIP and choose either a diagnosis or specialty. Results are listed by distance.</p></div></div>
-<section class="panel search-panel"><form method="get" class="search-form" hx-get="{% url 'provider_search' %}" hx-target="#search-results" hx-select="#search-results" hx-push-url="true" hx-indicator="#search-loading">{% include "tracker/_form.html" with form=form %}<div class="search-actions"><button class="button primary" type="submit">Search providers</button><a class="button ghost" href="{% url 'provider_search' %}">Clear</a><span id="search-loading" class="htmx-indicator">Searching…</span></div></form></section>
-<section id="search-results" class="results-section" aria-live="polite"><div class="results-head"><div><span class="eyebrow">Results</span><h2>{% if searched and form.is_valid %}{{ page.paginator.count }} provider{{ page.paginator.count|pluralize }} found{% else %}Enter search details{% endif %}</h2></div>{% if searched and form.is_valid %}<small>Nearest first</small>{% endif %}</div>
-{% if page.object_list %}<div class="provider-cards">{% for result in page %}<article class="provider-card"><div class="provider-card-head"><div><span class="avatar large">{{ result.facility.name|slice:":2"|upper }}</span><div><h3><a href="{% url 'facility_detail' result.facility.pk %}">{{ result.facility.name }}</a></h3><p>{{ result.facility.city }} · {{ result.distance }} miles</p></div></div><span class="badge {% if result.latest.result_code == 'meets_availability_guidelines' or result.latest.result_code == 'meets_availability_guidelines_urgent' %}success{% elif result.latest.result_code == 'unable_to_contact' %}warning{% else %}danger{% endif %}">{{ result.latest.result_phrase|default:"No recent call" }}</span></div><dl class="evidence-grid"><div><dt>Phone</dt><dd>{{ result.facility.phone_display|default:"Not available" }}</dd></div><div><dt>Specialty</dt><dd>{{ result.latest.specialty.name|default:"Mapped specialty" }}</dd></div><div><dt>Accepting</dt><dd>{{ result.latest.get_accepting_new_patients_display|default:"Unknown" }}</dd></div><div><dt>Scheduling</dt><dd>{{ result.latest.get_can_schedule_within_four_weeks_display|default:"Unknown" }}</dd></div><div><dt>Last call</dt><dd>{{ result.latest.call_at|date:"M j, Y"|default:"No calls recorded" }}</dd></div><div><dt>Data quality</dt><dd>{{ result.facility.get_data_quality_status_display }}</dd></div></dl><div class="recommendation"><span>Suggested next step</span><p>{{ result.latest.recommendation|default:"Call to check current availability." }}</p></div>{% if 'new_call' in allowed_nav %}<a class="button secondary wide" href="{% url 'new_call' %}?facility={{ result.facility.pk }}{% if form.cleaned_data.diagnosis %}&diagnosis={{ form.cleaned_data.diagnosis.pk }}{% endif %}{% if form.cleaned_data.specialty %}&specialty={{ form.cleaned_data.specialty.pk }}{% endif %}">Record a call</a>{% endif %}</article>{% endfor %}</div>{% include "tracker/_pagination.html" with page=page %}{% elif searched and form.is_valid %}<div class="empty-state large"><span>⌕</span><strong>No providers found</strong><p>Try a larger radius or check the facility location and specialty.</p></div>{% else %}<div class="empty-state large"><span>⌖</span><strong>Enter a ZIP and choose a diagnosis or specialty</strong><p>Results will show distance and the latest call details.</p></div>{% endif %}</section>
+  <header class="page-heading">
+    <div>
+      <span class="section-label">Provider Search</span>
+      <h1>Find a provider</h1>
+      <p>Search by member ZIP and one clinical criterion. Results are ordered by distance.</p>
+    </div>
+  </header>
+  <section class="search-panel">
+    <form
+      method="get"
+      hx-get="{% url 'provider_search' %}"
+      hx-target="#search-results"
+      hx-select="#search-results"
+      hx-push-url="true"
+      hx-indicator="#search-loading"
+    >
+      {% if form.non_field_errors %}
+        <div class="message error">{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>
+      {% endif %}
+      <div class="primary-filters">
+        {% include "tracker/_field.html" with field=form.member_postal_code %}
+        {% include "tracker/_field.html" with field=form.diagnosis %}
+        {% include "tracker/_field.html" with field=form.specialty %}
+        {% include "tracker/_field.html" with field=form.radius %}
+      </div>
+      <p class="field-guidance">Choose either a diagnosis or a specialty.</p>
+      <details class="filter-disclosure" {% if more_filters_open %}open{% endif %}>
+        <summary>More filters</summary>
+        <div class="secondary-filters">
+          {% include "tracker/_field.html" with field=form.facility_type %}
+          {% include "tracker/_field.html" with field=form.accepting_status %}
+          {% include "tracker/_field.html" with field=form.scheduling_status %}
+          {% include "tracker/_field.html" with field=form.last_verified_days %}
+          {% include "tracker/_field.html" with field=form.data_quality_status %}
+        </div>
+      </details>
+      <div class="search-actions">
+        <button class="button primary" type="submit">Search providers</button>
+        <a class="button ghost" href="{% url 'provider_search' %}">Clear</a>
+        <span id="search-loading" class="htmx-indicator">Searching…</span>
+      </div>
+    </form>
+  </section>
+  <section id="search-results" class="results-section" aria-live="polite">
+    <div class="section-heading">
+      <div>
+        <span class="section-label">Results</span>
+        <h2>{% if searched and form.is_valid %}{{ page.paginator.count }} provider{{ page.paginator.count|pluralize }} found{% else %}Ready to search{% endif %}</h2>
+      </div>
+      {% if searched and form.is_valid %}<span>Nearest first</span>{% endif %}
+    </div>
+    {% if page.object_list %}
+      <div class="provider-list">
+        {% for result in page %}
+          <article class="provider-result">
+            <header>
+              <div>
+                <h3><a href="{% url 'facility_detail' result.facility.pk %}">{{ result.facility.name }}</a></h3>
+                <p>{{ result.facility.city }} · {{ result.distance }} miles</p>
+              </div>
+              <span class="status {{ result.latest.result_code|default:'neutral' }}">
+                {{ result.latest.result_phrase|default:"No recent call" }}
+              </span>
+            </header>
+            <dl>
+              <div><dt>Phone</dt><dd>{{ result.facility.phone_display|default:"Not available" }}</dd></div>
+              <div><dt>Specialty</dt><dd>{{ result.latest.specialty.name|default:"Mapped specialty" }}</dd></div>
+              <div><dt>Accepting</dt><dd>{{ result.latest.get_accepting_new_patients_display|default:"Unknown" }}</dd></div>
+              <div><dt>Scheduling</dt><dd>{{ result.latest.get_can_schedule_within_four_weeks_display|default:"Unknown" }}</dd></div>
+              <div><dt>Last call</dt><dd>{{ result.latest.call_at|date:"M j, Y"|default:"No calls recorded" }}</dd></div>
+              <div><dt>Data quality</dt><dd>{{ result.facility.get_data_quality_status_display }}</dd></div>
+            </dl>
+            <div class="result-next-step"><strong>Next step</strong><p>{{ result.latest.recommendation|default:"Call to check current availability." }}</p></div>
+            {% if 'new_call' in allowed_nav %}
+              <a class="button secondary" href="{% url 'new_call' %}?facility={{ result.facility.pk }}">Record a call</a>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+      {% include "tracker/_pagination.html" with page=page %}
+    {% elif searched and form.is_valid %}
+      <div class="empty-copy"><strong>No providers found.</strong> Try a larger radius or check the facility location and clinical criterion.</div>
+    {% else %}
+      <div class="empty-copy"><strong>Enter a ZIP and choose a diagnosis or specialty.</strong> Distance and recent call details will appear here.</div>
+    {% endif %}
+  </section>
 {% endblock %}

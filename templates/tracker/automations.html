@@ -1,6 +1,54 @@
 {% extends "base.html" %}
-{% block title %}Scheduled Jobs — Provider Tracker{% endblock %}
+{% block title %}Automation Center — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">Scheduled jobs</span><h1>Scheduled jobs</h1><p>These jobs create follow-ups, check data, and save regular reports.</p></div><span class="badge success">Runs immediately in the local demo</span></div>
-<div class="automation-grid">{% for rule in rules %}<article class="panel automation-card"><div class="automation-head"><span class="automation-icon">{% if 'report' in rule.slug %}▥{% elif 'coordinate' in rule.slug %}⌖{% elif 'duplicate' in rule.slug %}↻{% else %}▷{% endif %}</span><span class="badge {% if rule.enabled %}success{% else %}neutral{% endif %}">{% if rule.enabled %}Enabled{% else %}Disabled{% endif %}</span></div><h2>{{ rule.name }}</h2><p>{{ rule.purpose }}</p><dl><div><dt>Schedule</dt><dd>{{ rule.schedule }}</dd></div><div><dt>Next run</dt><dd>{{ rule.next_run_at|date:"M j, Y g:i A"|default:"On demand" }}</dd></div>{% with last=rule.runs.all.0 %}<div><dt>Last result</dt><dd>{% if last %}{{ last.get_outcome_display }} · {{ last.affected_count }} updated{% else %}Not run yet{% endif %}</dd></div>{% endwith %}</dl><form method="post" action="{% url 'automation_run' rule.pk %}">{% csrf_token %}<button class="button secondary wide" type="submit" {% if not rule.enabled %}disabled{% endif %}>Run now</button></form><details><summary>Run history</summary><div class="run-history">{% for run in rule.runs.all|slice:":5" %}<div><span class="status-dot {% if run.outcome == 'failed' %}failed{% endif %}">{{ run.get_outcome_display }}</span><small>{{ run.started_at|date:"M j, g:i A" }} · {{ run.affected_count }} updated</small></div>{% empty %}<p>This job has not run yet.</p>{% endfor %}</div></details></article>{% endfor %}</div>
+  <header class="page-heading">
+    <div><span class="section-label">Automation Center</span><h1>Scheduled work</h1><p>Review jobs that create follow-ups, check data, and save reports.</p></div>
+  </header>
+  <section class="work-panel table-panel">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Automation</th><th>Status</th><th>Schedule</th><th>Next run</th><th>Last result</th><th>Action</th></tr></thead>
+        <tbody>
+          {% for rule in rules %}
+            <tr>
+              <td><strong>{{ rule.name }}</strong><small>{{ rule.purpose }}</small></td>
+              <td><span class="status {% if rule.enabled %}success{% else %}neutral{% endif %}">{% if rule.enabled %}Enabled{% else %}Disabled{% endif %}</span></td>
+              <td>{{ rule.schedule }}</td>
+              <td>{{ rule.next_run_at|date:"M j, Y g:i A"|default:"On demand" }}</td>
+              {% with last=rule.runs.all.0 %}
+                <td>
+                  {% if last %}
+                    {{ last.get_outcome_display }}
+                    <small>{{ last.affected_count }} updated</small>
+                  {% else %}
+                    Not run yet
+                  {% endif %}
+                </td>
+              {% endwith %}
+              <td>
+                <form method="post" action="{% url 'automation_run' rule.pk %}">
+                  {% csrf_token %}
+                  <button class="button secondary" type="submit" {% if not rule.enabled %}disabled{% endif %}>Run now</button>
+                </form>
+              </td>
+            </tr>
+            <tr class="detail-row">
+              <td colspan="6">
+                <details class="data-disclosure">
+                  <summary>Recent runs</summary>
+                  <ul>
+                    {% for run in rule.runs.all|slice:":5" %}
+                      <li>{{ run.started_at|date:"M j, g:i A" }} — {{ run.get_outcome_display }}, {{ run.affected_count }} updated</li>
+                    {% empty %}
+                      <li>No runs recorded.</li>
+                    {% endfor %}
+                  </ul>
+                </details>
+              </td>
+            </tr>
+          {% empty %}<tr><td colspan="6"><p class="empty-copy">No automations are configured.</p></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
 {% endblock %}

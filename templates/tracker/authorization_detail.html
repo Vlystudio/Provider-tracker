@@ -1,8 +1,60 @@
 {% extends "base.html" %}
 {% block title %}{{ authorization.authorization_number }} — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">Authorization {{ authorization.authorization_number }}</span><h1>{{ authorization.specialty.name }} provider calls</h1><p>{{ authorization.line_of_business.name }} · Member ZIP {{ authorization.member_postal_code }} · {{ authorization.diagnosis }}</p></div><div class="heading-actions"><button class="button secondary" type="button" data-copy-target="#narrative">Copy summary</button><a class="button secondary" href="{% url 'authorization_pdf' authorization.pk %}">Export PDF</a><button class="button ghost" type="button" onclick="window.print()">Print</button></div></div>
-{% if request.GET.saved %}<div class="success-banner"><span>✓</span><div><strong>Call saved</strong><p>Follow-ups and report totals are up to date.</p></div></div>{% endif %}
-<div class="summary-layout"><section class="panel narrative-panel"><div class="panel-head"><div><span class="eyebrow">Call summary</span><h2>Summary to copy</h2></div><span class="badge neutral">Stops after second success</span></div><p id="narrative">{{ narrative }}</p>{% if not authorization.referral_details %}<div class="inline-warning">Referral details are missing. Check the summary before using it.</div>{% endif %}</section><aside class="panel context-card"><span class="eyebrow">Authorization details</span><dl><div><dt>Status</dt><dd><span class="badge success">{{ authorization.get_status_display }}</span></dd></div><div><dt>Diagnosis</dt><dd>{{ authorization.diagnosis }}</dd></div><div><dt>Specialty</dt><dd>{{ authorization.specialty.name }}</dd></div><div><dt>Referral reason</dt><dd>{{ authorization.referral_reason.name }}</dd></div><div><dt>Created</dt><dd>{{ authorization.created_at|date:"M j, Y" }}</dd></div></dl></aside></div>
-<section class="timeline-section"><div class="results-head"><div><span class="eyebrow">Provider calls</span><h2>{{ calls|length }} call attempt{{ calls|length|pluralize }}</h2></div>{% if 'new_call' in allowed_nav %}<a class="button primary" href="{% url 'new_call' %}">Add another call</a>{% endif %}</div><div class="timeline">{% for call in calls %}<article><span class="timeline-dot {% if call.result_code == 'meets_availability_guidelines' or call.result_code == 'meets_availability_guidelines_urgent' %}success{% elif call.result_code == 'unable_to_contact' %}warning{% else %}danger{% endif %}"></span><div class="panel"><div class="timeline-head"><div><h3>{{ call.facility.name }}</h3><p>{{ call.call_at|date:"M j, Y · g:i A" }} · {{ call.caller.profile.initials|default:call.caller.username }}</p></div><span class="badge {% if call.result_code == 'meets_availability_guidelines' or call.result_code == 'meets_availability_guidelines_urgent' %}success{% elif call.result_code == 'unable_to_contact' %}warning{% else %}danger{% endif %}">{{ call.result_phrase }}</span></div><dl class="evidence-grid"><div><dt>Accepting</dt><dd>{{ call.get_accepting_new_patients_display }}</dd></div><div><dt>Can treat</dt><dd>{{ call.get_can_treat_diagnosis_display }}</dd></div><div><dt>Scheduling</dt><dd>{{ call.get_can_schedule_within_four_weeks_display }}</dd></div></dl><p class="recommendation"><strong>Next step:</strong> {{ call.recommendation }}</p></div></article>{% empty %}<div class="empty-state large"><strong>No calls recorded</strong></div>{% endfor %}</div></section>
+  <header class="page-heading">
+    <div>
+      <span class="section-label">Authorization {{ authorization.authorization_number }}</span>
+      <h1>{{ authorization.specialty.name }} provider calls</h1>
+      <p>{{ authorization.line_of_business.name }} · Member ZIP {{ authorization.member_postal_code }} · {{ authorization.diagnosis }}</p>
+    </div>
+    <div class="heading-actions">
+      <button class="button secondary" type="button" data-copy-target="#narrative">Copy summary</button>
+      <a class="button secondary" href="{% url 'authorization_pdf' authorization.pk %}">Export PDF</a>
+      <button class="button ghost" type="button" onclick="window.print()">Print</button>
+    </div>
+  </header>
+  {% if request.GET.saved %}<div class="message success"><strong>Call saved.</strong> Follow-ups and report totals are current.</div>{% endif %}
+  <div class="summary-layout">
+    <section class="work-panel narrative-panel">
+      <div class="section-heading">
+        <div><span class="section-label">Call summary</span><h2>Summary to copy</h2></div>
+        <span class="status neutral">Stops after second success</span>
+      </div>
+      <p id="narrative">{{ narrative }}</p>
+      {% if not authorization.referral_details %}<div class="notice warning"><strong>Referral details are missing.</strong> Check the summary before using it.</div>{% endif %}
+    </section>
+    <aside class="work-panel">
+      <div class="section-heading"><div><span class="section-label">Context</span><h2>Authorization details</h2></div></div>
+      <dl class="detail-list">
+        <div><dt>Status</dt><dd>{{ authorization.get_status_display }}</dd></div>
+        <div><dt>Diagnosis</dt><dd>{{ authorization.diagnosis }}</dd></div>
+        <div><dt>Specialty</dt><dd>{{ authorization.specialty.name }}</dd></div>
+        <div><dt>Referral reason</dt><dd>{{ authorization.referral_reason.name }}</dd></div>
+        <div><dt>Created</dt><dd>{{ authorization.created_at|date:"M j, Y" }}</dd></div>
+      </dl>
+    </aside>
+  </div>
+  <section class="call-timeline" aria-labelledby="calls-heading">
+    <div class="section-heading">
+      <div><span class="section-label">Provider calls</span><h2 id="calls-heading">{{ calls|length }} call attempt{{ calls|length|pluralize }}</h2></div>
+      {% if 'new_call' in allowed_nav %}<a class="button primary" href="{% url 'new_call' %}">Add another call</a>{% endif %}
+    </div>
+    {% for call in calls %}
+      <article class="work-panel call-entry">
+        <header>
+          <div>
+            <h3>{{ call.facility.name }}</h3>
+            <p>{{ call.call_at|date:"M j, Y · g:i A" }} · {{ call.caller.profile.initials|default:call.caller.username }}</p>
+          </div>
+          <span class="status {{ call.result_code }}">{{ call.result_phrase }}</span>
+        </header>
+        <dl class="inline-details">
+          <div><dt>Accepting</dt><dd>{{ call.get_accepting_new_patients_display }}</dd></div>
+          <div><dt>Can treat</dt><dd>{{ call.get_can_treat_diagnosis_display }}</dd></div>
+          <div><dt>Scheduling</dt><dd>{{ call.get_can_schedule_within_four_weeks_display }}</dd></div>
+        </dl>
+        <p class="next-step"><strong>Next step:</strong> {{ call.recommendation }}</p>
+      </article>
+    {% empty %}<p class="empty-copy">No calls recorded.</p>{% endfor %}
+  </section>
 {% endblock %}

@@ -1,1 +1,10 @@
-{% extends "base.html" %}{% block title %}Access denied — Provider Tracker{% endblock %}{% block content %}<div class="error-page"><span>403</span><h1>You do not have access to this page.</h1><p>If you think you should have access, ask an administrator to check your role.</p><a class="button primary" href="{% url 'dashboard' %}">Back to dashboard</a></div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Access denied — Provider Tracker{% endblock %}
+{% block content %}
+  <div class="error-page">
+    <span>403</span>
+    <h1>You do not have access to this page.</h1>
+    <p>Ask an administrator to check your role if you need access.</p>
+    <a class="button primary" href="{% url 'dashboard' %}">Back to dashboard</a>
+  </div>
+{% endblock %}

@@ -1,0 +1,321 @@
+.button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 14px;
+  color: var(--slate-900);
+  background: white;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.button:hover {
+  text-decoration: none;
+}
+.button.primary {
+  color: white;
+  background: var(--teal-700);
+}
+.button.primary:hover {
+  color: white;
+  background: var(--teal-600);
+}
+.button.secondary {
+  color: var(--navy-900);
+  border-color: var(--slate-300);
+}
+.button.secondary:hover {
+  border-color: var(--teal-600);
+}
+.button.ghost {
+  color: var(--slate-700);
+  background: transparent;
+}
+.button.wide {
+  width: 100%;
+}
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.work-panel,
+.form-section,
+.search-panel,
+.lookup-form,
+.filter-panel,
+.toolbar-form {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.section-heading > a,
+.section-heading > span {
+  font-size: 13px;
+  font-weight: 700;
+}
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.metric-strip > div {
+  min-width: 0;
+  padding: 15px 18px;
+  border-right: 1px solid var(--border);
+}
+.metric-strip > div:last-child {
+  border-right: 0;
+}
+.metric-strip span,
+.metric-strip strong,
+.metric-strip small {
+  display: block;
+}
+.metric-strip span {
+  color: var(--slate-500);
+  font-size: 13px;
+  font-weight: 650;
+}
+.metric-strip strong {
+  margin-top: 4px;
+  color: var(--navy-900);
+  font-size: 25px;
+  line-height: 1.1;
+}
+.metric-strip small {
+  margin-top: 3px;
+  color: var(--slate-500);
+  font-size: 12px;
+}
+.status {
+  display: inline-flex;
+  max-width: 280px;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+  text-align: left;
+}
+.status.success {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.status.warning {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+.status.danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.status.neutral {
+  color: var(--slate-700);
+  background: var(--slate-100);
+}
+.status.high {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.status.medium {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+.status.low {
+  color: var(--slate-700);
+  background: var(--slate-100);
+}
+.status.meets_availability_guidelines,
+.status.meets_availability_guidelines_urgent,
+.status.verified {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.status.unable_to_contact,
+.status.missing_coordinates,
+.status.review {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+.status.does_not_meet_availability_guidelines,
+.status.rejected {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.message-stack {
+  margin-bottom: 16px;
+}
+.message {
+  padding: 12px 14px;
+  color: var(--slate-900);
+  background: var(--slate-100);
+  border-left: 4px solid var(--slate-500);
+  border-radius: 5px;
+}
+.message.success {
+  background: var(--success-bg);
+  border-color: var(--success);
+}
+.message.error {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+}
+.message p {
+  margin: 0;
+}
+.notice {
+  margin-bottom: 18px;
+  padding: 13px 14px;
+  color: var(--slate-700);
+  background: var(--slate-100);
+  border-radius: 6px;
+}
+.notice.warning {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+.notice p {
+  margin: 3px 0 0;
+}
+.task-links,
+.work-list,
+.record-list,
+.text-link-list,
+.mini-history {
+  display: flex;
+  flex-direction: column;
+}
+.task-links > a,
+.work-list > div,
+.work-list > a,
+.record-list > div,
+.record-list > a,
+.text-link-list > a,
+.mini-history > a {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 0;
+  color: inherit;
+  border-bottom: 1px solid var(--slate-100);
+}
+.task-links > :last-child,
+.work-list > :last-child,
+.record-list > :last-child,
+.text-link-list > :last-child,
+.mini-history > :last-child {
+  border-bottom: 0;
+}
+.task-links a:hover,
+.work-list a:hover,
+.record-list a:hover,
+.text-link-list a:hover,
+.mini-history a:hover {
+  text-decoration: none;
+}
+.task-links strong,
+.task-links span {
+  display: block;
+}
+.task-links strong {
+  color: var(--slate-900);
+}
+.task-links span {
+  color: var(--slate-500);
+  font-size: 13px;
+}
+.work-list p,
+.record-list p,
+.mini-history p {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+}
+.work-list strong,
+.work-list span,
+.record-list strong,
+.record-list p > span,
+.mini-history strong,
+.mini-history small {
+  display: block;
+}
+.work-list p > span,
+.record-list p > span,
+.mini-history small {
+  color: var(--slate-500);
+  font-size: 13px;
+}
+.work-list time {
+  width: 50px;
+  flex: 0 0 50px;
+  color: var(--slate-700);
+  font-weight: 700;
+}
+.text-link-list a {
+  justify-content: space-between;
+  font-weight: 650;
+}
+.data-disclosure {
+  margin-top: 14px;
+}
+.data-disclosure summary,
+.filter-panel > summary,
+.resolve-panel > summary {
+  color: var(--teal-700);
+  font-weight: 750;
+}
+.data-disclosure ul {
+  margin-bottom: 0;
+  color: var(--slate-700);
+}
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.error-page {
+  display: flex;
+  min-height: 70vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.error-page > span {
+  color: var(--teal-700);
+  font-size: 54px;
+  font-weight: 800;
+}
+.error-page h1 {
+  margin: 0;
+}
+.error-page p {
+  max-width: 500px;
+  color: var(--slate-500);
+}
+@media (max-width: 700px) {
+  .metric-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .metric-strip > div:nth-child(2) {
+    border-right: 0;
+  }
+  .metric-strip > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--border);
+  }
+}

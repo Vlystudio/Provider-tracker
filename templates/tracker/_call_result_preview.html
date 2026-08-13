@@ -1,0 +1,15 @@
+<section
+  id="call-result-preview"
+  class="result-preview"
+  aria-live="polite"
+  aria-atomic="true"
+>
+  <span class="section-label">Result preview</span>
+  {% if preview.ready %}
+    <strong>{{ preview.phrase|capfirst }}</strong>
+    <p>{{ preview.recommendation }}</p>
+  {% else %}
+    <strong>Waiting for call details</strong>
+    <p>Choose a facility to see the calculated result.</p>
+  {% endif %}
+</section>

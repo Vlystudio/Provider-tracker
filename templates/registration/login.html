@@ -1,5 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Sign in — Provider Tracker{% endblock %}
 {% block public_content %}
-<div class="auth-shell"><section class="auth-story"><a class="brand" href="/"><span class="brand-mark">PT</span><span><strong>Provider Tracker</strong><small>Provider availability</small></span></a><div><span class="eyebrow light">Staff sign-in</span><h1>Sign in to continue.</h1><p>Use your staff account to view calls, provider availability, and follow-up work.</p></div><small>Do not enter member-identifying information in the public demo.</small></section><section class="auth-panel"><div class="auth-card"><span class="eyebrow">Provider Tracker</span><h2>Sign in</h2>{% if form.errors %}<div class="message error">The username or password was not recognized.</div>{% endif %}<form method="post" class="stack-form">{% csrf_token %}<div class="field"><label for="id_username">Username</label>{{ form.username }}</div><div class="field"><label for="id_password">Password</label>{{ form.password }}</div><input type="hidden" name="next" value="{{ next }}"><button class="button primary wide" type="submit">Sign in</button></form>{% if demo_mode %}<p class="form-note">To try a sample role, return to the <a href="{% url 'landing' %}#demo-accounts">demo accounts</a>.</p>{% endif %}</div></section></div>
+  <div class="login-shell">
+    <header>
+      <a class="brand brand-public" href="{% url 'landing' %}">
+        <span class="brand-mark" aria-hidden="true">PT</span>
+        <span><strong>Provider Tracker</strong><small>URA operations</small></span>
+      </a>
+    </header>
+    <section class="login-panel" aria-labelledby="sign-in-heading">
+      <div>
+        <span class="section-label">Staff access</span>
+        <h1 id="sign-in-heading">Sign in</h1>
+        <p>Use your staff account to continue.</p>
+      </div>
+      {% if form.errors %}<div class="message error">The username or password was not recognized.</div>{% endif %}
+      <form method="post" class="stack-form">
+        {% csrf_token %}
+        <div class="field"><label for="id_username">Username</label>{{ form.username }}</div>
+        <div class="field"><label for="id_password">Password</label>{{ form.password }}</div>
+        <input type="hidden" name="next" value="{{ next }}">
+        <button class="button primary wide" type="submit">Sign in</button>
+      </form>
+      {% if demo_mode %}<p class="form-note">Sample roles are available on the <a href="{% url 'landing' %}#demo-accounts">demo page</a>.</p>{% endif %}
+    </section>
+    <footer>Do not enter member-identifying information in the public demo.</footer>
+  </div>
 {% endblock %}

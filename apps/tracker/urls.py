@@ -6,6 +6,7 @@ urlpatterns = [
     path("", views.landing, name="landing"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("new-call/", views.new_call, name="new_call"),
+    path("new-call/result-preview/", views.call_result_preview, name="call_result_preview"),
     path("provider-search/", views.provider_search, name="provider_search"),
     path("call-log/", views.call_log, name="call_log"),
     path("authorization-summary/", views.authorization_summary, name="authorization_summary"),
@@ -22,5 +23,4 @@ urlpatterns = [
     path("imports/rejected/<uuid:pk>/", views.rejected_import_row, name="rejected_import_row"),
     path("administration/", views.administration, name="administration"),
     path("audit/", views.audit_history, name="audit_history"),
-    path("excel-vs-web/", views.comparison, name="comparison"),
 ]

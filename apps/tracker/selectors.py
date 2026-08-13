@@ -8,6 +8,7 @@ from .services.distance import distance_repository
 
 
 def provider_search(cleaned):
+    """Return nearby facilities with the latest call that matches every selected filter."""
     calls = ProviderCall.objects.select_related("facility", "specialty", "diagnosis").order_by("-call_at")
     facilities = Facility.objects.filter(active=True)
     diagnosis = cleaned.get("diagnosis")
@@ -40,6 +41,7 @@ def provider_search(cleaned):
 
 
 def filtered_calls(cleaned):
+    """Build the export and call-log queryset from validated filter values."""
     queryset = ProviderCall.objects.select_related(
         "authorization", "facility", "diagnosis", "specialty", "caller", "booking_out_bucket"
     )

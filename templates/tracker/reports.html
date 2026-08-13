@@ -1,9 +1,86 @@
 {% extends "base.html" %}
 {% block title %}Reports — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">Reports</span><h1>Provider availability</h1><p>Review call totals and results for the selected dates.</p></div><div class="heading-actions"><a class="button secondary" href="?{{ request.GET.urlencode }}&export=xlsx">Export Excel</a><button class="button ghost" onclick="window.print()">Print / PDF</button></div></div>
-<details class="panel filter-panel"><summary>Report filters <span>{{ metrics.period_start }} to {{ metrics.period_end }}</span></summary><form method="get" class="search-form">{% include "tracker/_form.html" with form=form %}<button class="button primary" type="submit">Update report</button></form></details>
-<section class="metric-grid"><article class="metric primary-metric"><span>Provider calls</span><strong>{{ metrics.total_calls }}</strong><small>{{ metrics.period_start }}–{{ metrics.period_end }}</small></article><article class="metric"><span>Successful results</span><strong>{{ metrics.successful_calls }}</strong><small>Met guidelines, including urgent referrals</small></article><article class="metric"><span>Success rate</span><strong>{{ metrics.success_rate }}%</strong><small>{{ metrics.successful_calls }} successful / {{ metrics.success_denominator }} calls</small></article><article class="metric"><span>Unable to contact</span><strong>{{ metrics.unable_rate }}%</strong><small>{{ metrics.unable_to_contact }} unable / {{ metrics.success_denominator }} calls</small></article></section>
-<div class="dashboard-grid"><section class="panel span-2"><div class="panel-head"><div><span class="eyebrow">Calls by day</span><h2>Calls and successful results</h2></div></div><div class="horizontal-chart">{% for item in metrics.by_week %}<div><span>{{ item.period }}</span><div class="track"><i style="width:{% widthratio item.total metrics.total_calls 100 %}%"></i><b style="width:{% widthratio item.success metrics.total_calls 100 %}%"></b></div><small>{{ item.total }} calls · {{ item.success }} successful</small></div>{% empty %}<div class="empty-state">No calls in this period.</div>{% endfor %}</div></section><section class="panel"><div class="panel-head"><div><span class="eyebrow">Specialties</span><h2>Calls by specialty</h2></div></div><div class="rank-list">{% for item in metrics.by_specialty %}<div><span>{{ forloop.counter }}</span><p>{{ item.specialty__name }}</p><strong>{{ item.total }}</strong></div>{% empty %}<div class="empty-state">No specialty data.</div>{% endfor %}</div></section></div>
-<section class="panel snapshot-panel"><div><span class="eyebrow">Saved reports</span><h2>Save this report</h2><p>Save the selected dates and totals so they can be reviewed later.</p></div><form method="post">{% csrf_token %}<button class="button primary" type="submit">Save report</button></form><div class="snapshot-list">{% for snapshot in snapshots %}<span><strong>{{ snapshot.report_type|title }}</strong><small>{{ snapshot.period_start }}–{{ snapshot.period_end }} · {{ snapshot.generated_at|date:"M j, Y g:i A" }}</small></span>{% empty %}<span><strong>No saved reports</strong><small>Save this report to add one.</small></span>{% endfor %}</div></section>
+  <header class="page-heading">
+    <div><span class="section-label">Reports</span><h1>Provider availability</h1><p>Call totals and results for the selected dates.</p></div>
+    <div class="heading-actions">
+      <a class="button secondary" href="?{{ request.GET.urlencode }}&export=xlsx">Export Excel</a>
+      <button class="button ghost" type="button" onclick="window.print()">Print or save PDF</button>
+    </div>
+  </header>
+  <details class="filter-panel">
+    <summary>Report filters <span>{{ metrics.period_start }} to {{ metrics.period_end }}</span></summary>
+    <form method="get" class="filter-grid">
+      {% include "tracker/_form.html" with form=form %}
+      <button class="button primary" type="submit">Update report</button>
+    </form>
+  </details>
+  <section class="metric-strip" aria-label="Report totals">
+    <div><span>Provider calls</span><strong>{{ metrics.total_calls }}</strong><small>{{ metrics.period_start }} to {{ metrics.period_end }}</small></div>
+    <div><span>Successful results</span><strong>{{ metrics.successful_calls }}</strong></div>
+    <div><span>Success rate</span><strong>{{ metrics.success_rate }}%</strong><small>{{ metrics.successful_calls }} of {{ metrics.success_denominator }}</small></div>
+    <div><span>Unable to contact</span><strong>{{ metrics.unable_rate }}%</strong><small>{{ metrics.unable_to_contact }} of {{ metrics.success_denominator }}</small></div>
+  </section>
+  <div class="report-layout">
+    <section class="work-panel">
+      <div class="section-heading">
+        <div><span class="section-label">Most recent 10 days</span><h2>Calls by day</h2></div>
+      </div>
+      <div class="horizontal-chart" aria-hidden="true">
+        {% for item in metrics.chart_days %}
+          <div>
+            <span>{{ item.period }}</span>
+            <div class="track">
+              <i style="width:{% widthratio item.total metrics.total_calls 100 %}%"></i>
+              <b style="width:{% widthratio item.success metrics.total_calls 100 %}%"></b>
+            </div>
+            <small>{{ item.total }} calls · {{ item.success }} successful</small>
+          </div>
+        {% empty %}
+          <p class="empty-copy">No calls in this period.</p>
+        {% endfor %}
+      </div>
+      <details class="data-disclosure">
+        <summary>Daily totals for the selected period</summary>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Calls</th><th>Successful</th></tr></thead>
+            <tbody>
+              {% for item in metrics.by_day %}
+                <tr><td>{{ item.period }}</td><td>{{ item.total }}</td><td>{{ item.success }}</td></tr>
+              {% empty %}
+                <tr><td colspan="3">No calls in this period.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+    <aside class="work-panel">
+      <div class="section-heading"><div><span class="section-label">Specialties</span><h2>Calls by specialty</h2></div></div>
+      <ol class="rank-list">
+        {% for item in metrics.by_specialty %}
+          <li><span>{{ item.specialty__name }}</span><strong>{{ item.total }}</strong></li>
+        {% empty %}
+          <li>No specialty data.</li>
+        {% endfor %}
+      </ol>
+    </aside>
+  </div>
+  <section class="work-panel snapshot-panel">
+    <div><span class="section-label">Saved reports</span><h2>Save this report</h2><p>Keep the selected dates and totals for later review.</p></div>
+    <form method="post">{% csrf_token %}<button class="button primary" type="submit">Save report</button></form>
+    <div class="record-list">
+      {% for snapshot in snapshots %}
+        <div>
+          <p>
+            <strong>{{ snapshot.report_type|title }}</strong>
+            <span>{{ snapshot.period_start }} to {{ snapshot.period_end }} · {{ snapshot.generated_at|date:"M j, Y g:i A" }}</span>
+          </p>
+        </div>
+      {% empty %}
+        <p class="empty-copy">No saved reports.</p>
+      {% endfor %}
+    </div>
+  </section>
 {% endblock %}

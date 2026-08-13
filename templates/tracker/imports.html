@@ -1,7 +1,74 @@
 {% extends "base.html" %}
-{% block title %}Data Import — Provider Tracker{% endblock %}
+{% block title %}Import Center — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">Data import</span><h1>Import a workbook</h1><p>Check a supported workbook before adding its facilities, specialties, and calls.</p></div><span class="badge warning">Administrators and auditors only</span></div>
-<div class="import-layout"><section class="panel upload-card"><div class="panel-head"><div><span class="eyebrow">Workbook</span><h2>Choose a workbook</h2></div></div><div class="security-note"><strong>Your original file is not changed</strong><p>A preview checks the rows and shows any problems. Source details are limited to authorized users.</p></div><form method="post" enctype="multipart/form-data" class="stack-form">{% csrf_token %}{% include "tracker/_form.html" with form=form %}<div class="form-actions"><button class="button primary" name="action" value="preview" type="submit">Preview only</button><button class="button secondary" name="action" value="apply" type="submit" data-confirm="Add records from this workbook?">Preview and import</button></div></form></section>{% if summary %}<section class="panel summary-card"><div class="panel-head"><div><span class="eyebrow">Preview</span><h2>Workbook checked</h2></div><span class="badge success">Original file unchanged</span></div><div class="summary-metrics"><div><span>Facilities</span><strong>{{ summary.counts.unique_facilities }}</strong></div><div><span>Mappings</span><strong>{{ summary.counts.unique_facility_specialties }}</strong></div><div><span>Calls</span><strong>{{ summary.counts.unique_calls }}</strong></div><div><span>Rejected</span><strong>{{ summary.counts.rejected_rows }}</strong></div><div><span>Duplicates removed</span><strong>{{ summary.counts.exact_duplicate_calls }}</strong></div><div><span>ZIP centroids</span><strong>{{ summary.counts.unique_postal_codes }}</strong></div></div><details><summary>Technical details</summary><pre>{{ summary|pprint }}</pre></details></section>{% else %}<section class="panel empty-state large"><span>⇧</span><strong>Choose a workbook to start</strong><p>The preview shows row counts, duplicates, rejected rows, and import totals.</p></section>{% endif %}</div>
-<div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><span class="eyebrow">Import history</span><h2>Recent imports</h2></div></div><div class="compact-list">{% for batch in batches %}<div><span class="avatar">{{ batch.source_kind|slice:":1"|upper }}</span><p><strong>{{ batch.source_name }}</strong><small>{{ batch.created_at|date:"M j, Y g:i A" }} · hash {{ batch.source_hash|slice:":10" }}…</small></p><span class="badge {% if batch.status == 'applied' %}success{% else %}neutral{% endif %}">{{ batch.get_status_display }}</span></div>{% empty %}<div class="empty-state">No workbooks imported yet.</div>{% endfor %}</div></section><section class="panel"><div class="panel-head"><div><span class="eyebrow">Rows to check</span><h2>Rejected rows</h2></div></div><div class="compact-list">{% for row in rejected %}<a href="{% url 'rejected_import_row' row.pk %}"><span class="alert-icon danger">!</span><p><strong>{{ row.entity_type|title }} · {{ row.source_sheet }} row {{ row.source_row }}</strong><small>{{ row.issue_codes|join:", " }}</small></p><b>›</b></a>{% empty %}<div class="empty-state"><strong>No rejected rows</strong><span>Rows with import problems will appear here.</span></div>{% endfor %}</div></section></div>
+  <header class="page-heading">
+    <div><span class="section-label">Import Center</span><h1>Import provider data</h1><p>Preview a supported workbook before adding facilities, specialties, and calls.</p></div>
+    <p class="access-note">Access: administrators and auditors</p>
+  </header>
+  <div class="split-layout import-layout">
+    <section class="work-panel">
+      <div class="section-heading"><div><span class="section-label">Workbook</span><h2>Choose a file</h2></div></div>
+      <div class="notice"><strong>The source file is not changed.</strong><p>Preview validates the rows and reports problems before any records are added.</p></div>
+      <form method="post" enctype="multipart/form-data" class="stack-form">
+        {% csrf_token %}
+        {% include "tracker/_form.html" with form=form %}
+        <div class="form-actions">
+          <button class="button primary" name="action" value="preview" type="submit">Preview only</button>
+          <button class="button secondary" name="action" value="apply" type="submit" data-confirm="Add records from this workbook?">Preview and import</button>
+        </div>
+      </form>
+    </section>
+    <section class="work-panel">
+      {% if summary %}
+        <div class="section-heading"><div><span class="section-label">Preview</span><h2>Workbook checked</h2></div><span class="status success">No changes made</span></div>
+        <dl class="summary-metrics">
+          <div><dt>Facilities</dt><dd>{{ summary.counts.unique_facilities }}</dd></div>
+          <div><dt>Mappings</dt><dd>{{ summary.counts.unique_facility_specialties }}</dd></div>
+          <div><dt>Calls</dt><dd>{{ summary.counts.unique_calls }}</dd></div>
+          <div><dt>Rejected</dt><dd>{{ summary.counts.rejected_rows }}</dd></div>
+          <div><dt>Duplicates removed</dt><dd>{{ summary.counts.exact_duplicate_calls }}</dd></div>
+          <div><dt>ZIP centroids</dt><dd>{{ summary.counts.unique_postal_codes }}</dd></div>
+        </dl>
+        <details class="data-disclosure"><summary>Technical details</summary><pre>{{ summary|pprint }}</pre></details>
+      {% else %}
+        <div class="section-heading"><div><span class="section-label">Preview</span><h2>No workbook selected</h2></div></div>
+        <p class="empty-copy">Choose a workbook to see row counts, duplicates, rejected rows, and import totals.</p>
+      {% endif %}
+    </section>
+  </div>
+  <div class="split-layout">
+    <section class="work-panel">
+      <div class="section-heading"><div><span class="section-label">History</span><h2>Recent imports</h2></div></div>
+      <div class="record-list">
+        {% for batch in batches %}
+          <div>
+            <span class="initials" aria-hidden="true">{{ batch.source_kind|slice:":1"|upper }}</span>
+            <p>
+              <strong>{{ batch.source_name }}</strong>
+              <span>{{ batch.created_at|date:"M j, Y g:i A" }} · hash {{ batch.source_hash|slice:":10" }}</span>
+            </p>
+            <span class="status {% if batch.status == 'applied' %}success{% else %}neutral{% endif %}">{{ batch.get_status_display }}</span>
+          </div>
+        {% empty %}
+          <p class="empty-copy">No workbooks imported yet.</p>
+        {% endfor %}
+      </div>
+    </section>
+    <section class="work-panel">
+      <div class="section-heading"><div><span class="section-label">Rows to check</span><h2>Rejected rows</h2></div></div>
+      <div class="record-list">
+        {% for row in rejected %}
+          <a href="{% url 'rejected_import_row' row.pk %}">
+            <p>
+              <strong>{{ row.entity_type|title }} · {{ row.source_sheet }} row {{ row.source_row }}</strong>
+              <span>{{ row.issue_codes|join:", " }}</span>
+            </p>
+            <span>Review</span>
+          </a>
+        {% empty %}
+          <p class="empty-copy">Rows with import problems will appear here.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
 {% endblock %}
