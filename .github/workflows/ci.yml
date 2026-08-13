@@ -41,6 +41,11 @@ jobs:
         run: python manage.py collectstatic --noinput
       - name: Dependency audit
         run: pip-audit -r requirements.txt
+      - name: Deployment manifests
+        run: |
+          APP_ENV_FILE=.env.production.example docker compose --env-file .env.production.example -f docker-compose.external-db.yml config --quiet
+          docker compose --env-file .env.production.example config --quiet
+          bash -n scripts/deploy.sh
       - name: Container build
         run: docker build --tag provider-tracker:ci .
 

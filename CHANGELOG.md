@@ -16,3 +16,7 @@ All notable project changes are documented here.
 - Celery/Redis production automation path and eager local execution.
 - Windows setup, run, and reset scripts; production-style container stack.
 - Automated business-rule, importer, permission, workflow, report, export, and page-state tests.
+- Application-only Docker topology for organization-managed PostgreSQL/PostGIS.
+- Linux and Windows deployment scripts, production configuration guidance, and an IT handoff runbook.
+- Liveness and database-readiness endpoints plus container health checks.
+- PostgreSQL TLS, connection timeout, persistent connection, and trusted-proxy configuration.

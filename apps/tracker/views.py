@@ -6,8 +6,9 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db import connections
 from django.db.models import Count, Q
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -47,6 +48,20 @@ from .services.business_rules import authorization_narrative
 from .services.importer import apply_plan, parse_workbook, reconcile, safe_summary
 from .services.reports import report_metrics, save_snapshot
 from .services.workflows import audit, create_authorization_call
+
+
+def health_live(request):
+    return JsonResponse({"status": "ok"})
+
+
+def health_ready(request):
+    try:
+        with connections["default"].cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except Exception:
+        return JsonResponse({"status": "unavailable"}, status=503)
+    return JsonResponse({"status": "ready"})
 
 
 def landing(request):

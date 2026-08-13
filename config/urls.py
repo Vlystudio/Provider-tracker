@@ -5,6 +5,8 @@ from django.urls import include, path
 from apps.tracker import views
 
 urlpatterns = [
+    path("health/live/", views.health_live, name="health_live"),
+    path("health/ready/", views.health_ready, name="health_ready"),
     path("django-admin/", admin.site.urls),
     path("login/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),

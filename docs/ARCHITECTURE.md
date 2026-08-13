@@ -4,7 +4,7 @@
 
 Local demonstration mode uses Django, SQLite, server-rendered templates, static assets, and eager Celery execution. It requires no Docker, Redis, or external database.
 
-Production-style mode uses Django/Gunicorn, PostgreSQL with PostGIS, Redis, Celery workers, and Celery Beat. The container stack is an implementation reference and still requires organizational hardening.
+Production mode uses Django/Gunicorn, PostgreSQL with PostGIS, Redis, Celery workers, and Celery Beat. The application-only container stack connects to an organization-managed database; the bundled stack supports isolated evaluation. Organizational infrastructure and security controls remain deployment responsibilities.
 
 ## Application layers
 

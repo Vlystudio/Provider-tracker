@@ -50,6 +50,22 @@ The public demonstration contains only deterministic, fictional records. It is n
 
 See [architecture](docs/ARCHITECTURE.md), [data model](docs/DATA_MODEL.md), and [deployment guidance](docs/DEPLOYMENT.md).
 
+## Ready for IT deployment
+
+The repository is the full open-source application, not a hosted service. An IT team can deploy it without the private workbooks and without assistance from the application owner. It includes database migrations, Docker definitions, production environment templates, web/worker/scheduler services, health endpoints, tests, and an operator runbook.
+
+For an organization-managed PostgreSQL/PostGIS database, the handoff is:
+
+```bash
+git clone https://github.com/Vlystudio/Provider-tracker.git
+cd Provider-tracker
+cp .env.production.example .env.production
+# IT supplies the hostname, database credentials, public URL, and secrets.
+./scripts/deploy.sh external
+```
+
+See the [IT Deployment Handoff](docs/IT_HANDOFF.md) for the exact database contract, Windows commands, first-administrator setup, upgrades, monitoring, backups, and rollback. A self-contained evaluation stack is also available with `./scripts/deploy.sh bundled`.
+
 ## One-command Windows demo setup
 
 Requirements: Windows PowerShell and Python 3.14 or a compatible supported Python release.
@@ -124,7 +140,7 @@ These technical controls do not establish HIPAA compliance or organizational app
 
 ## Production deployment
 
-Copy `.env.example` to a secure environment configuration, replace every placeholder, and review `docker-compose.yml`. The production-style stack includes PostGIS, Redis, web, worker, and scheduler services. Do not use public demo accounts or fictional seed commands in production.
+Copy `.env.production.example` to the deployment platform's private configuration, replace every placeholder, and follow the [IT Deployment Handoff](docs/IT_HANDOFF.md). Use `docker-compose.external-db.yml` when IT supplies PostgreSQL/PostGIS, or `docker-compose.yml` for a self-contained evaluation stack. Do not use public demo accounts or fictional seed commands in production.
 
 ## Contributing and license
 

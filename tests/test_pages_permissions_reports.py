@@ -59,6 +59,16 @@ ROLE_PAGES = {
 
 
 @pytest.mark.django_db
+def test_health_endpoints(client):
+    live = client.get(reverse("health_live"))
+    ready = client.get(reverse("health_ready"))
+    assert live.status_code == 200
+    assert live.json() == {"status": "ok"}
+    assert ready.status_code == 200
+    assert ready.json() == {"status": "ready"}
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("role", list(ROLE_PAGES))
 def test_role_permission_matrix(client, domain, role):
     client.force_login(domain["users"][role])
