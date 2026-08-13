@@ -1,4 +1,4 @@
-# Security and Governance
+# Security Notes
 
 ## Implemented controls
 
@@ -16,7 +16,7 @@
 
 ## Data handling
 
-The repository and seeded database contain fictional data only. Do not place real workbooks or operational data inside the repository. Use a private, access-controlled intake location and encrypted storage for any authorized production migration.
+The repository and sample database contain fictional data only. Do not place real workbooks or production data inside the repository. Use a private, access-controlled location and encrypted storage for any approved production import.
 
 ## Production review still required
 

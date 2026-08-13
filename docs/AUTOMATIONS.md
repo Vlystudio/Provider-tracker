@@ -1,17 +1,17 @@
-# Automations
+# Scheduled Jobs
 
-The demonstration configures these visible rules:
+The sample database includes these jobs:
 
-- seven-day follow-up creation;
-- overdue review notification evaluation;
-- weekly duplicate monitoring;
-- stale availability monitoring;
-- missing coordinate review;
-- weekly report snapshots;
-- monthly report snapshots;
-- unresolved import issue monitoring; and
-- facility reconfirmation.
+- create seven-day follow-ups
+- find overdue reviews
+- flag repeat calls in the same week
+- find provider calls older than 30 days
+- find facilities with missing coordinates
+- save weekly reports
+- save monthly reports
+- find unresolved import issues
+- find facility-specialty mappings that need confirmation
 
-Each rule records enabled state, purpose, schedule/trigger, next run, recent run history, affected count, outcome, details, and errors. A rule/date idempotency key prevents repeated effects in the same schedule window.
+Each job stores its name, purpose, schedule, enabled status, next run, and recent results. A job/date key prevents the same work from being repeated for one schedule period.
 
-Local demo mode executes tasks eagerly and exposes a safe **Run now** action. Production-style mode uses Redis, Celery workers, and Celery Beat. Notification delivery and scheduled export destinations remain deployment integrations; the rules already surface their affected records and audit evidence.
+In the local demo, **Run now** completes the job immediately. Production uses Redis, Celery workers, and Celery Beat. IT can add notification delivery or scheduled export destinations if needed.

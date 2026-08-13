@@ -6,7 +6,7 @@ Thank you for improving Provider Tracker.
 
 1. Search existing issues and pull requests.
 2. Open an issue for large behavior, schema, security, or importer changes.
-3. Never attach real workbooks, authorization records, provider notes, databases, exports, credentials, or logs containing operational data.
+3. Never attach real workbooks, authorization records, provider notes, databases, exports, credentials, or logs containing real work data.
 4. Use fictional fixtures with clearly non-production identifiers.
 
 ## Local checks
@@ -25,4 +25,4 @@ Importer changes should include a small generated workbook fixture that covers t
 
 ## Pull requests
 
-Keep commits focused, explain user and data-governance impact, list verification performed, and call out migrations or deployment changes. Pull requests must pass CI and must not contain sensitive data.
+Keep commits focused. Explain what changes for users or stored data, list the checks you ran, and call out database migrations or deployment changes. Pull requests must pass CI and must not contain sensitive data.
