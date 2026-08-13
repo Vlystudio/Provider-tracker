@@ -9,7 +9,7 @@ We pledge to make participation in this project a harassment-free experience for
 - Be respectful, constructive, and specific.
 - Assume good intent while addressing impact directly.
 - Welcome questions and differing technical perspectives.
-- Protect private or operational information.
+- Protect private work information.
 - Accept responsibility, apologize when appropriate, and learn from mistakes.
 
 ## Unacceptable behavior

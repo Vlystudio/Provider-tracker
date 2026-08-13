@@ -38,7 +38,7 @@ DEMO_PASSWORD = "DemoOnly!2026"
 
 
 class Command(BaseCommand):
-    help = "Create deterministic, fictional demonstration records."
+    help = "Load fictional sample records for the local demo."
 
     def handle(self, *args, **options):
         random.seed(7426)
@@ -234,9 +234,7 @@ class Command(BaseCommand):
                     "diagnosis": diagnosis,
                     "specialty": specialty,
                     "referral_reason": referrals[index % len(referrals)],
-                    "referral_details": (
-                        "Fictional demonstration referral requiring provider availability research."
-                    ),
+                    "referral_details": "Sample referral for the local demo.",
                     "status": "open",
                     "created_by": ura,
                 },
@@ -275,8 +273,8 @@ class Command(BaseCommand):
                 booking_out_bucket=booking[index % len(booking)]
                 if scheduling == "no"
                 else booking[min(index % 3, 2)],
-                booking_out_notes="Fictional scheduling observation",
-                notes="Sanitized demonstration call note.",
+                booking_out_notes="Sample scheduling note",
+                notes="Sample call note.",
                 referral_type="Standard referral",
                 out_of_network_reason="Network access" if scheduling == "no" else "",
                 specialty_confirmed=index % 4 != 0,
@@ -285,7 +283,7 @@ class Command(BaseCommand):
                 import_fingerprint=f"demo-call-{index:03d}",
             )
             calls.append(call)
-        # Two same-week facility/diagnosis calls demonstrate the weekly duplicate guardrail.
+        # Two same-week calls make it easy to show the duplicate check in the demo.
         duplicate_calls = calls[:2]
         duplicate_facility = facilities[0]
         duplicate_diagnosis = diagnoses[0]
@@ -312,7 +310,7 @@ class Command(BaseCommand):
         review_specs = [
             (
                 "seven_day_follow_up",
-                "Follow up on recent scheduling evidence",
+                "Follow up on recent scheduling details",
                 -4,
                 "high",
                 facilities[3],
@@ -336,7 +334,7 @@ class Command(BaseCommand):
             ),
             (
                 "stale_availability",
-                "Reconfirm stale availability evidence",
+                "Check availability again",
                 5,
                 "medium",
                 facilities[12],
@@ -355,7 +353,7 @@ class Command(BaseCommand):
             ReviewTask.objects.create(
                 task_type=task_type,
                 title=title,
-                description="Fictional demonstration review work created by a business rule.",
+                description="Sample follow-up task for the local demo.",
                 facility=facility,
                 provider_call=call,
                 due_date=today + timedelta(days=due_offset),
@@ -394,7 +392,7 @@ class Command(BaseCommand):
                     "fingerprint": hashlib.sha256(f"rejected-{index}".encode()).hexdigest(),
                     "status": "rejected",
                     "issue_codes": [issue],
-                    "raw_data": {"notice": "Fictional demonstration row", "field": "redacted"},
+                    "raw_data": {"notice": "Fictional sample row", "field": "redacted"},
                     "normalized_data": {"fictional": True},
                 },
             )
@@ -420,7 +418,7 @@ class Command(BaseCommand):
             (
                 "Stale availability monitoring",
                 "stale-availability",
-                "Identify provider evidence older than 30 days.",
+                "Find provider calls that are more than 30 days old.",
                 "Daily at 6:00 AM",
             ),
             (
@@ -432,13 +430,13 @@ class Command(BaseCommand):
             (
                 "Weekly report snapshot",
                 "weekly-report-snapshot",
-                "Save a reproducible weekly activity snapshot.",
+                "Save the weekly activity report.",
                 "Mondays at 7:00 AM",
             ),
             (
                 "Monthly report snapshot",
                 "monthly-report-snapshot",
-                "Save a reproducible monthly activity snapshot.",
+                "Save the monthly activity report.",
                 "First day of month",
             ),
             (
@@ -491,15 +489,15 @@ class Command(BaseCommand):
             AuditEvent.objects.create(
                 actor=admin if index % 2 == 0 else ura,
                 action=action,
-                object_type="DemonstrationRecord",
+                object_type="SampleRecord",
                 object_id=f"demo-{index}",
-                summary=f"Fictional demonstration event: {action}",
+                summary=f"Fictional sample event: {action}",
                 metadata={"fictional": True},
             )
         self.stdout.write(
             self.style.SUCCESS(
-                "Sanitized demo ready: 30 facilities, 24 authorizations, 68 calls, four role accounts."
+                "Sample data ready: 30 facilities, 24 authorizations, 68 calls, four role accounts."
             )
         )
-        self.stdout.write("Demo usernames: ura.demo, admin.demo, viewer.demo, auditor.demo")
+        self.stdout.write("Sample usernames: ura.demo, admin.demo, viewer.demo, auditor.demo")
         self.stdout.write(f"Demo password: {DEMO_PASSWORD}")

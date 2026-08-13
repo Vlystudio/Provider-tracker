@@ -1,38 +1,38 @@
 # Architecture
 
-## Runtime modes
+## Local and production setups
 
-Local demonstration mode uses Django, SQLite, server-rendered templates, static assets, and eager Celery execution. It requires no Docker, Redis, or external database.
+The local demo uses Django, SQLite, server-rendered templates, static files, and immediate execution of background jobs. It does not require Docker, Redis, or an external database.
 
-Production mode uses Django/Gunicorn, PostgreSQL with PostGIS, Redis, Celery workers, and Celery Beat. The application-only container stack connects to an organization-managed database; the bundled stack supports isolated evaluation. Organizational infrastructure and security controls remain deployment responsibilities.
+Production uses Django with Gunicorn, PostgreSQL/PostGIS, Redis, Celery workers, and Celery Beat. The application-only Compose file connects to a database managed by IT. A bundled Compose file is also available for evaluation.
 
-## Application layers
+## Main code areas
 
-- `apps/accounts`: user profiles, URA initials, and role-to-group synchronization.
-- `apps/tracker/models.py`: normalized persistence and indexes.
-- `apps/tracker/forms.py`: input validation, clinical search constraints, duplicate overrides, and safe uploads.
-- `apps/tracker/services`: versioned business rules, transactions, importer, distance search, reports, and automations.
-- `apps/tracker/selectors.py`: bounded read queries, prefetching, filtering, and ordering.
-- `apps/tracker/views.py`: permission-protected request coordination.
-- `templates` and `static`: semantic, responsive presentation with HTMX enhancement and graceful full-page fallback.
+- `apps/accounts`: user profiles, URA initials, roles, and Django groups
+- `apps/tracker/models.py`: database tables and indexes
+- `apps/tracker/forms.py`: form and upload validation
+- `apps/tracker/services`: business rules, database writes, imports, distance search, reports, and scheduled jobs
+- `apps/tracker/selectors.py`: filtered and ordered database queries
+- `apps/tracker/views.py`: page requests and permission checks
+- `templates` and `static`: HTML, CSS, JavaScript, and HTMX page updates
 
-Models do not contain reporting queries. Templates do not calculate business outcomes. Browser previews improve speed but server-side saves always recalculate canonical results.
+Reporting queries stay out of the models, and templates do not calculate call results. The browser shows a result preview, but the server calculates it again before saving.
 
-## Distance repository
+## Distance search
 
-SQLite looks up a stored ZIP centroid, computes a latitude/longitude bounding box, limits candidates, and applies a tested Haversine calculation before sorting.
+SQLite starts with a stored ZIP centroid, narrows the facilities with a latitude/longitude box, calculates Haversine distance, and sorts the results.
 
-PostgreSQL stores a generated `geography(Point, 4326)` column derived from latitude/longitude, indexes it with GiST, filters with `ST_DWithin`, and returns miles from `ST_Distance`. Both paths implement the same search contract.
+PostgreSQL stores a generated `geography(Point, 4326)` value with a GiST index. It uses `ST_DWithin` to filter and `ST_Distance` to return miles. Both database paths follow the same search rules.
 
-## Automation
+## Scheduled jobs
 
-Each rule creates an `AutomationRun` with a schedule-window idempotency key. Demo actions execute eagerly. Production workers consume Redis jobs, while Beat evaluates enabled rules. Expensive imports and report generation can move behind the same task boundary without changing views.
+Each job creates an `AutomationRun` with a key for its schedule period. Demo actions run immediately. Production workers take jobs from Redis, and Celery Beat checks which jobs are due.
 
 ## Request flow
 
-1. Authentication establishes a Django session.
-2. Role decorators protect the view; navigation hides destinations outside the role.
-3. A form normalizes and validates input.
-4. A service performs business calculations and transactional writes.
-5. Review, duplicate, report, and audit records update from canonical data.
-6. A template renders bounded results or a safe empty/error state.
+1. Django signs in the user and starts a session.
+2. The view checks the user's role.
+3. A form cleans and validates the submitted values.
+4. A service calculates results and saves the related records in one transaction.
+5. Follow-ups, duplicate warnings, reports, and change history are updated.
+6. The template shows the result or a useful empty/error state.

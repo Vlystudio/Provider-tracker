@@ -1,8 +1,8 @@
 # Data Model
 
-Business records use UUID primary keys. Django's authentication user remains the identity anchor, with `UserProfile` storing URA initials, display name, role, and activity state.
+Business records use UUID primary keys. Django's user table stores sign-in details, while `UserProfile` stores URA initials, display name, role, and active status.
 
-## Reference records
+## Reference tables
 
 - `LineOfBusiness`
 - `Specialty`
@@ -11,24 +11,24 @@ Business records use UUID primary keys. Django's authentication user remains the
 - `BookingOutBucket`
 - `PostalCodeCentroid`
 
-Normalized reference names support stable matching while retaining a clean display value.
+Reference values keep a normalized name for matching and a separate display name.
 
-## Operational records
+## Main records
 
-- `Facility`: canonical identity, contact/location, numeric coordinates, quality status, provenance, and active state.
-- `FacilitySpecialty`: confirmed mapping, treatment status, notes, and source evidence.
-- `Authorization`: referral context shared by related call attempts.
-- `ProviderCall`: timestamped availability evidence, result code/phrase, recommendation, FDM fields, repeat reason, review date, and import provenance.
-- `DuplicateCallGroup`: facility + diagnosis + week warning state.
-- `ReviewTask`: assigned, prioritized, due-dated follow-up or data-quality work.
+- `Facility`: name, contact information, location, coordinates, data-quality status, import source, and active status
+- `FacilitySpecialty`: specialty mapping, confirmation status, treatment status, notes, and source
+- `Authorization`: referral details shared by its provider calls
+- `ProviderCall`: call time, availability answers, result, recommendation, FDM fields, repeat reason, review date, and import details
+- `DuplicateCallGroup`: repeat calls for the same facility, diagnosis, and week
+- `ReviewTask`: assigned follow-up or data issue with a priority and due date
 
-## Governance and automation
+## Imports, reports, and jobs
 
-- `ImportBatch` is unique by source hash and importer version.
-- `ImportRowResult` retains accepted or quarantined row evidence; raw data is restricted to authorized roles.
-- `AuditEvent` records material changes with a non-sensitive summary.
-- `ReportSnapshot` preserves period metrics behind a stable fingerprint.
-- `AutomationRule` describes a trigger or schedule.
-- `AutomationRun` records outcome, affected count, details, and idempotency key.
+- `ImportBatch`: one workbook import, identified by file hash and importer version
+- `ImportRowResult`: accepted or rejected source rows; raw values are limited to authorized roles
+- `AuditEvent`: important changes with a short, non-sensitive summary
+- `ReportSnapshot`: saved report dates and totals
+- `AutomationRule`: a scheduled or triggered job definition
+- `AutomationRun`: one job result, including its count, details, error, and duplicate-prevention key
 
-Common facility, ZIP, status, result, date, caller, authorization, review, and relationship filters are indexed. List views use server pagination and relation prefetching.
+Common filters such as facility, ZIP, status, result, date, caller, authorization, review status, and relationships are indexed. Long lists use server-side pagination and related-record prefetching.

@@ -1,11 +1,11 @@
 name: Bug report
-description: Report reproducible incorrect behavior using fictional data only.
+description: Report a problem using fictional data only.
 title: "[Bug]: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: Never attach real workbooks, authorization data, provider notes, credentials, or operational logs.
+      value: Never attach real workbooks, authorization data, provider notes, credentials, or private logs.
   - type: textarea
     id: behavior
     attributes:
@@ -29,5 +29,5 @@ body:
     attributes:
       label: Data safety
       options:
-        - label: I confirmed this report contains no private or operational data.
+        - label: I confirmed this report contains no private or production data.
           required: true

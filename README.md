@@ -1,74 +1,49 @@
 # Provider Tracker
 
-Provider Tracker is a Django operations platform for managing provider availability research. It replaces split spreadsheet workflows with one validated database, guided call entry, geographic provider search, automatic follow-up work, reproducible reports, and an auditable history.
+Provider Tracker is a Django site for recording provider availability calls. Staff can search facilities, add call results, follow up on open items, and run reports from one database.
 
-The public demonstration contains only deterministic, fictional records. It is not configured or approved for regulated production data.
+This public repository contains fictional sample data only. Do not add real member information, authorization records, call notes, workbooks, credentials, or database exports to the repository.
 
 ![Provider Tracker dashboard](screenshots/dashboard.png)
 
 <details>
-<summary>More application screenshots</summary>
+<summary>More screenshots</summary>
 
-![Provider search with ranked nearby results](screenshots/provider-search.png)
+![Provider search](screenshots/provider-search.png)
 
-![Guided provider call workflow](screenshots/new-call.png)
+![New provider call](screenshots/new-call.png)
 
-![Authorization call summary](screenshots/authorization-summary.png)
+![Authorization summary](screenshots/authorization-summary.png)
 
 </details>
 
-## Demonstration workflows
+## What the site does
 
-- Create an authorization and provider call in one validated transaction.
-- Calculate availability outcomes and seven-day recommendations from versioned server-side rules.
-- Search nearby facilities by ZIP, radius, diagnosis or specialty, and recent evidence.
-- Detect same-week duplicate calls while allowing documented legitimate callbacks.
-- Generate authorization narratives that stop after the second successful provider.
-- Assign and resolve follow-up, duplicate, stale-evidence, coordinate, and import review work.
-- Filter and paginate the canonical call log; export CSV or professionally formatted Excel.
-- Explore weekly, monthly, and filtered metrics with stated periods and denominators.
-- Save reproducible report snapshots and run visible, idempotent automations.
-- Preview and apply recognized workbooks through a quarantining, provenance-preserving importer.
-- Review material changes in a role-protected audit history.
+- Records an authorization and provider call together.
+- Calculates the call result and next review date on the server.
+- Searches facilities by ZIP, distance, diagnosis, or specialty.
+- Flags repeat calls for the same facility and diagnosis in one week.
+- Keeps follow-up tasks in a review queue.
+- Shows authorization summaries and recent facility calls.
+- Filters and exports the call log.
+- Builds date-based reports and saves report snapshots.
+- Previews supported Excel workbooks before importing them.
+- Keeps a history of important changes.
+- Limits pages and actions by user role.
 
-| Workbook limitation | Application improvement |
-|---|---|
-| Split admin and user files | One canonical database |
-| Recalculation and fixed formula ranges | Targeted, tested services and indexed queries |
-| Positional column drift | Header-driven import and named fields |
-| Manual follow-up tracking | Automatic review queue |
-| Cached report sheets | Live metrics and reproducible snapshots |
-| Difficult concurrent editing | Authenticated, role-based multiuser access |
+## Project layout
 
-## Architecture
+- Django 6.1 serves the pages and handles validation.
+- SQLite is used for the local demo.
+- PostgreSQL with PostGIS is used in production for distance searches.
+- Redis and Celery run scheduled jobs in production.
+- Docker files and setup scripts are included for IT deployment.
 
-- **Web:** Django 6.1 templates, semantic HTML, HTMX-enhanced filtering, and a responsive local design system.
-- **Domain:** Django forms for validation, thin views, selectors/repositories for data access, and services for business rules and transactions.
-- **Local demo:** SQLite, eager background tasks, numeric coordinates, bounding-box prefiltering, and final Haversine distance calculation.
-- **Production path:** PostgreSQL/PostGIS stored geography points with a GiST index, `ST_DWithin`/`ST_Distance`, Redis, Celery workers, and scheduled task evaluation.
-- **Governance:** UUID business records, source provenance, row-level import results, audit events, report snapshots, and role-protected administration.
+More detail is in [Architecture](docs/ARCHITECTURE.md) and [Data Model](docs/DATA_MODEL.md).
 
-See [architecture](docs/ARCHITECTURE.md), [data model](docs/DATA_MODEL.md), and [deployment guidance](docs/DEPLOYMENT.md).
+## Run the local demo on Windows
 
-## Ready for IT deployment
-
-The repository is the full open-source application, not a hosted service. An IT team can deploy it without the private workbooks and without assistance from the application owner. It includes database migrations, Docker definitions, production environment templates, web/worker/scheduler services, health endpoints, tests, and an operator runbook.
-
-For an organization-managed PostgreSQL/PostGIS database, the handoff is:
-
-```bash
-git clone https://github.com/Vlystudio/Provider-tracker.git
-cd Provider-tracker
-cp .env.production.example .env.production
-# IT supplies the hostname, database credentials, public URL, and secrets.
-./scripts/deploy.sh external
-```
-
-See the [IT Deployment Handoff](docs/IT_HANDOFF.md) for the exact database contract, Windows commands, first-administrator setup, upgrades, monitoring, backups, and rollback. A self-contained evaluation stack is also available with `./scripts/deploy.sh bundled`.
-
-## One-command Windows demo setup
-
-Requirements: Windows PowerShell and Python 3.14 or a compatible supported Python release.
+You need PowerShell and Python 3.14, or another supported Python version.
 
 ```powershell
 git clone https://github.com/Vlystudio/Provider-tracker.git "D:\Provider tracker Database"
@@ -79,26 +54,50 @@ Set-Location "D:\Provider tracker Database"
 
 Open <http://127.0.0.1:8000>.
 
-| Role | Username | Demo password |
+| Role | Username | Password |
 |---|---|---|
 | URA User | `ura.demo` | `DemoOnly!2026` |
 | Administrator | `admin.demo` | `DemoOnly!2026` |
 | Report Viewer | `viewer.demo` | `DemoOnly!2026` |
 | Auditor | `auditor.demo` | `DemoOnly!2026` |
 
-One-click role sign-in is available only when both `DJANGO_DEBUG=true` and `DEMO_MODE=true`. Startup refuses production mode with demonstration authentication enabled.
+The demo buttons are available only when `DJANGO_DEBUG=true` and `DEMO_MODE=true`. The production settings will not start if demo sign-in is enabled.
 
-To reset fictional data:
+Reset the sample database with:
 
 ```powershell
 .\scripts\reset_demo.ps1
 ```
 
-## Workbook migration
+## Give the project to IT
 
-Private workbooks are never part of this repository. The importer validates the Office Open XML container, enforces size and row limits, hashes files with SHA-256, streams selected sheets, maps normalized headers, quarantines malformed rows, recalculates canonical results, and keeps source provenance.
+The repository includes the application, database migrations, Docker files, environment examples, health checks, tests, and deployment scripts. IT can connect its own PostgreSQL/PostGIS database and deploy the site without the sample workbooks.
 
-Read-only preview:
+Basic Linux deployment with an IT-managed database:
+
+```bash
+git clone https://github.com/Vlystudio/Provider-tracker.git
+cd Provider-tracker
+cp .env.production.example .env.production
+# Add the database connection, public URL, and secrets to .env.production.
+./scripts/deploy.sh external
+```
+
+Windows deployment:
+
+```powershell
+Copy-Item .env.production.example .env.production
+# Add the database connection, public URL, and secrets to .env.production.
+.\scripts\deploy.ps1 -Mode external
+```
+
+See [IT Deployment Handoff](docs/IT_HANDOFF.md) for the database requirements, first setup, updates, backups, and rollback notes. A self-contained evaluation stack is also available with `./scripts/deploy.sh bundled`.
+
+## Import a workbook
+
+Workbook files are not stored in this repository. The importer checks the file structure, size, sheets, rows, and duplicates before changing the database. A preview does not write any records.
+
+Preview two workbooks:
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py import_ura_workbooks `
@@ -107,7 +106,7 @@ Read-only preview:
   --preview
 ```
 
-Explicit, idempotent apply:
+Import after reviewing the preview:
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py import_ura_workbooks `
@@ -116,9 +115,9 @@ Explicit, idempotent apply:
   --apply
 ```
 
-The current source-file analysis is documented in [Workbook Analysis](docs/WORKBOOK_ANALYSIS.md). Original rows, uploads, databases, exports, logs, and workbook files are excluded from version control.
+See [Workbook Analysis](docs/WORKBOOK_ANALYSIS.md) and [Import Process](docs/IMPORT_PROCESS.md) for supported sheets and import rules.
 
-## Tests and quality checks
+## Run the checks
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
@@ -130,20 +129,16 @@ The current source-file analysis is documented in [Workbook Analysis](docs/WORKB
 .\.venv\Scripts\pip-audit.exe -r requirements.txt
 ```
 
-GitHub Actions runs formatting, linting, Django checks, migration consistency, tests, static collection, dependency auditing, and secret scanning on pushes and pull requests.
+GitHub Actions runs these checks on pushes and pull requests.
 
-## Privacy and security boundaries
+## Before production use
 
-The repository implements CSRF protection, secure password hashing, role checks, restricted administration, upload validation, redacted structured logs, provenance, audit events, safe production session defaults, and a hard refusal of production demo login.
+The code includes role checks, upload validation, secure session defaults, audit records, redacted logs, and health endpoints. Those features do not by themselves make a deployment HIPAA compliant or approved by an organization.
 
-These technical controls do not establish HIPAA compliance or organizational approval. Before production use, complete privacy, security, legal, infrastructure, backup, incident-response, identity-provider, retention, and vendor reviews. See [Security](docs/SECURITY.md) and the project [security policy](SECURITY.md).
-
-## Production deployment
-
-Copy `.env.production.example` to the deployment platform's private configuration, replace every placeholder, and follow the [IT Deployment Handoff](docs/IT_HANDOFF.md). Use `docker-compose.external-db.yml` when IT supplies PostgreSQL/PostGIS, or `docker-compose.yml` for a self-contained evaluation stack. Do not use public demo accounts or fictional seed commands in production.
+Before using real data, IT must review privacy, security, identity, access, backups, monitoring, retention, incident response, and the production environment. Read [Security Notes](docs/SECURITY.md) and the [Security Policy](SECURITY.md).
 
 ## Contributing and license
 
-Contributions are welcome through issues and pull requests. Read [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) first.
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) first.
 
-Licensed under the [MIT License](LICENSE).
+Provider Tracker is available under the [MIT License](LICENSE).

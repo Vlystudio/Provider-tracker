@@ -73,7 +73,7 @@ def landing(request):
 @require_POST
 def demo_login(request, role):
     if not settings.DEMO_MODE or not settings.DEBUG:
-        raise PermissionDenied("Demonstration sign-in is disabled.")
+        raise PermissionDenied("Demo sign-in is not available.")
     usernames = {
         "ura": "ura.demo",
         "administrator": "admin.demo",
@@ -84,7 +84,7 @@ def demo_login(request, role):
         raise Http404
     user = get_object_or_404(get_user_model(), username=usernames[role], is_active=True)
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    messages.success(request, f"Signed in as {user.profile.get_role_display()} demonstration account.")
+    messages.success(request, f"Signed in with the {user.profile.get_role_display()} demo account.")
     return redirect("dashboard")
 
 
@@ -271,7 +271,7 @@ def resolve_review(request, pk):
         summary=f"Resolved review: {task.title}",
         request=request,
     )
-    messages.success(request, "Review task resolved and added to the audit history.")
+    messages.success(request, "Review saved.")
     return redirect("review_queue")
 
 
@@ -333,7 +333,7 @@ def reports(request):
             actor=request.user,
             action="report.snapshot",
             instance=snapshot,
-            summary="Saved reproducible report snapshot",
+            summary="Saved report snapshot",
             request=request,
         )
         messages.success(request, "Report snapshot saved.")
@@ -366,9 +366,9 @@ def automation_run(request, pk):
     )
     messages.success(
         request,
-        f"{rule.name}: {run.affected_count} record(s) affected."
+        f"{rule.name}: {run.affected_count} item(s) updated."
         if created
-        else f"{rule.name} already ran for this schedule window; the idempotent result was reused.",
+        else f"{rule.name} already ran for this period. The earlier result was used.",
     )
     return redirect("automations")
 
@@ -391,11 +391,9 @@ def imports(request):
             summary = safe_summary(plan)
             if request.POST.get("action") == "apply":
                 result = apply_plan(plan, actor=request.user)
-                messages.success(
-                    request, f"Import applied idempotently: {result['calls_imported']} new call(s)."
-                )
+                messages.success(request, f"Import complete: {result['calls_imported']} new call(s).")
                 return redirect("imports")
-            messages.success(request, "Preview complete. No canonical records were changed.")
+            messages.success(request, "Preview complete. No records were changed.")
         except (OSError, ValueError) as exc:
             form.add_error("workbook", str(exc))
         finally:
