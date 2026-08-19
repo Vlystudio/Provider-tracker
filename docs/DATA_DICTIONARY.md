@@ -14,7 +14,7 @@ Stores authenticated staff with role-based access and URA initials for workflow 
 - is_active: disabled users are filtered from active workflows
 - created_at / updated_at
 
-Auth-compatible `accounts`, `sessions`, and `verification_tokens` tables are included so the authentication adapter can be added without reshaping operational data.
+Better Auth uses the `accounts`, `sessions`, `verification_tokens`, and `auth_rate_limits` tables. Credential accounts are scoped by issuer, and session records are deleted when the related user is deleted.
 
 ### facilities
 

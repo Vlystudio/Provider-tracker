@@ -1,53 +1,40 @@
-# Security and operational safeguards
+# Security
 
-## Current baseline
+## Application controls
 
-- browser responses include a content security policy and clickjacking, MIME-sniffing, referrer, and permissions controls
-- production responses use HSTS when the app is served over HTTPS
-- the app does not send the default Next.js identification header
-- sample data mode is blocked when `APP_ENV=production`
-- database connection strings are validated as PostgreSQL URLs and remain server-side
-- local environment files, workbooks, exports, and generated reconciliation files are excluded from Git
+- Better Auth verifies email/password credentials and stores sessions in PostgreSQL.
+- Passwords use Better Auth's scrypt implementation. The staff provisioning and reset paths require at least 14 characters with upper case, lower case, a number, and a symbol.
+- Public registration and unused authentication endpoints are not exposed.
+- Sessions last eight hours, use database records, and are revoked on password reset, role change, or account activation change.
+- Production cookies are `HttpOnly`, `Secure`, `SameSite=Lax`, host-only, and scoped to `/`.
+- Page checks, route-handler checks, and service-layer checks use the same role and permission policy.
+- User-owned authorization queries include the authenticated user ID. A mismatched ID returns `404`.
+- State-changing application routes require an approved `Origin`, JSON bodies, strict schemas, and a 16 KiB body limit.
+- Sign-in and sensitive application routes use database-backed rate limits.
+- Authentication failures and security-sensitive account or record changes create structured audit events. IP addresses and email lookup values are HMAC-hashed before storage.
 
-Authentication and role checks are not finished. Do not place this app on a public network until those controls are implemented and reviewed.
+## Browser and transport controls
 
-## Access model
+Responses include Content Security Policy, clickjacking protection, MIME-sniffing protection, a strict referrer policy, permissions controls, and cross-origin isolation headers. Production adds HSTS and removes the Next.js identification header. Cross-origin browser access is not enabled.
 
-- all access requires authenticated sessions
-- authorization checks are enforced on the server
-- roles: admin, ura_user, report_viewer, auditor
-- least-privilege patterns are required for import, reconciliation, and audit access
+TLS must terminate at the application host or at a trusted reverse proxy. `AUTH_CLIENT_IP_HEADER` stays unset unless that proxy overwrites the selected header and strips values supplied by clients.
 
-## Session and transport
+## Data and files
 
-- HttpOnly, SameSite cookies
-- CSRF protection on mutation endpoints
-- secure headers and Content Security Policy
-- TLS required for production deployments
+Authorization numbers, provider data, diagnosis codes, notes, and reports are sensitive operational data. The web app does not provide file upload or download endpoints. Workbook intake is a local command with bounded ZIP/XML parsing, file-size and row limits, and no macro or formula execution. Source workbooks and exports are excluded from Git.
 
-## Data handling
+Database credentials stay in server environment variables. The production database account should have only the permissions needed by the app. Run migrations with a separate release identity when the hosting platform supports it.
 
-- authorization numbers, provider data, diagnosis codes, and narratives are treated as sensitive operational data
-- logs must redact or omit direct identifiers where possible
-- no workbook or generated export artifacts are committed to version control
-- all file uploads are subject to safe-size checks and validation
+## Dependency audit note
 
-## Operational requirements
+The deployable package set passes:
 
-- external hosting should be paired with a signed BAA where applicable
-- document encryption at rest, backup rotation, and restore testing
-- production requires secret scanning, dependency scanning, and review of external packages
-- import endpoints should restrict file types, ZIP bombs, and row counts
-- the CLI accepts only XLSX/XLSM containers, rejects encrypted/unsafe ZIP entries, and bounds compressed size, expanded size, and sheet rows
-- reconciliation output excludes raw row content and local source paths; staged raw data remains inside PostgreSQL access controls
-- source workbook and export patterns are ignored by Git
+```bash
+npm audit --omit=dev --omit=optional --omit=peer
+```
 
-## Dependency posture
+The broader `npm audit --omit=dev` report currently follows Better Auth's optional `drizzle-kit` peer back to this repository's development tooling and reports four moderate findings under `@esbuild-kit` and `esbuild` (`GHSA-67mh-4wv8-2f99`). The advisory concerns an exposed esbuild development server. The production image removes development, optional, and peer-only packages and does not run an esbuild server. Do not use `npm audit fix --force`; npm currently proposes an incompatible Drizzle Kit downgrade. Upgrade Drizzle Kit when its dependency chain removes the affected package.
 
-- Placeholder Auth.js packages were removed after the production audit reported critical/high advisories and before any auth code was introduced.
-- The authentication phase must install a current security-reviewed integration and rerun the production dependency audit.
-- The importer uses narrowly scoped streaming ZIP/XML packages and does not execute macros or workbook formulas.
+## Deployment responsibility
 
-## Compliance note
-
-This application does not claim HIPAA compliance by code alone. Production deployment requires the organization’s security/compliance owner to confirm hosting, BAA coverage, policy controls, and risk assessment.
+Code alone does not establish HIPAA compliance. Before live use, the organization must approve the host, BAA coverage, database encryption, backups and restore tests, network controls, monitoring, retention, and incident procedures.

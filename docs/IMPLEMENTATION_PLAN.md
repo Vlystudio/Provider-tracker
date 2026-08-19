@@ -3,11 +3,11 @@
 ## Phase 1 — foundation
 
 - [x] Initialize a Next.js App Router project with TypeScript and Tailwind.
-- [x] Configure Docker Compose for PostgreSQL/PostGIS and a worker service.
+- [x] Configure Docker Compose for PostgreSQL/PostGIS and the local app service.
 - [x] Add Drizzle schema, migrations, environment configuration, and deterministic seed.
-- [ ] Add auth/RBAC scaffolding and session model.
+- [x] Add server-backed authentication, RBAC, and database sessions.
 - [x] Define UI shell, tokens, and app navigation.
-- [ ] Add audit, logging, and redaction helpers.
+- [x] Add audit, logging, and redaction helpers.
 
 ## Phase 2 — migration and master data
 
@@ -36,8 +36,8 @@
 - [ ] Add benchmark seed and performance testing.
 - [ ] Verify query plans and tune indexes.
 - [ ] Complete E2E, accessibility, and permission tests.
-- [ ] Finalize security guidance and migration completion notes.
+- [x] Finalize security and operations guidance.
 
 ## Current status
 
-The database and workbook-migration foundation is implemented. A real-file dry run reconciles the admin and user workbooks without evaluating formulas or loading the workbook object model. The next milestone is secure authentication/RBAC, followed by the provider-search and rapid call-entry workflow.
+The database, workbook intake, authentication, authorization, and deployment safeguards are in place. Remaining product work is tracked by the unchecked workflow items above.

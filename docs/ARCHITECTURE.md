@@ -1,63 +1,34 @@
 # Architecture
 
-## Overview
+## Runtime
 
-This project is a Next.js App Router application that centralizes URA provider-availability workflows into a single canonical database and interface. It replaces the spreadsheet model with a normalized PostgreSQL/PostGIS foundation and business logic that is versioned and testable.
+- Next.js 16 App Router on Node.js 22
+- React server components for pages and route handlers for HTTP APIs
+- Better Auth for email/password identity and database-backed sessions
+- Drizzle ORM for typed data access and migrations
+- PostgreSQL with PostGIS for operational and geospatial data
+- local workbook import command for controlled data intake
 
-## Runtime components
+## Request path
 
-- Next.js app server for authenticated views and server actions
-- PostgreSQL with PostGIS for operational storage and geospatial filtering
-- Drizzle ORM for typed schema and SQL migrations
-- Auth.js for session-based RBAC
-- Worker process for import, export, snapshot generation, and background jobs
-- Docker Compose for local orchestration
+Browser requests pass through the Next.js proxy, then the page or route handler, the central authorization helper, the service layer, Drizzle, and PostgreSQL. Page checks keep users out of routes they cannot use. Route and service checks remain the security boundary for direct HTTP requests.
 
-## Application layers
-
-### Presentation
+## Application areas
 
 - dashboard and summary pages
-- rapid call-entry form
-- provider search page
-- authorization narrative preview
-- admin review and facility workflows
-- reports and audit screens
+- call entry and call history
+- provider search
+- authorization summaries and review queue
+- facility maintenance
+- reports and audit views
+- administrator account and data operations
 
-### Domain
+## Data rules
 
-- provider-search validation
-- result-phrase rules
-- review-queue logic
-- duplicate detection
-- FDM eligibility
-- narrative-generation rules
+- workbook formulas are not treated as source data
+- aliases are normalized while raw source values remain available for reconciliation
+- derived results come from versioned business rules
+- provider distance filtering uses indexed PostGIS queries
+- source workbooks stay read-only and outside version control
 
-### Data access
-
-- Drizzle queries for calls, facilities, mappings, and reports
-- PostgreSQL views and summary tables for current state
-- materialized summaries for reporting workloads
-- audit rows for every mutation
-
-### Workbook migration
-
-- bounded ZIP/XML streaming reader; no Excel formula engine or workbook recalculation
-- header-name mapping to tolerate the admin/user column drift
-- raw and normalized row staging with source hash, sheet, and row provenance
-- canonical rule recalculation instead of trusting cached output phrases
-- deterministic fingerprints for batch and call idempotency
-- reconciliation before any database write; redacted JSON summaries are safe to share internally
-
-## Design principles
-
-- never trust workbook formula output as the system-of-record
-- normalize aliases and preserve raw source values
-- enforce RBAC on the server, not only in the UI
-- keep derived state queryable rather than stored as spreadsheet formulas
-- use indexed geospatial queries instead of row-by-row client processing
-- keep source workbooks read-only and outside version control
-
-## Future migration path
-
-The application is intentionally designed for 100,000+ payment and operational records and a path to 1,000,000 records through server-side pagination, summary tables, and query planning discipline.
+The detailed trust boundaries, permissions, and endpoint rules are in `SECURITY_ARCHITECTURE.md`.

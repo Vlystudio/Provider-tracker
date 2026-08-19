@@ -4,26 +4,32 @@ services:
     container_name: provider-tracker-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-provider_tracker}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-provider_tracker}']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
       interval: 10s
       timeout: 5s
       retries: 5
 
-  worker:
+  app:
     image: node:22-alpine
     working_dir: /workspace
     command: sh -c "npm ci && npm run dev -- --hostname 0.0.0.0"
     environment:
       NODE_ENV: development
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/provider_tracker}
+      APP_ENV: development
+      APP_DATA_MODE: database
+      DATABASE_URL: ${DOCKER_DATABASE_URL:?Set DOCKER_DATABASE_URL in .env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Set BETTER_AUTH_URL in .env}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:?Set AUTH_TRUSTED_ORIGINS in .env}
+      AUDIT_LOG_IP_SALT: ${AUDIT_LOG_IP_SALT:?Set AUDIT_LOG_IP_SALT in .env}
     volumes:
       - .:/workspace
     depends_on:

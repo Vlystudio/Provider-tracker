@@ -1,0 +1,9 @@
+.git
+.next
+node_modules
+work
+reference
+exports
+.env*
+npm-debug.log*
+coverage

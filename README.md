@@ -1,25 +1,40 @@
 # Provider Tracker
 
-Internal web app for URA provider calls, availability checks, follow-up, and reporting. The current version includes the database schema, workbook importer, staff screens, and sample data used for local testing.
+Provider Tracker is an internal web app for URA provider calls, availability checks, follow-up, and reporting. It runs on Next.js and PostgreSQL/PostGIS. Staff accounts are created by an administrator; there is no public registration.
 
-## Quick start
+## Local setup
 
-1. Copy `.env.example` to `.env`.
-2. Start PostgreSQL/PostGIS locally:
+Requirements: Node.js 22 or later and PostgreSQL 16 with PostGIS. Docker Desktop can provide the local database.
+
+1. Copy `.env.example` to `.env` and replace the local passwords and secrets.
+2. Start PostgreSQL:
+
    ```bash
    docker compose up -d postgres
    ```
-3. Install dependencies (if you have not already):
+
+3. Install packages and apply migrations:
+
    ```bash
-   npm install
+   npm ci
+   npm run db:migrate
    ```
-4. Run the app:
+
+4. Create the first administrator. The command asks for the password without displaying it:
+
+   ```bash
+   npm run admin:bootstrap -- --email admin@example.org --name "Administrator"
+   ```
+
+5. Start the app and open http://localhost:3000:
+
    ```bash
    npm run dev
    ```
-5. Open http://localhost:3000
 
-## Database and migrations
+The bootstrap command stops if an active administrator already exists. Additional staff accounts are created through the protected administrator API.
+
+## Database commands
 
 ```bash
 npm run db:generate
@@ -27,46 +42,54 @@ npm run db:migrate
 npm run db:seed
 ```
 
-## Tests
+`db:seed` adds sample operational records for local testing. Production cannot run in demo data mode.
+
+## Checks
 
 ```bash
 npm test
 npm run lint
 npm run typecheck
 npm run build
+npm run audit:production
+npm run scan:secrets
 ```
 
-## Import the existing workbooks
+The live security matrix needs a disposable PostgreSQL database whose name ends in `_test`:
 
-The import command reads the two existing workbooks without changing them. Run a preview first:
+```bash
+SECURITY_TEST_DATABASE_URL=postgresql://user:password@localhost/provider_tracker_test npm run test:security
+```
 
-Preview the real workbooks without a database write:
+That command drops and recreates only the authentication, authorization, and audit tables in the named test database. Never point it at a working database.
+
+## Workbook import
+
+The import command reads the two source workbooks without changing them. Run a preview first:
 
 ```bash
 npm run import:workbooks -- --admin "C:\path\URA_Provider_Availability_Tracker_ADMIN_MASTER.xlsx" --user "C:\path\URA_Provider_Availability_Tracker_USER_ACTIVE.xlsx" --output work/import-summary.json
 ```
 
-After reviewing the preview, import the data into PostgreSQL:
+After reviewing the preview, import the data:
 
 ```bash
 npm run import:workbooks -- --admin "C:\path\URA_Provider_Availability_Tracker_ADMIN_MASTER.xlsx" --user "C:\path\URA_Provider_Availability_Tracker_USER_ACTIVE.xlsx" --apply
 ```
 
-With no file arguments, the command looks under `reference/`. Workbook files and exports in that folder are not committed to Git. See `docs/IMPORTING_WORKBOOKS.md` for the matching and rejection rules.
+With no file arguments, the command looks under `reference/`. Workbook files and exports in that folder are excluded from Git. See `docs/IMPORTING_WORKBOOKS.md` for matching and rejection rules.
 
-## Implementation status
+## Production
 
-Working now:
+Use an external PostgreSQL/PostGIS database, run migrations as a release step, and serve the app behind HTTPS. Set every variable listed in `.env.example`; production startup rejects missing, placeholder, or non-HTTPS security settings.
 
-- staff dashboard and workflow screens
-- PostgreSQL/PostGIS schema, migrations, and sample records
-- provider availability rules and recommendations
-- workbook preview and import commands
-- unit tests for business rules and import matching
+```bash
+npm ci
+npm run db:migrate
+npm run build
+npm start
+```
 
-Still needed before launch:
+The included `Dockerfile` builds an unprivileged runtime image without development, optional, or peer-only packages. Environment values are supplied when the container starts, not during the image build.
 
-- sign-in and role permissions
-- database-backed write screens
-- browser and accessibility tests
-- production deployment review
+Deployment, account recovery, proxy, and session-revocation steps are in `docs/OPERATIONS.md`. The access model and endpoint map are in `docs/SECURITY_ARCHITECTURE.md`.
