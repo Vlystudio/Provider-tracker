@@ -3,20 +3,13 @@
 {% block public_content %}
   <div class="public-shell">
     <header class="public-header">
-      <a class="brand brand-public" href="{% url 'landing' %}">
-        <span class="brand-mark" aria-hidden="true">PT</span>
-        <span>
-          <strong>Provider Tracker</strong>
-          <small>URA operations</small>
-        </span>
-      </a>
+      <a class="brand-public" href="{% url 'landing' %}">Provider Tracker</a>
       <a href="{% url 'login' %}" class="button secondary">Staff sign in</a>
     </header>
     <section class="entry-intro">
       <div>
-        <span class="section-label">Provider availability</span>
         <h1>Provider Availability Tracker</h1>
-        <p>Record provider calls, review current availability, and manage follow-up work.</p>
+        <p>Record provider calls, check current availability, and keep up with follow-up work in one straightforward place.</p>
         <a class="button primary" href="{% url 'login' %}">Staff sign in</a>
       </div>
       <dl class="entry-tasks" aria-label="Available staff tasks">
@@ -28,9 +21,8 @@
     {% if demo_mode %}
       <section id="demo-accounts" class="demo-access" aria-labelledby="demo-heading">
         <div>
-          <span class="section-label">Local demo</span>
-          <h2 id="demo-heading">Open a sample account</h2>
-          <p>Sample accounts use made-up data and are available only in demo mode.</p>
+          <h2 id="demo-heading">Try the local demo</h2>
+          <p>These accounts use fictional data and are available only when demo mode is on.</p>
         </div>
         <div class="demo-list">
           <form method="post" action="{% url 'demo_login' 'ura' %}">

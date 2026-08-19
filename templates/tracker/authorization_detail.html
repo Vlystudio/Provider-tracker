@@ -3,8 +3,8 @@
 {% block content %}
   <header class="page-heading">
     <div>
-      <span class="section-label">Authorization {{ authorization.authorization_number }}</span>
       <h1>{{ authorization.specialty.name }} provider calls</h1>
+      <p>Authorization {{ authorization.authorization_number }}</p>
       <p>{{ authorization.line_of_business.name }} · Member ZIP {{ authorization.member_postal_code }} · {{ authorization.diagnosis }}</p>
     </div>
     <div class="heading-actions">

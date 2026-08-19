@@ -3,54 +3,47 @@
 {% block content %}
   <header class="page-heading">
     <div>
-      <span class="section-label">Dashboard</span>
-      <h1>Work overview</h1>
-      <p>{{ metrics.period }}. {{ metrics.denominator }} completed call{{ metrics.denominator|pluralize }} included.</p>
-    </div>
-    <div class="heading-actions">
-      {% if 'new_call' in allowed_nav %}<a class="button primary" href="{% url 'new_call' %}">Record a call</a>{% endif %}
-      {% if 'provider_search' in allowed_nav %}<a class="button secondary" href="{% url 'provider_search' %}">Find a provider</a>{% endif %}
+      <h1>Today’s work</h1>
+      <p>{{ today|date:"l, F j, Y" }}</p>
     </div>
   </header>
-  <section class="metric-strip" aria-label="Weekly totals">
+
+  <section class="metric-strip" aria-label="Current totals">
     <div><span>Calls completed</span><strong>{{ metrics.calls }}</strong></div>
     <div><span>Met guidelines</span><strong>{{ metrics.success }}</strong></div>
     <div><span>Success rate</span><strong>{{ metrics.success_rate }}%</strong></div>
     <div><span>Open reviews</span><strong>{{ metrics.open_reviews }}</strong><small>{{ metrics.overdue_reviews }} overdue</small></div>
   </section>
+
   <div class="dashboard-layout">
     <section class="work-panel attention-panel" aria-labelledby="attention-heading">
       <div class="section-heading">
-        <div><span class="section-label">Needs attention</span><h2 id="attention-heading">Work to check</h2></div>
+        <h2 id="attention-heading">Items needing attention</h2>
       </div>
-      <div class="task-links">
-        {% if 'review_queue' in allowed_nav %}
-          <a href="{% url 'review_queue' %}?status=open"><strong>{{ metrics.overdue_reviews }} overdue reviews</strong><span>Past the due date</span></a>
-          <a href="{% url 'review_queue' %}"><strong>{{ metrics.duplicates }} possible duplicates</strong><span>Same facility, diagnosis, and week</span></a>
-        {% endif %}
-        {% if 'imports' in allowed_nav %}
-          <a href="{% url 'imports' %}"><strong>{{ metrics.import_issues }} import issues</strong><span>Rows that could not be imported</span></a>
-        {% endif %}
-        <a href="{% url 'facilities' %}?quality=review"><strong>{{ metrics.facility_review }} facility records</strong><span>Location or source needs review</span></a>
+      <div class="table-wrap attention-table">
+        <table>
+          <thead>
+            <tr><th>Due date</th><th>Work item</th><th>Category</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for task in reviews %}
+              <tr>
+                <td><strong class="due-date {% if task.due_date < today %}overdue{% endif %}">{{ task.due_date|date:"M j, Y" }}</strong></td>
+                <td>{{ task.title }}</td>
+                <td>{{ task.get_priority_display }} priority</td>
+                <td>
+                  <span class="plain-status {% if task.due_date < today %}overdue{% else %}due{% endif %}">
+                    {% if task.due_date < today %}Overdue{% else %}Due{% endif %}
+                  </span>
+                </td>
+              </tr>
+            {% empty %}<tr><td colspan="4">No open review tasks.</td></tr>{% endfor %}
+          </tbody>
+        </table>
       </div>
+      {% if 'review_queue' in allowed_nav %}<a class="queue-link" href="{% url 'review_queue' %}">View full queue</a>{% endif %}
     </section>
-    <section class="work-panel" aria-labelledby="queue-heading">
-      <div class="section-heading">
-        <div><span class="section-label">Review queue</span><h2 id="queue-heading">Due next</h2></div>
-        {% if 'review_queue' in allowed_nav %}<a href="{% url 'review_queue' %}">View queue</a>{% endif %}
-      </div>
-      <div class="work-list">
-        {% for task in reviews %}
-          <div>
-            <time datetime="{{ task.due_date|date:'Y-m-d' }}">{{ task.due_date|date:"M j" }}</time>
-            <p><strong>{{ task.title }}</strong><span>{{ task.get_priority_display }} priority</span></p>
-            <span class="status {% if task.due_date < today %}danger{% else %}warning{% endif %}">{% if task.due_date < today %}Overdue{% else %}Due{% endif %}</span>
-          </div>
-        {% empty %}
-          <p class="empty-copy">No open review tasks.</p>
-        {% endfor %}
-      </div>
-    </section>
+
     <section class="work-panel trend-panel" aria-labelledby="trend-heading">
       <div class="section-heading">
         <div><span class="section-label">Last six weeks</span><h2 id="trend-heading">Call activity</h2></div>
@@ -76,22 +69,30 @@
         </table>
       </details>
     </section>
+
     <section class="work-panel" aria-labelledby="recent-heading">
       <div class="section-heading">
-        <div><span class="section-label">Recent</span><h2 id="recent-heading">Authorizations</h2></div>
-        <a href="{% url 'authorization_summary' %}">Find one</a>
+        <h2 id="recent-heading">Recent authorizations</h2>
+        <a href="{% url 'authorization_summary' %}">View all</a>
       </div>
-      <div class="work-list">
-        {% for authorization in authorizations %}
-          <a href="{% url 'authorization_detail' authorization.pk %}">
-            <span class="initials" aria-hidden="true">{{ authorization.specialty.name|slice:":2"|upper }}</span>
-            <p><strong>{{ authorization.authorization_number }}</strong><span>{{ authorization.diagnosis.code }} · {{ authorization.specialty.name }}</span></p>
-            <span>{{ authorization.call_count }} call{{ authorization.call_count|pluralize }}</span>
-          </a>
-        {% empty %}
-          <p class="empty-copy">No authorizations recorded.</p>
-        {% endfor %}
+      <div class="table-wrap compact-table">
+        <table>
+          <thead><tr><th>Authorization</th><th>Service</th><th>Calls</th></tr></thead>
+          <tbody>
+            {% for authorization in authorizations %}
+              <tr>
+                <td><a href="{% url 'authorization_detail' authorization.pk %}">{{ authorization.authorization_number }}</a></td>
+                <td>{{ authorization.diagnosis.code }} · {{ authorization.specialty.name }}</td>
+                <td>{{ authorization.call_count }}</td>
+              </tr>
+            {% empty %}<tr><td colspan="3">No authorizations recorded.</td></tr>{% endfor %}
+          </tbody>
+        </table>
       </div>
     </section>
   </div>
+  <footer class="dashboard-footnote">
+    <span>All times shown in local time</span>
+    <span>Data as of {% now "M j, Y g:i A" %}</span>
+  </footer>
 {% endblock %}

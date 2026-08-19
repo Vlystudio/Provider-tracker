@@ -1,4 +1,3 @@
-from datetime import datetime
 from decimal import Decimal
 
 import pytest
@@ -21,6 +20,7 @@ from apps.tracker.models import (
 
 @pytest.fixture
 def domain(db):
+    fixture_now = timezone.now().replace(hour=10, minute=0, second=0, microsecond=0)
     user_model = get_user_model()
     users = {}
     for role, username, initials in [
@@ -75,7 +75,7 @@ def domain(db):
         "booking": booking,
         "facility": facility,
         "authorization": authorization,
-        "now": timezone.make_aware(datetime(2026, 8, 12, 10, 0)),
+        "now": fixture_now,
     }
 
 
@@ -91,7 +91,7 @@ def valid_call_data(domain):
         "referral_details": "Fictional test referral",
         "facility": domain["facility"].pk,
         "facility_phone": "(617) 555-0100",
-        "call_at": "2026-08-12T10:00",
+        "call_at": domain["now"].strftime("%Y-%m-%dT%H:%M"),
         "accepting_new_patients": "yes",
         "can_treat_diagnosis": "yes",
         "can_schedule_within_four_weeks": "yes",

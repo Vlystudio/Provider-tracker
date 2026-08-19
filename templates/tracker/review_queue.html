@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Review Queue — Provider Tracker{% endblock %}
 {% block content %}
-  <header class="page-heading"><div><span class="section-label">Review Queue</span><h1>Open follow-up work</h1><p>Overdue items are listed first.</p></div></header>
+  <header class="page-heading"><div><h1>Open follow-up work</h1><p>Overdue items are listed first.</p></div></header>
   <nav class="queue-tabs" aria-label="Review status">
     <a href="?" {% if not request.GET.status %}aria-current="page"{% endif %}>All open <span>{{ page.paginator.count }}</span></a>
     <a href="?status=open" {% if request.GET.status == 'open' %}aria-current="page"{% endif %}>Open</a>
