@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -10,7 +11,6 @@ import {
   jsonb,
   pgEnum,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -102,13 +102,13 @@ export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    name: text('name'),
+    name: text('name').notNull(),
     email: text('email').notNull(),
-    emailVerified: timestamp('email_verified', { withTimezone: true }),
+    emailVerified: boolean('email_verified').notNull().default(false),
     displayName: text('display_name'),
     image: text('image'),
-    initials: text('initials').notNull(),
-    role: userRoleEnum('role').notNull(),
+    initials: text('initials').notNull().default('--'),
+    role: userRoleEnum('role').notNull().default('ura_user'),
     isActive: boolean('is_active').notNull().default(true),
     isServiceAccount: boolean('is_service_account').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -116,33 +116,32 @@ export const users = pgTable(
   },
   (table) => [
     uniqueIndex('users_email_unique').on(table.email),
-    uniqueIndex('users_initials_unique').on(table.initials),
     index('users_role_active_idx').on(table.role, table.isActive),
   ],
 );
 
-// Auth.js-compatible tables are defined without coupling the data model to a
-// particular provider. The authentication milestone can add the current,
-// security-reviewed adapter without changing the database shape.
 export const accounts = pgTable(
   'accounts',
   {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: text('account_id').notNull(),
+    providerId: text('provider_id').notNull(),
+    issuer: text('issuer').notNull(),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    type: text('type').notNull(),
-    provider: text('provider').notNull(),
-    providerAccountId: text('provider_account_id').notNull(),
-    refreshToken: text('refresh_token'),
     accessToken: text('access_token'),
-    expiresAt: integer('expires_at'),
-    tokenType: text('token_type'),
-    scope: text('scope'),
+    refreshToken: text('refresh_token'),
     idToken: text('id_token'),
-    sessionState: text('session_state'),
+    accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }),
+    refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
+    scope: text('scope'),
+    password: text('password'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    primaryKey({ columns: [table.provider, table.providerAccountId] }),
+    uniqueIndex('accounts_issuer_account_unique').on(table.issuer, table.accountId),
     index('accounts_user_id_idx').on(table.userId),
   ],
 );
@@ -150,26 +149,49 @@ export const accounts = pgTable(
 export const sessions = pgTable(
   'sessions',
   {
-    sessionToken: text('session_token').primaryKey(),
+    id: uuid('id').primaryKey().defaultRandom(),
+    token: text('token').notNull(),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    expires: timestamp('expires', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('sessions_user_id_idx').on(table.userId), index('sessions_expires_idx').on(table.expires)],
+  (table) => [
+    uniqueIndex('sessions_token_unique').on(table.token),
+    index('sessions_user_id_idx').on(table.userId),
+    index('sessions_expires_idx').on(table.expiresAt),
+  ],
 );
 
 export const verificationTokens = pgTable(
   'verification_tokens',
   {
+    id: uuid('id').primaryKey().defaultRandom(),
     identifier: text('identifier').notNull(),
-    token: text('token').notNull(),
-    expires: timestamp('expires', { withTimezone: true }).notNull(),
+    value: text('value').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    primaryKey({ columns: [table.identifier, table.token] }),
-    uniqueIndex('verification_tokens_token_unique').on(table.token),
+    uniqueIndex('verification_tokens_value_unique').on(table.value),
+    index('verification_tokens_identifier_idx').on(table.identifier),
   ],
+);
+
+export const authRateLimits = pgTable(
+  'auth_rate_limits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    key: text('key').notNull(),
+    count: integer('count').notNull(),
+    lastRequest: bigint('last_request', { mode: 'number' }).notNull(),
+  },
+  (table) => [uniqueIndex('auth_rate_limits_key_unique').on(table.key)],
 );
 
 export const linesOfBusiness = pgTable('lines_of_business', {
@@ -496,12 +518,14 @@ export const auditEvents = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
     action: text('action').notNull(),
+    result: text('result').notNull().default('success'),
     entityType: text('entity_type').notNull(),
     entityId: text('entity_id'),
     beforeJson: jsonb('before_json').$type<Record<string, unknown>>(),
     afterJson: jsonb('after_json').$type<Record<string, unknown>>(),
     requestId: text('request_id'),
     sourceIpHash: text('source_ip_hash'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

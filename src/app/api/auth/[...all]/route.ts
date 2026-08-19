@@ -1,0 +1,71 @@
+import { toNextJsHandler } from 'better-auth/next-js';
+import { randomUUID } from 'node:crypto';
+import { getAuth } from '@/server/auth';
+import { getPrincipal } from '@/server/authorization';
+import { hashAuditValue, recordAuditEventBestEffort } from '@/server/audit';
+
+const allowedGetPaths = new Set(['/api/auth/get-session']);
+const allowedPostPaths = new Set(['/api/auth/sign-in/email', '/api/auth/sign-out']);
+
+export function GET(request: Request) {
+  return allowedGetPaths.has(new URL(request.url).pathname)
+    ? toNextJsHandler(getAuth()).GET(request)
+    : new Response('Not Found', { status: 404 });
+}
+
+const auditedActions: Record<string, string> = {
+  '/api/auth/sign-in/email': 'auth.sign-in',
+  '/api/auth/sign-out': 'auth.sign-out',
+};
+
+async function getSafeEmailHash(request: Request): Promise<string | null> {
+  if (!request.url.endsWith('/sign-in/email') && !request.url.endsWith('/forget-password')) return null;
+  try {
+    const contentType = request.headers.get('content-type') ?? '';
+    const body = contentType.includes('application/json')
+      ? await request.clone().json() as Record<string, unknown>
+      : Object.fromEntries(await request.clone().formData());
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    return email ? hashAuditValue(email) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function POST(request: Request) {
+  const pathname = new URL(request.url).pathname;
+  if (!allowedPostPaths.has(pathname)) return new Response('Not Found', { status: 404 });
+  const action = auditedActions[pathname];
+  if (!action) return new Response('Not Found', { status: 404 });
+
+  const requestId = randomUUID();
+  const principalBefore = action === 'auth.sign-out' ? await getPrincipal(request.headers) : null;
+  const emailHash = await getSafeEmailHash(request);
+  const response = await toNextJsHandler(getAuth()).POST(request);
+
+  let actorId = principalBefore?.id ?? null;
+  if (response.ok && action === 'auth.sign-in') {
+    try {
+      const body = await response.clone().json() as { user?: { id?: string } };
+      actorId = body.user?.id ?? null;
+    } catch {
+      actorId = null;
+    }
+  }
+
+  await recordAuditEventBestEffort({
+    actorId,
+    action,
+    result: response.ok ? 'success' : 'failure',
+    entityType: 'session',
+    entityId: actorId,
+    request,
+    requestId,
+    metadata: {
+      status: response.status,
+      ...(emailHash ? { emailHash } : {}),
+    },
+  });
+
+  return response;
+}

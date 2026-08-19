@@ -1,12 +1,14 @@
 import { AppShell } from '@/components/app-shell';
 import { providerSearchValidation } from '@/lib/domain';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
+import { requirePagePermission } from '@/server/authorization';
 
 export default async function ProviderSearchPage({
   searchParams,
 }: {
   searchParams?: Promise<{ memberZip?: string; radius?: string; diagnosis?: string; specialty?: string }> | { memberZip?: string; radius?: string; diagnosis?: string; specialty?: string };
 }) {
+  const principal = await requirePagePermission('operations:read');
   const params = (await Promise.resolve(searchParams ?? {})) as {
     memberZip?: string;
     radius?: string;
@@ -27,7 +29,7 @@ export default async function ProviderSearchPage({
 
   const adapter = getAppDataAdapter();
   const dataMode = getResolvedDataMode();
-  const state = await adapter.getProviderSearch({
+  const state = await adapter.getProviderSearch(principal, {
     memberZip,
     radius,
     diagnosis: validation.success ? diagnosis : undefined,
@@ -38,7 +40,7 @@ export default async function ProviderSearchPage({
   const results = state.data ?? [];
 
   return (
-    <AppShell dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
+    <AppShell user={principal} dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
       <header className="card flex items-center justify-between p-5">
         <div>
           <p className="text-sm uppercase tracking-[0.22em] text-slate-500">Search</p>

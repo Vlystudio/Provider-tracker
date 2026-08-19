@@ -22,6 +22,27 @@
       "when": 1786491795581,
       "tag": "0002_wooden_darwin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787163669645,
+      "tag": "0003_auth_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787164512671,
+      "tag": "0004_curious_santa_claus",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787164901404,
+      "tag": "0005_famous_thunderbolt",
+      "breakpoints": true
     }
   ]
 }

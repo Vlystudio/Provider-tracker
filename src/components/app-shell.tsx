@@ -5,27 +5,31 @@ import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
 import { Menu, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { can, type Permission, type UserRole } from '@/lib/access-control';
+import { SignOutButton } from './sign-out-button';
 
 const navItems = [
-  { label: 'Dashboard', href: '/' },
-  { label: 'New Call', href: '/new-call' },
-  { label: 'Call Log', href: '/call-log' },
-  { label: 'Provider Search', href: '/provider-search' },
-  { label: 'Authorization Summary', href: '/authorization-summary' },
-  { label: 'Review Queue', href: '/review-queue' },
-  { label: 'Facilities', href: '/facilities' },
-  { label: 'Reports', href: '/reports' },
-  { label: 'Admin', href: '/admin' },
-];
+  { label: 'Dashboard', href: '/', permission: 'app:access' },
+  { label: 'New Call', href: '/new-call', permission: 'operations:write' },
+  { label: 'Call Log', href: '/call-log', permission: 'operations:read' },
+  { label: 'Provider Search', href: '/provider-search', permission: 'operations:read' },
+  { label: 'Authorization Summary', href: '/authorization-summary', permission: 'operations:read' },
+  { label: 'Review Queue', href: '/review-queue', permission: 'operations:read' },
+  { label: 'Facilities', href: '/facilities', permission: 'operations:read' },
+  { label: 'Reports', href: '/reports', permission: 'reports:read' },
+  { label: 'Admin', href: '/admin', permission: 'admin:read' },
+] satisfies Array<{ label: string; href: string; permission: Permission }>;
 
 export function AppShell({
   children,
   dataMode = 'database',
   statusMessage,
+  user,
 }: {
   children: React.ReactNode;
   dataMode?: 'database' | 'demo';
   statusMessage?: string | null;
+  user: { name: string; role: UserRole };
 }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -72,7 +76,10 @@ export function AppShell({
               Provider Tracker
             </Link>
           </div>
-          <span className="text-sm text-slate-600">URA User</span>
+          <div className="flex items-center gap-3">
+            <span className="hidden text-sm text-slate-600 sm:inline">{user.name}</span>
+            <SignOutButton />
+          </div>
         </div>
       </header>
 
@@ -108,7 +115,7 @@ export function AppShell({
             </div>
 
             <nav className="space-y-1 text-sm" aria-label="Main navigation">
-              {navItems.map((item) => (
+              {navItems.filter((item) => can(user.role, item.permission)).map((item) => (
                 <Link
                   key={item.label}
                   href={item.href}
@@ -124,6 +131,9 @@ export function AppShell({
                 </Link>
               ))}
             </nav>
+            <div className="mt-5 border-t border-slate-200 pt-4 text-xs text-slate-500">
+              Signed in as {user.name}
+            </div>
           </aside>
         </div>
       ) : null}

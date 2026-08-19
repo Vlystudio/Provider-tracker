@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import { PHASE_PRODUCTION_SERVER } from "next/constants";
+import { assertProductionConfiguration } from "./src/server/config";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -32,7 +34,7 @@ export const securityHeaders = [
     : []),
 ];
 
-const nextConfig: NextConfig = {
+export const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     return [
@@ -44,4 +46,9 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default function getNextConfig(phase: string): NextConfig {
+  if (phase === PHASE_PRODUCTION_SERVER) {
+    assertProductionConfiguration(true);
+  }
+  return nextConfig;
+}

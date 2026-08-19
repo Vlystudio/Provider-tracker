@@ -1,14 +1,16 @@
 import { AppShell } from '@/components/app-shell';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
+import { requirePagePermission } from '@/server/authorization';
 
 export default async function ReportsPage() {
+  const principal = await requirePagePermission('reports:read');
   const adapter = getAppDataAdapter();
   const dataMode = getResolvedDataMode();
-  const state = await adapter.getReports();
+  const state = await adapter.getReports(principal);
   const metrics = state.data?.metrics ?? [];
 
   return (
-    <AppShell dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
+    <AppShell user={principal} dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
       <header className="card flex items-center justify-between p-5">
         <div>
           <p className="text-sm uppercase tracking-[0.22em] text-slate-500">Analytics</p>

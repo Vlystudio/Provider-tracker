@@ -1,17 +1,19 @@
 import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
+import { requirePagePermission } from '@/server/authorization';
 
 export default async function HomePage() {
+  const principal = await requirePagePermission('app:access');
   const adapter = getAppDataAdapter();
-  const state = await adapter.getDashboard();
+  const state = await adapter.getDashboard(principal);
   const dataMode = getResolvedDataMode();
   const statCards = state.data?.cards ?? [];
   const recentAuthorizations = state.data?.recentAuthorizations ?? [];
   const reviewPreview = state.data?.reviewPreview ?? [];
 
   return (
-    <AppShell dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
+    <AppShell user={principal} dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
       <header className="flex flex-col gap-2 border-b border-slate-300 pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>

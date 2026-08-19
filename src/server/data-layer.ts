@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { getDatabaseHealth, getDatabaseClient } from './database';
 import { getDemoAdminOverview, getDemoCallLog, getDemoDashboard, getDemoFacilities, getDemoProviderResults, getDemoReports, getDemoReviewQueue } from './demo-data';
 import { getDataMode, getServerConfig } from './config';
+import { assertPermission, type Principal } from './authorization';
 
 const searchInputSchema = z.object({
   memberZip: z.string().trim().regex(/^\d{5}$/).default('04530'),
@@ -25,22 +26,24 @@ type DataState<T> = {
 export type DashboardPageState = DataState<ReturnType<typeof getDemoDashboard>>;
 
 export interface AppDataAdapter {
-  getDashboard(): Promise<DashboardPageState>;
-  getProviderSearch(input: z.input<typeof searchInputSchema>): Promise<DataState<ReturnType<typeof getDemoProviderResults>>>;
-  getCallLog(input?: Record<string, string | number>): Promise<DataState<ReturnType<typeof getDemoCallLog>>>;
-  getFacilities(): Promise<DataState<ReturnType<typeof getDemoFacilities>>>;
-  getReviewQueue(): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>>;
-  getReports(): Promise<DataState<ReturnType<typeof getDemoReports>>>;
-  getAdminOverview(): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>>;
-  getDatabaseHealth(): Promise<{ ok: boolean; message: string; details?: string }>;
+  getDashboard(principal: Principal): Promise<DashboardPageState>;
+  getProviderSearch(principal: Principal, input: z.input<typeof searchInputSchema>): Promise<DataState<ReturnType<typeof getDemoProviderResults>>>;
+  getCallLog(principal: Principal, input?: Record<string, string | number>): Promise<DataState<ReturnType<typeof getDemoCallLog>>>;
+  getFacilities(principal: Principal): Promise<DataState<ReturnType<typeof getDemoFacilities>>>;
+  getReviewQueue(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>>;
+  getReports(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReports>>>;
+  getAdminOverview(principal: Principal): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>>;
+  getDatabaseHealth(principal: Principal): Promise<{ ok: boolean; message: string }>;
 }
 
 class DemoDataAdapter implements AppDataAdapter {
-  async getDashboard(): Promise<DashboardPageState> {
+  async getDashboard(principal: Principal): Promise<DashboardPageState> {
+    assertPermission(principal, 'app:access');
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoDashboard() };
   }
 
-  async getProviderSearch(input: z.input<typeof searchInputSchema>): Promise<DataState<ReturnType<typeof getDemoProviderResults>>> {
+  async getProviderSearch(principal: Principal, input: z.input<typeof searchInputSchema>): Promise<DataState<ReturnType<typeof getDemoProviderResults>>> {
+    assertPermission(principal, 'operations:read');
     const parsed = searchInputSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, dataMode: 'demo', databaseAvailable: false, message: parsed.error.issues[0]?.message ?? 'Invalid search parameters.' };
@@ -48,27 +51,33 @@ class DemoDataAdapter implements AppDataAdapter {
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoProviderResults().slice(0, parsed.data.pageSize) };
   }
 
-  async getCallLog(): Promise<DataState<ReturnType<typeof getDemoCallLog>>> {
+  async getCallLog(principal: Principal): Promise<DataState<ReturnType<typeof getDemoCallLog>>> {
+    assertPermission(principal, 'operations:read');
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoCallLog() };
   }
 
-  async getFacilities(): Promise<DataState<ReturnType<typeof getDemoFacilities>>> {
+  async getFacilities(principal: Principal): Promise<DataState<ReturnType<typeof getDemoFacilities>>> {
+    assertPermission(principal, 'operations:read');
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoFacilities() };
   }
 
-  async getReviewQueue(): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>> {
+  async getReviewQueue(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>> {
+    assertPermission(principal, 'operations:read');
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoReviewQueue() };
   }
 
-  async getReports(): Promise<DataState<ReturnType<typeof getDemoReports>>> {
+  async getReports(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReports>>> {
+    assertPermission(principal, 'reports:read');
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoReports() };
   }
 
-  async getAdminOverview(): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>> {
+  async getAdminOverview(principal: Principal): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>> {
+    assertPermission(principal, 'admin:read');
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoAdminOverview() };
   }
 
-  async getDatabaseHealth(): Promise<{ ok: boolean; message: string; details?: string }> {
+  async getDatabaseHealth(principal: Principal): Promise<{ ok: boolean; message: string }> {
+    assertPermission(principal, 'admin:read');
     return { ok: false, message: 'Demo mode is active; database access is intentionally disabled for local demo work.' };
   }
 }
@@ -87,7 +96,8 @@ class DatabaseDataAdapter implements AppDataAdapter {
     return [];
   }
 
-  async getDashboard(): Promise<DashboardPageState> {
+  async getDashboard(principal: Principal): Promise<DashboardPageState> {
+    assertPermission(principal, 'app:access');
     const health = await getDatabaseHealth();
     if (!health.ok) {
       return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: this.emptyDashboard() };
@@ -101,13 +111,13 @@ class DatabaseDataAdapter implements AppDataAdapter {
     try {
       await db.execute(`SELECT 1 as ok`);
       return { ok: true, dataMode: 'database', databaseAvailable: true, data: this.emptyDashboard() };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'The database could not be queried.';
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message, data: this.emptyDashboard() };
+    } catch {
+      return { ok: false, dataMode: 'database', databaseAvailable: false, message: 'The dashboard data could not be loaded.', data: this.emptyDashboard() };
     }
   }
 
-  async getProviderSearch(input: z.input<typeof searchInputSchema>): Promise<DataState<ReturnType<typeof getDemoProviderResults>>> {
+  async getProviderSearch(principal: Principal, input: z.input<typeof searchInputSchema>): Promise<DataState<ReturnType<typeof getDemoProviderResults>>> {
+    assertPermission(principal, 'operations:read');
     const parsed = searchInputSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, dataMode: 'database', databaseAvailable: false, message: parsed.error.issues[0]?.message ?? 'Request validation failed.', data: this.emptyProviderResults() };
@@ -126,18 +136,19 @@ class DatabaseDataAdapter implements AppDataAdapter {
     try {
       await db.execute(`SELECT 1 as ok`);
       return { ok: true, dataMode: 'database', databaseAvailable: true, data: this.emptyProviderResults().slice(0, parsed.data.pageSize) };
-    } catch (error) {
+    } catch {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
-        message: error instanceof Error ? error.message : 'The provider search query failed.',
+        message: 'The provider search could not be completed.',
         data: this.emptyProviderResults(),
       };
     }
   }
 
-  async getCallLog(): Promise<DataState<ReturnType<typeof getDemoCallLog>>> {
+  async getCallLog(principal: Principal): Promise<DataState<ReturnType<typeof getDemoCallLog>>> {
+    assertPermission(principal, 'operations:read');
     const health = await getDatabaseHealth();
     if (!health.ok) {
       return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: [] };
@@ -151,18 +162,19 @@ class DatabaseDataAdapter implements AppDataAdapter {
     try {
       await db.execute(`SELECT 1 as ok`);
       return { ok: true, dataMode: 'database', databaseAvailable: true, data: [] };
-    } catch (error) {
+    } catch {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
-        message: error instanceof Error ? error.message : 'The call log query failed.',
+        message: 'The call log could not be loaded.',
         data: [],
       };
     }
   }
 
-  async getFacilities(): Promise<DataState<ReturnType<typeof getDemoFacilities>>> {
+  async getFacilities(principal: Principal): Promise<DataState<ReturnType<typeof getDemoFacilities>>> {
+    assertPermission(principal, 'operations:read');
     const health = await getDatabaseHealth();
     if (!health.ok) {
       return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: [] };
@@ -176,18 +188,19 @@ class DatabaseDataAdapter implements AppDataAdapter {
     try {
       await db.execute(`SELECT 1 as ok`);
       return { ok: true, dataMode: 'database', databaseAvailable: true, data: [] };
-    } catch (error) {
+    } catch {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
-        message: error instanceof Error ? error.message : 'The facilities query failed.',
+        message: 'The facilities list could not be loaded.',
         data: [],
       };
     }
   }
 
-  async getReviewQueue(): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>> {
+  async getReviewQueue(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>> {
+    assertPermission(principal, 'operations:read');
     const health = await getDatabaseHealth();
     if (!health.ok) {
       return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: [] };
@@ -201,18 +214,19 @@ class DatabaseDataAdapter implements AppDataAdapter {
     try {
       await db.execute(`SELECT 1 as ok`);
       return { ok: true, dataMode: 'database', databaseAvailable: true, data: [] };
-    } catch (error) {
+    } catch {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
-        message: error instanceof Error ? error.message : 'The review queue query failed.',
+        message: 'The review queue could not be loaded.',
         data: [],
       };
     }
   }
 
-  async getReports(): Promise<DataState<ReturnType<typeof getDemoReports>>> {
+  async getReports(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReports>>> {
+    assertPermission(principal, 'reports:read');
     const health = await getDatabaseHealth();
     if (!health.ok) {
       return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: { metrics: [], generatedAt: new Date().toISOString() } };
@@ -226,18 +240,19 @@ class DatabaseDataAdapter implements AppDataAdapter {
     try {
       await db.execute(`SELECT 1 as ok`);
       return { ok: true, dataMode: 'database', databaseAvailable: true, data: { metrics: [], generatedAt: new Date().toISOString() } };
-    } catch (error) {
+    } catch {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
-        message: error instanceof Error ? error.message : 'The reports query failed.',
+        message: 'The reports could not be loaded.',
         data: { metrics: [], generatedAt: new Date().toISOString() },
       };
     }
   }
 
-  async getAdminOverview(): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>> {
+  async getAdminOverview(principal: Principal): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>> {
+    assertPermission(principal, 'admin:read');
     const health = await getDatabaseHealth();
     if (!health.ok) {
       return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: { tasks: [], importBatches: [] } };
@@ -251,18 +266,19 @@ class DatabaseDataAdapter implements AppDataAdapter {
     try {
       await db.execute(`SELECT 1 as ok`);
       return { ok: true, dataMode: 'database', databaseAvailable: true, data: { tasks: [], importBatches: [] } };
-    } catch (error) {
+    } catch {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
-        message: error instanceof Error ? error.message : 'The admin overview query failed.',
+        message: 'The admin overview could not be loaded.',
         data: { tasks: [], importBatches: [] },
       };
     }
   }
 
-  async getDatabaseHealth() {
+  async getDatabaseHealth(principal: Principal) {
+    assertPermission(principal, 'admin:read');
     return getDatabaseHealth();
   }
 }

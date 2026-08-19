@@ -10,15 +10,20 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:security": "tsx scripts/security-acceptance.ts",
+    "audit:production": "npm audit --omit=dev --omit=optional --omit=peer",
+    "scan:secrets": "tsx scripts/secret-scan.ts",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
+    "admin:bootstrap": "node --conditions=react-server --import tsx scripts/bootstrap-admin.ts",
     "import:workbooks": "tsx scripts/import-workbooks.ts"
   },
   "dependencies": {
     "@tanstack/react-table": "^9.1.2",
+    "better-auth": "^1.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
@@ -30,6 +35,7 @@
     "react-dom": "19.2.8",
     "recharts": "^3.10.1",
     "saxes": "^6.0.0",
+    "server-only": "^0.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

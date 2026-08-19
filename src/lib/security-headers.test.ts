@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import nextConfig, { securityHeaders } from '../../next.config';
+import { nextConfig, securityHeaders } from '../../next.config';
 
 describe('security headers', () => {
   it('sets the baseline browser protections', () => {

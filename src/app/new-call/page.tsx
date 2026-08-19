@@ -1,11 +1,13 @@
 import { AppShell } from '@/components/app-shell';
 import { getResolvedDataMode } from '@/server/data-layer';
+import { requirePagePermission } from '@/server/authorization';
 
-export default function NewCallPage() {
+export default async function NewCallPage() {
+  const principal = await requirePagePermission('operations:write');
   const dataMode = getResolvedDataMode();
 
   return (
-    <AppShell dataMode={dataMode}>
+    <AppShell user={principal} dataMode={dataMode}>
       <header className="card flex items-center justify-between p-5">
         <div>
           <p className="text-sm uppercase tracking-[0.22em] text-slate-500">Workflow</p>

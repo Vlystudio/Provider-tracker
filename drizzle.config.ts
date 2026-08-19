@@ -1,12 +1,17 @@
 import 'dotenv/config';
 import { defineConfig } from 'drizzle-kit';
 
+const databaseUrl = process.env.DATABASE_URL?.trim();
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required for database migrations.');
+}
+
 export default defineConfig({
   dialect: 'postgresql',
   schema: './src/db/schema.ts',
   out: './drizzle',
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/provider_tracker',
+    url: databaseUrl,
   },
   verbose: true,
   strict: true,

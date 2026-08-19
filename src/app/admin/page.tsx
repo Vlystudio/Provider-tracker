@@ -1,15 +1,17 @@
 import { AppShell } from '@/components/app-shell';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
+import { requirePagePermission } from '@/server/authorization';
 
 export default async function AdminPage() {
+  const principal = await requirePagePermission('admin:read');
   const adapter = getAppDataAdapter();
   const dataMode = getResolvedDataMode();
-  const state = await adapter.getAdminOverview();
+  const state = await adapter.getAdminOverview(principal);
   const tasks = state.data?.tasks ?? [];
   const batches = state.data?.importBatches ?? [];
 
   return (
-    <AppShell dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
+    <AppShell user={principal} dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
       <header className="card flex items-center justify-between p-5">
         <div>
           <p className="text-sm uppercase tracking-[0.22em] text-slate-500">Configuration</p>
