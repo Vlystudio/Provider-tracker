@@ -6,7 +6,9 @@ import { Pool } from 'pg';
 
 const databaseUrl = process.env.SECURITY_TEST_DATABASE_URL?.trim();
 const baseUrl = process.env.SECURITY_TEST_BASE_URL?.trim() || 'http://127.0.0.1:3100';
+const publicOrigin = process.env.SECURITY_TEST_PUBLIC_ORIGIN?.trim() || 'https://provider-tracker.test';
 if (!databaseUrl) throw new Error('SECURITY_TEST_DATABASE_URL is required.');
+if (!publicOrigin.startsWith('https://')) throw new Error('SECURITY_TEST_PUBLIC_ORIGIN must use HTTPS.');
 
 const databaseName = new URL(databaseUrl).pathname.slice(1);
 if (!databaseName.endsWith('_test')) {
@@ -16,12 +18,12 @@ if (!databaseName.endsWith('_test')) {
 const runtimeEnvironment: NodeJS.ProcessEnv = {
   ...process.env,
   NODE_ENV: 'production',
-  APP_ENV: 'test',
+  APP_ENV: 'production',
   APP_DATA_MODE: 'database',
   DATABASE_URL: databaseUrl,
-  BETTER_AUTH_URL: baseUrl,
+  BETTER_AUTH_URL: publicOrigin,
   BETTER_AUTH_SECRET: randomBytes(48).toString('base64url'),
-  AUTH_TRUSTED_ORIGINS: baseUrl,
+  AUTH_TRUSTED_ORIGINS: publicOrigin,
   AUDIT_LOG_IP_SALT: randomBytes(48).toString('base64url'),
   AUTH_CLIENT_IP_HEADER: 'x-real-ip',
 };
@@ -63,7 +65,7 @@ async function mutation(path: string, cookie: string, method: 'POST' | 'PATCH' |
     cookie,
     clientIp: '192.0.2.10',
     headers: {
-      origin: baseUrl,
+      origin: publicOrigin,
       'sec-fetch-site': 'same-origin',
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
     },
@@ -76,7 +78,7 @@ async function signIn(email: string, accountPassword: string, clientIp: string) 
     method: 'POST',
     clientIp,
     headers: {
-      origin: baseUrl,
+      origin: publicOrigin,
       'sec-fetch-site': 'same-origin',
       'content-type': 'application/json',
     },
@@ -231,7 +233,7 @@ async function main() {
   record('Anonymous → protected API', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
   response = await request('/api/auth/sign-up/email', {
     method: 'POST',
-    headers: { origin: baseUrl, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+    headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
     body: JSON.stringify({ email: 'public-signup@example.invalid', password: password(), name: 'Public Signup' }),
   });
   record('Public registration endpoint', 'BLOCKED', `HTTP ${response.status}`, response.status === 404);
@@ -241,6 +243,16 @@ async function main() {
 
   const userLogin = await signIn(fixtures.userA.email, fixtures.userA.password, '192.0.2.11');
   record('Valid sign-in', 'PASS', `HTTP ${userLogin.response.status}`, userLogin.response.status === 200 && Boolean(userLogin.cookie));
+  const sessionCookieAttributes = userLogin.response.headers.getSetCookie().join('; ').toLowerCase();
+  record(
+    'Production session cookie attributes',
+    'PASS',
+    'HttpOnly; Secure; SameSite=Lax; Path=/',
+    sessionCookieAttributes.includes('httponly') &&
+      sessionCookieAttributes.includes('secure') &&
+      sessionCookieAttributes.includes('samesite=lax') &&
+      sessionCookieAttributes.includes('path=/'),
+  );
   response = await request(`/api/authorizations/${authorizationA.id}`, { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
   record('User → authorized resource', 'PASS', `HTTP ${response.status}`, response.status === 200);
   response = await request(`/api/authorizations/${authorizationB.id}`, { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
@@ -259,12 +271,12 @@ async function main() {
   record('Invalid route identifier', 'BLOCKED', `HTTP ${response.status}`, response.status === 400);
   response = await request(`/api/authorizations/${authorizationA.id}`, {
     method: 'PUT', cookie: userLogin.cookie, clientIp: '192.0.2.11',
-    headers: { origin: baseUrl, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }, body: '{}',
+    headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }, body: '{}',
   });
   record('Unsupported mutation method', 'BLOCKED', `HTTP ${response.status}`, response.status === 405);
   response = await request(`/api/authorizations/${authorizationA.id}`, {
     method: 'PATCH', clientIp: '192.0.2.51',
-    headers: { origin: baseUrl, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+    headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
     body: JSON.stringify({ status: 'complete' }),
   });
   record('Direct API call bypassing UI', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
@@ -274,7 +286,7 @@ async function main() {
   record('User → admin API', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
   response = await request(`/api/admin/users/${userB.id}`, {
     method: 'PATCH', cookie: userLogin.cookie, clientIp: '192.0.2.11',
-    headers: { origin: baseUrl, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'x-user-role': 'admin' },
+    headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'x-user-role': 'admin' },
     body: JSON.stringify({ role: 'admin' }),
   });
   record('Modified client role → admin API', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
