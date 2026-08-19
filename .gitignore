@@ -12,6 +12,12 @@
 
 # testing
 /coverage
+/work/
+
+# source workbooks and generated exports contain sensitive operational data
+/reference/*.xlsx
+/reference/*.xlsm
+/exports/
 
 # next.js
 /.next/
@@ -32,6 +38,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
 
 # vercel
 .vercel

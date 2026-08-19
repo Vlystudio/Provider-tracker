@@ -1,0 +1,2 @@
+ALTER TABLE "facilities" ADD CONSTRAINT "facilities_geog_srid_check" CHECK ("facilities"."geog_point" is null or ST_SRID("facilities"."geog_point") = 4326);--> statement-breakpoint
+ALTER TABLE "postal_code_centroids" ADD CONSTRAINT "postal_code_centroids_geog_srid_check" CHECK ("postal_code_centroids"."geog_point" is null or ST_SRID("postal_code_centroids"."geog_point") = 4326);

@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Provider Tracker
 
-## Getting Started
+Internal web app for URA provider calls, availability checks, follow-up, and reporting. The current version includes the database schema, workbook importer, staff screens, and sample data used for local testing.
 
-First, run the development server:
+## Quick start
+
+1. Copy `.env.example` to `.env`.
+2. Start PostgreSQL/PostGIS locally:
+   ```bash
+   docker compose up -d postgres
+   ```
+3. Install dependencies (if you have not already):
+   ```bash
+   npm install
+   ```
+4. Run the app:
+   ```bash
+   npm run dev
+   ```
+5. Open http://localhost:3000
+
+## Database and migrations
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run db:generate
+npm run db:migrate
+npm run db:seed
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tests
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test
+npm run lint
+npm run typecheck
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Import the existing workbooks
 
-## Learn More
+The import command reads the two existing workbooks without changing them. Run a preview first:
 
-To learn more about Next.js, take a look at the following resources:
+Preview the real workbooks without a database write:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run import:workbooks -- --admin "C:\path\URA_Provider_Availability_Tracker_ADMIN_MASTER.xlsx" --user "C:\path\URA_Provider_Availability_Tracker_USER_ACTIVE.xlsx" --output work/import-summary.json
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+After reviewing the preview, import the data into PostgreSQL:
 
-## Deploy on Vercel
+```bash
+npm run import:workbooks -- --admin "C:\path\URA_Provider_Availability_Tracker_ADMIN_MASTER.xlsx" --user "C:\path\URA_Provider_Availability_Tracker_USER_ACTIVE.xlsx" --apply
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+With no file arguments, the command looks under `reference/`. Workbook files and exports in that folder are not committed to Git. See `docs/IMPORTING_WORKBOOKS.md` for the matching and rejection rules.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Implementation status
+
+Working now:
+
+- staff dashboard and workflow screens
+- PostgreSQL/PostGIS schema, migrations, and sample records
+- provider availability rules and recommendations
+- workbook preview and import commands
+- unit tests for business rules and import matching
+
+Still needed before launch:
+
+- sign-in and role permissions
+- database-backed write screens
+- browser and accessibility tests
+- production deployment review
