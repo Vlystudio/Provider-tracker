@@ -1,7 +1,52 @@
 {% extends "base.html" %}
 {% block title %}Call Log — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">Call history</span><h1>Provider calls</h1><p>Review calls, filter the list, or download a copy.</p></div><div class="heading-actions"><a class="button secondary" href="?{{ request.GET.urlencode }}&export=csv">Export CSV</a><a class="button secondary" href="?{{ request.GET.urlencode }}&export=xlsx">Export Excel</a></div></div>
-<details class="panel filter-panel" {% if request.GET %}open{% endif %}><summary>Filters <span>{{ page.paginator.count }} result{{ page.paginator.count|pluralize }}</span></summary><form method="get" class="search-form">{% include "tracker/_form.html" with form=form %}<div class="search-actions"><button class="button primary" type="submit">Apply filters</button><a class="button ghost" href="{% url 'call_log' %}">Reset</a></div></form></details>
-<section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th><a href="?{{ request.GET.urlencode }}&sort=-call_at">Date</a></th><th>Authorization</th><th><a href="?{{ request.GET.urlencode }}&sort=facility__name">Facility</a></th><th>Clinical context</th><th><a href="?{{ request.GET.urlencode }}&sort=result_code">Outcome</a></th><th>Caller</th><th><span class="sr-only">Details</span></th></tr></thead><tbody>{% for call in page %}<tr><td><strong>{{ call.call_at|date:"M j, Y" }}</strong><small>{{ call.call_at|date:"g:i A" }}</small></td><td><a href="{% url 'authorization_detail' call.authorization.pk %}">{{ call.authorization.authorization_number }}</a></td><td><a href="{% url 'facility_detail' call.facility.pk %}"><strong>{{ call.facility.name }}</strong><small>{{ call.facility.city }}</small></a></td><td><strong>{{ call.specialty.name }}</strong><small>{{ call.diagnosis.code }}</small></td><td><span class="badge {% if call.result_code == 'meets_availability_guidelines' or call.result_code == 'meets_availability_guidelines_urgent' %}success{% elif call.result_code == 'unable_to_contact' %}warning{% else %}danger{% endif %}">{{ call.result_phrase }}</span></td><td>{{ call.caller.profile.initials|default:call.caller.username }}</td><td><details class="row-detail"><summary aria-label="View call details">View</summary><div><strong>Recommendation</strong><p>{{ call.recommendation }}</p><strong>Notes</strong><p>{{ call.notes|default:"No notes recorded." }}</p></div></details></td></tr>{% empty %}<tr><td colspan="7"><div class="empty-state"><strong>No calls match these filters</strong><span>Adjust the filters or record a provider call.</span></div></td></tr>{% endfor %}</tbody></table></div>{% include "tracker/_pagination.html" with page=page %}</section>
+  <header class="page-heading">
+    <div><h1>Provider calls</h1><p>Review recorded calls, filter the list, or download a copy.</p></div>
+    <div class="heading-actions">
+      <a class="button secondary" href="?{{ request.GET.urlencode }}&export=csv">Export CSV</a>
+      <a class="button secondary" href="?{{ request.GET.urlencode }}&export=xlsx">Export Excel</a>
+    </div>
+  </header>
+  <details class="filter-panel" {% if request.GET %}open{% endif %}>
+    <summary>Filters <span>{{ page.paginator.count }} result{{ page.paginator.count|pluralize }}</span></summary>
+    <form method="get" class="filter-grid">
+      {% include "tracker/_form.html" with form=form %}
+      <div class="search-actions"><button class="button primary" type="submit">Apply filters</button><a class="button ghost" href="{% url 'call_log' %}">Reset</a></div>
+    </form>
+  </details>
+  <section class="work-panel table-panel">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Authorization</th><th>Facility</th><th>Clinical context</th><th>Outcome</th><th>Caller</th><th><span class="sr-only">Details</span></th></tr>
+        </thead>
+        <tbody>
+          {% for call in page %}
+            <tr>
+              <td><strong>{{ call.call_at|date:"M j, Y" }}</strong><small>{{ call.call_at|date:"g:i A" }}</small></td>
+              <td><a href="{% url 'authorization_detail' call.authorization.pk %}">{{ call.authorization.authorization_number }}</a></td>
+              <td><a href="{% url 'facility_detail' call.facility.pk %}"><strong>{{ call.facility.name }}</strong><small>{{ call.facility.city }}</small></a></td>
+              <td><strong>{{ call.specialty.name }}</strong><small>{{ call.diagnosis.code }}</small></td>
+              <td>
+                <span class="status {{ call.result_code }}">
+                  {{ call.result_phrase }}
+                </span>
+              </td>
+              <td>{{ call.caller.profile.initials|default:call.caller.username }}</td>
+              <td>
+                <details class="row-detail">
+                  <summary>View</summary>
+                  <div><strong>Recommendation</strong><p>{{ call.recommendation }}</p><strong>Notes</strong><p>{{ call.notes|default:"No notes recorded." }}</p></div>
+                </details>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><p class="empty-copy"><strong>No calls match these filters.</strong> Adjust the filters or record a provider call.</p></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "tracker/_pagination.html" with page=page %}
+  </section>
 {% endblock %}

@@ -1,0 +1,37 @@
+:root {
+  --ink: #24272b;
+  --ink-soft: #41464d;
+  --muted: #687078;
+  --line: #d7dade;
+  --line-strong: #bcc1c7;
+  --canvas: #f7f7f5;
+  --surface: #ffffff;
+  --surface-muted: #f1f2f2;
+  --blue: #1f5f9d;
+  --blue-dark: #174b7c;
+  --blue-soft: #e8f0f7;
+  --success: #2f6b4f;
+  --success-bg: #e8f1ec;
+  --warning: #805a17;
+  --warning-bg: #f7eedb;
+  --danger: #a23b39;
+  --danger-bg: #f7e9e8;
+  --focus: #2f6fad;
+  --radius: 3px;
+  --radius-lg: 4px;
+
+  /* Aliases keep extensions using the original token names visually consistent. */
+  --navy-950: var(--ink);
+  --navy-900: var(--ink);
+  --navy-800: var(--ink-soft);
+  --teal-700: var(--blue);
+  --teal-600: var(--blue-dark);
+  --teal-100: var(--blue-soft);
+  --slate-900: var(--ink);
+  --slate-700: var(--ink-soft);
+  --slate-500: var(--muted);
+  --slate-300: var(--line-strong);
+  --slate-200: var(--line);
+  --slate-100: var(--surface-muted);
+  --border: var(--line);
+}

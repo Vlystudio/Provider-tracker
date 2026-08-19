@@ -10,6 +10,7 @@ from .reports import report_metrics, save_snapshot
 
 @transaction.atomic
 def run_automation(rule, *, actor=None, run_date=None):
+    """Run a scheduled rule once per date, returning the existing run on retries."""
     run_date = run_date or timezone.localdate()
     key = f"{rule.slug}:{run_date.isoformat()}"
     existing = AutomationRun.objects.filter(idempotency_key=key).first()

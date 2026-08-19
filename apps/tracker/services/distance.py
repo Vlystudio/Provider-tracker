@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 from django.db import connection
@@ -14,13 +15,13 @@ class FacilityDistance:
 
 class SQLiteDistanceRepository:
     def search(self, *, postal_code, radius, queryset=None, limit=500):
+        """Find nearby facilities without requiring spatial database extensions."""
         origin = PostalCodeCentroid.objects.get(postal_code=postal_code)
         latitude, longitude = float(origin.latitude), float(origin.longitude)
         latitude_delta = radius / 69.0
-        longitude_delta = radius / max(
-            1, 69.0 * abs(__import__("math").cos(__import__("math").radians(latitude)))
-        )
+        longitude_delta = radius / max(1, 69.0 * abs(math.cos(math.radians(latitude))))
         queryset = queryset if queryset is not None else Facility.objects.filter(active=True)
+        # The bounding box keeps the exact Python distance calculation limited to plausible matches.
         candidates = queryset.filter(
             latitude__gte=latitude - latitude_delta,
             latitude__lte=latitude + latitude_delta,
@@ -37,6 +38,7 @@ class SQLiteDistanceRepository:
 
 class PostGISDistanceRepository:
     def search(self, *, postal_code, radius, queryset=None, limit=500):
+        """Use indexed PostGIS distance operations in deployed PostgreSQL environments."""
         origin = PostalCodeCentroid.objects.get(postal_code=postal_code)
         queryset = queryset if queryset is not None else Facility.objects.filter(active=True)
         ids = list(queryset.values_list("id", flat=True)[:5000])

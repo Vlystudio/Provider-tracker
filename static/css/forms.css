@@ -1,0 +1,267 @@
+.input,
+input:not([type="checkbox"]):not([type="hidden"]),
+select,
+textarea {
+  width: 100%;
+  min-height: 41px;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: white;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+textarea {
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgb(31 95 157 / 15%);
+  outline: none;
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--blue);
+}
+
+.field {
+  min-width: 0;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.field > small,
+.field-error {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.field-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.has-error input,
+.has-error select,
+.has-error textarea {
+  border-color: var(--danger);
+}
+
+.form-grid,
+.filter-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.form-grid.two-col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid.three-col {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.form-grid .span-2 {
+  grid-column: span 2;
+}
+
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-section > .section-heading {
+  margin-bottom: 18px;
+}
+
+.form-section .section-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.step-number {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.required-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.check-row,
+.check-grid > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.check-row {
+  margin-top: 14px;
+  padding: 10px;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+}
+
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.check-grid > div {
+  padding: 10px;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+}
+
+.search-panel {
+  margin-bottom: 24px;
+}
+
+.primary-filters {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr 1.35fr 0.8fr;
+  gap: 14px;
+}
+
+.field-guidance {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.filter-disclosure {
+  margin: 14px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.filter-disclosure summary {
+  width: fit-content;
+  color: var(--blue);
+  font-weight: 600;
+}
+
+.secondary-filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.filter-panel {
+  margin-bottom: 22px;
+}
+
+.filter-panel > summary {
+  display: flex;
+  justify-content: space-between;
+}
+
+.filter-grid {
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  margin-top: 16px;
+  align-items: end;
+}
+
+.filter-grid > .message,
+.filter-grid > .button,
+.filter-grid > .search-actions {
+  grid-column: 1 / -1;
+}
+
+.toolbar-form,
+.lookup-form {
+  display: flex;
+  align-items: end;
+  gap: 11px;
+  margin-bottom: 24px;
+}
+
+.toolbar-form .grow,
+.lookup-form .grow {
+  flex: 1;
+}
+
+.loading,
+.htmx-indicator {
+  display: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+form.is-submitting .loading,
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  display: inline;
+}
+
+.form-note {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .primary-filters {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .secondary-filters {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .filter-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 650px) {
+  .form-grid.two-col,
+  .form-grid.three-col,
+  .check-grid,
+  .primary-filters,
+  .secondary-filters,
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid .span-2 {
+    grid-column: auto;
+  }
+
+  .toolbar-form,
+  .lookup-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

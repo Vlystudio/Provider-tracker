@@ -60,6 +60,7 @@ def file_sha256(path):
 
 
 def validate_workbook_container(path):
+    """Reject oversized or malformed Office archives before XML parsing begins."""
     size = os.path.getsize(path)
     if size > settings.DATA_UPLOAD_MAX_MEMORY_SIZE:
         raise ValueError("Workbook exceeds the configured compressed upload limit.")
@@ -468,6 +469,7 @@ def parse_call(record, source):
 
 
 def parse_workbook(path, kind):
+    """Stream a workbook into normalized, reviewable records without modifying the source."""
     validate_workbook_container(path)
     source_hash = file_sha256(path)
     with zipfile.ZipFile(path) as archive:
@@ -577,6 +579,7 @@ def parse_workbook(path, kind):
 
 
 def source_priority(item):
+    """Rank overlapping sources so operational admin data wins deterministically."""
     source = item["source"]
     if source["kind"] == "admin" and source["sheet"] == "tblWeeklyCallLog":
         return 500
@@ -590,6 +593,7 @@ def source_priority(item):
 
 
 def reconcile(parsed_workbooks):
+    """Merge parsed sources by fingerprint while preserving precedence and import issues."""
     raw_facilities = [item for workbook in parsed_workbooks for item in workbook["facilities"]]
     raw_mappings = [item for workbook in parsed_workbooks for item in workbook["mappings"]]
     raw_calls = [item for workbook in parsed_workbooks for item in workbook["calls"]]
@@ -706,6 +710,7 @@ def reference(model, name, **defaults):
 
 @transaction.atomic
 def apply_plan(plan, *, actor):
+    """Apply a reconciled plan atomically; fingerprints make repeated imports idempotent."""
     batches = {}
     for source in plan["sources"]:
         batch, _ = ImportBatch.objects.get_or_create(

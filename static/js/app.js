@@ -1,11 +1,57 @@
 document.addEventListener("DOMContentLoaded", () => {
   const toggle = document.querySelector("[data-menu-toggle]");
-  const navigation = document.querySelector("#mobile-nav");
-  if (toggle && navigation) {
-    toggle.addEventListener("click", () => {
-      const expanded = toggle.getAttribute("aria-expanded") === "true";
-      toggle.setAttribute("aria-expanded", String(!expanded));
-      navigation.hidden = expanded;
+  const drawer = document.querySelector("#site-drawer");
+  const closeButtons = document.querySelectorAll("[data-menu-close]");
+  const scrim = document.querySelector(".drawer-scrim");
+
+  if (toggle && drawer && scrim) {
+    const focusableSelector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const openMenu = () => {
+      drawer.hidden = false;
+      scrim.hidden = false;
+      drawer.setAttribute("aria-hidden", "false");
+      toggle.setAttribute("aria-expanded", "true");
+      document.body.classList.add("drawer-open");
+      drawer.querySelector(focusableSelector)?.focus();
+    };
+
+    const closeMenu = () => {
+      drawer.hidden = true;
+      scrim.hidden = true;
+      drawer.setAttribute("aria-hidden", "true");
+      toggle.setAttribute("aria-expanded", "false");
+      document.body.classList.remove("drawer-open");
+      toggle.focus();
+    };
+
+    toggle.addEventListener("click", openMenu);
+    closeButtons.forEach((button) => button.addEventListener("click", closeMenu));
+
+    drawer.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        closeMenu();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const focusable = [...drawer.querySelectorAll(focusableSelector)];
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !drawer.hidden) closeMenu();
     });
   }
 
@@ -26,33 +72,9 @@ document.addEventListener("DOMContentLoaded", () => {
       await navigator.clipboard.writeText(target.textContent.trim());
       const original = button.textContent;
       button.textContent = "Copied";
-      window.setTimeout(() => { button.textContent = original; }, 1600);
+      window.setTimeout(() => {
+        button.textContent = original;
+      }, 1600);
     });
   });
-
-  const form = document.querySelector("[data-live-result]");
-  if (form) {
-    const result = form.querySelector("[data-result-code]");
-    const recommendation = form.querySelector("[data-recommendation]");
-    const fields = {
-      vm: form.querySelector("#id_did_not_leave_vm"),
-      accepting: form.querySelector("#id_accepting_new_patients"),
-      treat: form.querySelector("#id_can_treat_diagnosis"),
-      schedule: form.querySelector("#id_can_schedule_within_four_weeks"),
-      urgent: form.querySelector("#id_urgent_referral_required"),
-    };
-    const update = () => {
-      let phrase = "does not meet availability guidelines";
-      if (fields.vm.checked) phrase = "unable to contact, did not leave voicemail";
-      else if (fields.accepting.value === "yes" && fields.treat.value === "yes" && (fields.urgent.checked || fields.schedule.value === "urgent_referral_required")) phrase = "meets availability guidelines — urgent referral required";
-      else if (fields.accepting.value === "yes" && fields.treat.value === "yes" && fields.schedule.value === "yes") phrase = "meets availability guidelines";
-      result.textContent = phrase;
-      if (fields.vm.checked) recommendation.textContent = "Call again after the unsuccessful contact attempt.";
-      else if (fields.accepting.value === "yes" && (fields.schedule.value === "yes" || fields.urgent.checked)) recommendation.textContent = "Good provider to call; verify treatment for the diagnosis.";
-      else if (fields.accepting.value === "no") recommendation.textContent = "Do not call; provider is not accepting new patients.";
-      else recommendation.textContent = "Provider availability is not yet confirmed.";
-    };
-    Object.values(fields).forEach((field) => field && field.addEventListener("change", update));
-    update();
-  }
 });

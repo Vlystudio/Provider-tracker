@@ -1,16 +1,100 @@
 {% extends "base.html" %}
 {% block title %}New Call — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">New call</span><h1>Add an authorization and provider call</h1><p>Add the authorization and call details below. Saving the call also updates follow-ups and reports.</p></div><a class="button secondary" href="{% url 'provider_search' %}">Search providers</a></div>
-<form method="post" class="entry-layout" data-live-result>{% csrf_token %}
-  <div class="entry-main">
-    {% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}
-    <section class="panel form-section"><div class="section-number">1</div><div class="section-content"><div class="panel-head"><div><span class="eyebrow">Authorization</span><h2>Authorization details</h2></div><span class="required-note">* Required</span></div><div class="form-grid two-col">{% for field in form %}{% if field.name in 'authorization_number,line_of_business,member_postal_code,diagnosis,specialty,referral_reason,referral_details' %}<div class="field {% if field.errors %}has-error{% endif %} {% if field.name == 'referral_details' %}span-2{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>{% endif %}{% endfor %}</div></div></section>
-    <section class="panel form-section"><div class="section-number">2</div><div class="section-content"><div class="panel-head"><div><span class="eyebrow">Provider</span><h2>Call details</h2></div></div><div class="form-grid two-col">{% for field in form %}{% if field.name in 'facility,facility_phone,call_at,referral_type' %}<div class="field {% if field.errors %}has-error{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>{{ field }}{% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>{% endif %}{% endfor %}</div><div class="check-row">{{ form.did_not_leave_vm }}<label for="{{ form.did_not_leave_vm.id_for_label }}">{{ form.did_not_leave_vm.label }}</label></div></div></section>
-    <section class="panel form-section"><div class="section-number">3</div><div class="section-content"><div class="panel-head"><div><span class="eyebrow">Availability</span><h2>What did the provider say?</h2></div></div><div class="form-grid three-col">{% for field in form %}{% if field.name == 'accepting_new_patients' or field.name == 'can_treat_diagnosis' or field.name == 'can_schedule_within_four_weeks' %}<div class="field {% if field.errors %}has-error{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>{% endif %}{% endfor %}</div><div class="form-grid two-col">{% for field in form %}{% if field.name in 'booking_out_bucket,booking_out_notes' %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>{% endif %}{% endfor %}</div><div class="check-grid"><div>{{ form.urgent_referral_required }}<label for="{{ form.urgent_referral_required.id_for_label }}">Urgent referral required</label></div><div>{{ form.specialty_confirmed }}<label for="{{ form.specialty_confirmed.id_for_label }}">Facility-specialty confirmed</label></div><div>{{ form.use_in_fdm }}<label for="{{ form.use_in_fdm.id_for_label }}">Include in FDM review</label></div></div></div></section>
-    <section class="panel form-section"><div class="section-number">4</div><div class="section-content"><div class="panel-head"><div><span class="eyebrow">Notes</span><h2>Additional details</h2></div></div><div class="form-grid two-col">{% for field in form %}{% if field.name in 'notes,out_of_network_reason,repeat_call_reason' %}<div class="field {% if field.errors %}has-error{% endif %} {% if field.name == 'notes' %}span-2{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.name == 'repeat_call_reason' %}<small>Only required when this facility and diagnosis already have a call this week.</small>{% endif %}{% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</div>{% endif %}{% endfor %}</div></div></section>
-    <div class="form-actions"><button class="button primary" type="submit">Save call</button><a class="button ghost" href="{% url 'dashboard' %}">Cancel</a><span class="loading" aria-live="polite">Saving…</span></div>
-  </div>
-  <aside class="entry-aside"><section class="result-preview"><span class="eyebrow light">Result preview</span><strong data-result-code>Complete the availability fields</strong><p data-recommendation>This result is checked again when the call is saved.</p></section><section class="panel"><div class="panel-head"><div><span class="eyebrow">Recent calls</span><h2>Latest calls</h2></div></div><div class="mini-history">{% for call in recent_calls %}<a href="{% url 'authorization_detail' call.authorization.pk %}"><span class="status-line {{ call.result_code }}"></span><p><strong>{{ call.facility.name }}</strong><small>{{ call.call_at|date:"M j, g:i A" }} · {{ call.diagnosis.code }}</small></p></a>{% endfor %}</div></section></aside>
-</form>
+  <header class="page-heading">
+    <div>
+      <h1>Record a provider call</h1>
+      <p>Enter the authorization, provider response, and any follow-up notes.</p>
+    </div>
+    <a class="button secondary" href="{% url 'provider_search' %}">Search providers</a>
+  </header>
+  <form
+    method="post"
+    class="entry-layout"
+  >
+    {% csrf_token %}
+    <div class="entry-main">
+      {% if form.non_field_errors %}
+        <div class="message error">{{ form.non_field_errors }}</div>
+      {% endif %}
+      <section class="form-section" aria-labelledby="authorization-fields">
+        <div class="section-heading">
+          <div><span class="step-number">1</span><h2 id="authorization-fields">Authorization</h2></div>
+          <span class="required-note">Required fields are marked *</span>
+        </div>
+        <div class="form-grid two-col">
+          {% include "tracker/_field.html" with field=form.authorization_number %}
+          {% include "tracker/_field.html" with field=form.line_of_business %}
+          {% include "tracker/_field.html" with field=form.member_postal_code %}
+          {% include "tracker/_field.html" with field=form.diagnosis %}
+          {% include "tracker/_field.html" with field=form.specialty %}
+          {% include "tracker/_field.html" with field=form.referral_reason %}
+          {% include "tracker/_field.html" with field=form.referral_details wide=True %}
+        </div>
+      </section>
+      <section class="form-section" aria-labelledby="provider-fields">
+        <div class="section-heading"><div><span class="step-number">2</span><h2 id="provider-fields">Provider call</h2></div></div>
+        <div class="form-grid two-col">
+          {% include "tracker/_field.html" with field=form.facility %}
+          {% include "tracker/_field.html" with field=form.facility_phone %}
+          {% include "tracker/_field.html" with field=form.call_at %}
+          {% include "tracker/_field.html" with field=form.referral_type %}
+        </div>
+        <div class="check-row">{{ form.did_not_leave_vm }}<label for="{{ form.did_not_leave_vm.id_for_label }}">{{ form.did_not_leave_vm.label }}</label></div>
+      </section>
+      <section
+        class="form-section"
+        aria-labelledby="availability-fields"
+        hx-post="{% url 'call_result_preview' %}"
+        hx-trigger="change from:select, change from:input[type=checkbox]"
+        hx-target="#call-result-preview"
+        hx-swap="outerHTML"
+        hx-include="closest form"
+        hx-sync="this:replace"
+      >
+        <div class="section-heading"><div><span class="step-number">3</span><h2 id="availability-fields">Availability</h2></div></div>
+        <div class="form-grid three-col">
+          {% include "tracker/_field.html" with field=form.accepting_new_patients %}
+          {% include "tracker/_field.html" with field=form.can_treat_diagnosis %}
+          {% include "tracker/_field.html" with field=form.can_schedule_within_four_weeks %}
+        </div>
+        <div class="form-grid two-col">
+          {% include "tracker/_field.html" with field=form.booking_out_bucket %}
+          {% include "tracker/_field.html" with field=form.booking_out_notes %}
+        </div>
+        <div class="check-grid">
+          <div>{{ form.urgent_referral_required }}<label for="{{ form.urgent_referral_required.id_for_label }}">Urgent referral required</label></div>
+          <div>{{ form.specialty_confirmed }}<label for="{{ form.specialty_confirmed.id_for_label }}">Facility-specialty confirmed</label></div>
+          <div>{{ form.use_in_fdm }}<label for="{{ form.use_in_fdm.id_for_label }}">Include in FDM review</label></div>
+        </div>
+      </section>
+      <section class="form-section" aria-labelledby="notes-fields">
+        <div class="section-heading"><div><span class="step-number">4</span><h2 id="notes-fields">Notes</h2></div></div>
+        <div class="form-grid two-col">
+          {% include "tracker/_field.html" with field=form.notes wide=True %}
+          {% include "tracker/_field.html" with field=form.out_of_network_reason %}
+          {% include "tracker/_field.html" with field=form.repeat_call_reason %}
+        </div>
+      </section>
+      <div class="form-actions">
+        <button class="button primary" type="submit">Save call</button>
+        <a class="button ghost" href="{% url 'dashboard' %}">Cancel</a>
+        <span class="loading" aria-live="polite">Saving…</span>
+      </div>
+    </div>
+    <aside class="entry-aside" aria-label="Call result and recent activity">
+      {% include "tracker/_call_result_preview.html" with preview=preview %}
+      <section class="work-panel">
+        <div class="section-heading"><div><span class="section-label">Recent calls</span><h2>Latest activity</h2></div></div>
+        <div class="mini-history">
+          {% for call in recent_calls %}
+            <a href="{% url 'authorization_detail' call.authorization.pk %}">
+              <span class="status-line {{ call.result_code }}" aria-hidden="true"></span>
+              <p><strong>{{ call.facility.name }}</strong><small>{{ call.call_at|date:"M j, g:i A" }} · {{ call.diagnosis.code }}</small></p>
+            </a>
+          {% empty %}<p class="empty-copy">No calls recorded.</p>{% endfor %}
+        </div>
+      </section>
+    </aside>
+  </form>
 {% endblock %}

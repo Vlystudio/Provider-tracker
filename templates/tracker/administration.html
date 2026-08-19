@@ -1,7 +1,47 @@
 {% extends "base.html" %}
 {% block title %}Administration — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">Settings</span><h1>Administration</h1><p>Manage users, reference lists, facilities, imports, scheduled jobs, and site settings.</p></div><a class="button secondary" href="/django-admin/">Open Django admin</a></div>
-<section class="metric-grid"><article class="metric"><span>Users</span><strong>{{ counts.users }}</strong><small>Accounts</small></article><article class="metric"><span>Facilities</span><strong>{{ counts.facilities }}</strong><small>Facility records</small></article><article class="metric"><span>Imports</span><strong>{{ counts.imports }}</strong><small>Previewed and completed</small></article><article class="metric"><span>Scheduled jobs</span><strong>{{ counts.automations }}</strong><small>Configured jobs</small></article></section>
-<div class="dashboard-grid"><section class="panel span-2 table-panel"><div class="panel-head"><div><span class="eyebrow">User access</span><h2>Users and roles</h2></div></div><div class="table-wrap"><table><thead><tr><th>User</th><th>URA initials</th><th>Role</th><th>Activity</th><th>Last sign-in</th></tr></thead><tbody>{% for account in users %}<tr><td><strong>{{ account.profile.display_name|default:account.username }}</strong><small>{{ account.username }}</small></td><td>{{ account.profile.initials|default:"—" }}</td><td><span class="badge neutral">{{ account.profile.get_role_display }}</span></td><td>{% if account.is_active %}<span class="badge success">Active</span>{% else %}<span class="badge danger">Disabled</span>{% endif %}</td><td>{{ account.last_login|date:"M j, Y g:i A"|default:"Never" }}</td></tr>{% endfor %}</tbody></table></div></section><section class="panel"><div class="panel-head"><div><span class="eyebrow">Site setup</span><h2>Lists and tools</h2></div></div><div class="admin-links"><a href="/django-admin/tracker/specialty/">Specialties <span>›</span></a><a href="/django-admin/tracker/diagnosis/">Diagnoses <span>›</span></a><a href="/django-admin/tracker/referralreason/">Referral reasons <span>›</span></a><a href="/django-admin/tracker/bookingoutbucket/">Booking-out buckets <span>›</span></a><a href="{% url 'imports' %}">Imports and rejected rows <span>›</span></a><a href="{% url 'automations' %}">Scheduled jobs <span>›</span></a><a href="{% url 'audit_history' %}">Change history <span>›</span></a></div></section></div>
+  <header class="page-heading">
+    <div><h1>Site administration</h1><p>Manage access, reference lists, facilities, imports, and automations.</p></div>
+    <a class="button secondary" href="/django-admin/">Open Django admin</a>
+  </header>
+  <section class="metric-strip" aria-label="Administrative record totals">
+    <div><span>Users</span><strong>{{ counts.users }}</strong></div>
+    <div><span>Facilities</span><strong>{{ counts.facilities }}</strong></div>
+    <div><span>Imports</span><strong>{{ counts.imports }}</strong></div>
+    <div><span>Automations</span><strong>{{ counts.automations }}</strong></div>
+  </section>
+  <div class="split-layout admin-layout">
+    <section class="work-panel table-panel">
+      <div class="section-heading"><div><span class="section-label">User access</span><h2>Users and roles</h2></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>User</th><th>URA initials</th><th>Role</th><th>Status</th><th>Last sign-in</th></tr></thead>
+          <tbody>
+            {% for account in users %}
+              <tr>
+                <td><strong>{{ account.profile.display_name|default:account.username }}</strong><small>{{ account.username }}</small></td>
+                <td>{{ account.profile.initials|default:"—" }}</td>
+                <td>{{ account.profile.get_role_display }}</td>
+                <td><span class="status {% if account.is_active %}success{% else %}danger{% endif %}">{% if account.is_active %}Active{% else %}Disabled{% endif %}</span></td>
+                <td>{{ account.last_login|date:"M j, Y g:i A"|default:"Never" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <aside class="work-panel">
+      <div class="section-heading"><div><span class="section-label">Site setup</span><h2>Lists and tools</h2></div></div>
+      <nav class="text-link-list" aria-label="Administrative tools">
+        <a href="/django-admin/tracker/specialty/">Specialties</a>
+        <a href="/django-admin/tracker/diagnosis/">Diagnoses</a>
+        <a href="/django-admin/tracker/referralreason/">Referral reasons</a>
+        <a href="/django-admin/tracker/bookingoutbucket/">Booking-out buckets</a>
+        <a href="{% url 'imports' %}">Imports and rejected rows</a>
+        <a href="{% url 'automations' %}">Automation Center</a>
+        <a href="{% url 'audit_history' %}">Change History</a>
+      </nav>
+    </aside>
+  </div>
 {% endblock %}

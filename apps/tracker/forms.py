@@ -50,7 +50,11 @@ class AuthorizationCallForm(StyledFormMixin, forms.Form):
     out_of_network_reason = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     specialty_confirmed = forms.BooleanField(required=False)
     use_in_fdm = forms.BooleanField(required=False, label="Mark for FDM review")
-    repeat_call_reason = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    repeat_call_reason = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 2}),
+        required=False,
+        help_text="Required only when the same facility and diagnosis already have a call this week.",
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -171,6 +175,7 @@ class CallLogFilterForm(StyledFormMixin, forms.Form):
         callers = (
             ProviderCall.objects.select_related("caller")
             .values_list("caller_id", "caller__username")
+            .order_by("caller__username", "caller_id")
             .distinct()
         )
         self.fields["caller"].choices = [("", "Any caller"), *callers]
@@ -223,6 +228,7 @@ class ReportFilterForm(StyledFormMixin, forms.Form):
         callers = (
             ProviderCall.objects.select_related("caller")
             .values_list("caller_id", "caller__username")
+            .order_by("caller__username", "caller_id")
             .distinct()
         )
         self.fields["caller"].choices = [("", "Any caller"), *callers]

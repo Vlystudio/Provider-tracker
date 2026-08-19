@@ -40,4 +40,4 @@ Open Change History to find the call, review, report, and job entries. In Data I
 
 ## Finish
 
-Open Why Use the Site? and show the basic difference between the workbooks and the site. Remind viewers that the local demo is ready for evaluation, while IT still needs to complete security, identity, infrastructure, and production approval before using real data.
+Return to the dashboard and review the open follow-ups. Remind viewers that the local demo is ready for evaluation, while IT still needs to complete security, identity, infrastructure, and production approval before using real data.

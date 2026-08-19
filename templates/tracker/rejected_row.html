@@ -1,6 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Rejected Import Row — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">Rejected row</span><h1>{{ row.source_sheet }} row {{ row.source_row }}</h1><p>{{ row.batch.source_name }} · {{ row.entity_type|title }}</p></div><a class="button secondary" href="{% url 'imports' %}">Back to imports</a></div>
-<div class="security-note"><strong>Restricted source data</strong><p>This row may contain private work information. Do not copy it into public issues, logs, screenshots, or test data.</p></div><div class="detail-grid"><section class="panel"><span class="eyebrow">Problems</span><h2>Why this row was rejected</h2><div class="tag-list">{% for issue in row.issue_codes %}<span class="badge danger">{{ issue }}</span>{% endfor %}</div></section><section class="panel"><span class="eyebrow">Parsed values</span><h2>Values the importer could read</h2><pre>{{ row.normalized_data|pprint }}</pre></section></div><section class="panel"><span class="eyebrow">Original row</span><h2>Authorized users only</h2><pre>{{ row.raw_data|pprint }}</pre></section>
+  <header class="page-heading">
+    <div>
+      <h1>{{ row.source_sheet }} row {{ row.source_row }}</h1>
+      <p>{{ row.batch.source_name }} · {{ row.entity_type|title }}</p>
+    </div>
+    <a class="button secondary" href="{% url 'imports' %}">Back to imports</a>
+  </header>
+  <div class="notice warning"><strong>Restricted source data.</strong><p>Do not copy this row into public issues, logs, screenshots, or test data.</p></div>
+  <div class="split-layout">
+    <section class="work-panel">
+      <div class="section-heading"><div><span class="section-label">Problems</span><h2>Why the row was rejected</h2></div></div>
+      <div class="tag-list">
+        {% for issue in row.issue_codes %}<span class="status danger">{{ issue }}</span>{% endfor %}
+      </div>
+    </section>
+    <section class="work-panel">
+      <div class="section-heading"><div><span class="section-label">Parsed values</span><h2>Values read by the importer</h2></div></div>
+      <pre>{{ row.normalized_data|pprint }}</pre>
+    </section>
+  </div>
+  <section class="work-panel">
+    <div class="section-heading"><div><span class="section-label">Original row</span><h2>Authorized users only</h2></div></div>
+    <pre>{{ row.raw_data|pprint }}</pre>
+  </section>
 {% endblock %}

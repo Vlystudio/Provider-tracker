@@ -1,7 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Authorization Summary — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">Authorization lookup</span><h1>Authorization summary</h1><p>Enter an authorization number to see its provider calls and summary.</p></div></div>
-<section class="lookup-card"><form method="get"><label for="{{ form.authorization_number.id_for_label }}">Authorization number</label><div>{{ form.authorization_number }}<button class="button primary" type="submit">Open summary</button></div>{% for error in form.authorization_number.errors %}<span class="field-error">{{ error }}</span>{% endfor %}</form></section>
-<section class="panel"><div class="panel-head"><div><span class="eyebrow">Recent authorizations</span><h2>Recent work</h2></div></div><div class="authorization-grid">{% for item in recent %}<a href="{% url 'authorization_detail' item.pk %}"><span class="avatar">{{ item.specialty.name|slice:":2"|upper }}</span><div><strong>{{ item.authorization_number }}</strong><p>{{ item.diagnosis.code }} · {{ item.specialty.name }}</p></div><span class="badge neutral">{{ item.call_count }} call{{ item.call_count|pluralize }}</span></a>{% empty %}<div class="empty-state"><strong>No authorizations yet</strong><span>Authorizations appear here after a call is saved.</span></div>{% endfor %}</div></section>
+  <header class="page-heading">
+    <div><h1>Find an authorization</h1><p>Open its provider calls, result summary, and next steps.</p></div>
+  </header>
+  <form method="get" class="lookup-form">
+    <div class="field grow">
+      <label for="{{ form.authorization_number.id_for_label }}">Authorization number</label>
+      {{ form.authorization_number }}
+      {% for error in form.authorization_number.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+    </div>
+    <button class="button primary" type="submit">Open summary</button>
+  </form>
+  <section class="work-panel">
+    <div class="section-heading"><div><span class="section-label">Recent</span><h2>Authorizations</h2></div></div>
+    <div class="record-list">
+      {% for item in recent %}
+        <a href="{% url 'authorization_detail' item.pk %}">
+          <span class="initials" aria-hidden="true">{{ item.specialty.name|slice:":2"|upper }}</span>
+          <p><strong>{{ item.authorization_number }}</strong><span>{{ item.diagnosis.code }} · {{ item.specialty.name }}</span></p>
+          <span>{{ item.call_count }} call{{ item.call_count|pluralize }}</span>
+        </a>
+      {% empty %}<p class="empty-copy">Authorizations appear here after a call is saved.</p>{% endfor %}
+    </div>
+  </section>
 {% endblock %}

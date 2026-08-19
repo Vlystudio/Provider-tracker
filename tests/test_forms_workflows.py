@@ -3,7 +3,13 @@ from datetime import timedelta
 import pytest
 from django.urls import reverse
 
-from apps.tracker.forms import AuthorizationCallForm, ProviderSearchForm
+from apps.accounts.models import UserProfile
+from apps.tracker.forms import (
+    AuthorizationCallForm,
+    CallLogFilterForm,
+    ProviderSearchForm,
+    ReportFilterForm,
+)
 from apps.tracker.models import AuditEvent, DuplicateCallGroup, ProviderCall, ReviewTask
 from apps.tracker.services.workflows import create_authorization_call
 
@@ -72,6 +78,28 @@ def test_server_recalculates_browser_outcome(domain):
 
 
 @pytest.mark.django_db
+def test_caller_filters_list_each_user_once(domain):
+    for index in range(2):
+        ProviderCall.objects.create(
+            authorization=domain["authorization"],
+            facility=domain["facility"],
+            specialty=domain["specialty"],
+            diagnosis=domain["diagnosis"],
+            caller=domain["users"]["ura_user"],
+            call_at=domain["now"] - timedelta(hours=index),
+            accepting_new_patients="yes",
+            can_treat_diagnosis="yes",
+            can_schedule_within_four_weeks="yes",
+            import_fingerprint=f"caller-filter-{index}",
+        )
+
+    for form_class in (CallLogFilterForm, ReportFilterForm):
+        choices = list(form_class().fields["caller"].choices)
+        caller_values = [value for value, _label in choices if value]
+        assert caller_values == [domain["users"]["ura_user"].pk]
+
+
+@pytest.mark.django_db
 def test_guided_http_workflow(client, domain, valid_call_data):
     client.force_login(domain["users"]["ura_user"])
     response = client.post(reverse("new_call"), valid_call_data)
@@ -81,3 +109,23 @@ def test_guided_http_workflow(client, domain, valid_call_data):
     assert summary.status_code == 200
     assert b"meets availability guidelines" in summary.content
     assert ReviewTask.objects.filter(provider_call=call).exists()
+
+
+@pytest.mark.django_db
+def test_live_preview_matches_the_saved_server_result(client, domain, valid_call_data):
+    client.force_login(domain["users"]["ura_user"])
+    preview = client.post(reverse("call_result_preview"), valid_call_data)
+    assert preview.status_code == 200
+
+    saved = client.post(reverse("new_call"), valid_call_data)
+    assert saved.status_code == 302
+    call = ProviderCall.objects.get(import_fingerprint__isnull=False)
+    assert preview.context["preview"]["phrase"] == call.result_phrase
+    assert preview.context["preview"]["recommendation"] == call.recommendation
+
+
+@pytest.mark.django_db
+def test_preview_endpoint_uses_call_entry_permissions(client, domain, valid_call_data):
+    client.force_login(domain["users"][UserProfile.Role.REPORT_VIEWER])
+    response = client.post(reverse("call_result_preview"), valid_call_data)
+    assert response.status_code == 403

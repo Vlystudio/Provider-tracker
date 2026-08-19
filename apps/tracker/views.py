@@ -1,3 +1,4 @@
+import os
 import tempfile
 from datetime import timedelta
 
@@ -44,7 +45,11 @@ from .permissions import ADMIN, AUDITOR, URA, VIEWER, role_required
 from .selectors import filtered_calls
 from .selectors import provider_search as search_providers
 from .services.automations import run_automation
-from .services.business_rules import authorization_narrative
+from .services.business_rules import (
+    authorization_narrative,
+    calculate_result,
+    seven_day_recommendation,
+)
 from .services.importer import apply_plan, parse_workbook, reconcile, safe_summary
 from .services.reports import report_metrics, save_snapshot
 from .services.workflows import audit, create_authorization_call
@@ -136,6 +141,7 @@ def dashboard(request):
     context = {
         "metrics": metrics,
         "trend": trend,
+        "today": today,
         "reviews": ReviewTask.objects.exclude(status__in=["resolved", "dismissed"])
         .select_related("facility")
         .order_by("due_date")[:5],
@@ -166,7 +172,51 @@ def new_call(request):
         return redirect(
             f"{reverse('authorization_detail', args=[authorization.pk])}?saved={provider_call.pk}"
         )
-    return render(request, "tracker/new_call.html", {"form": form, "recent_calls": recent_calls})
+    preview = _call_result_preview(request.POST if request.method == "POST" else {})
+    return render(
+        request,
+        "tracker/new_call.html",
+        {"form": form, "recent_calls": recent_calls, "preview": preview},
+    )
+
+
+def _call_result_preview(values):
+    """Return the same result fields that ProviderCall.save() persists."""
+    did_not_leave_vm = values.get("did_not_leave_vm") in {"on", "true", "1", True}
+    urgent = values.get("urgent_referral_required") in {"on", "true", "1", True}
+    accepting = values.get("accepting_new_patients", ProviderCall.StatusValue.UNKNOWN)
+    can_treat = values.get("can_treat_diagnosis", ProviderCall.StatusValue.UNKNOWN)
+    schedule = values.get("can_schedule_within_four_weeks", ProviderCall.ScheduleValue.UNKNOWN)
+    result = calculate_result(
+        did_not_leave_vm=did_not_leave_vm,
+        accepting=accepting,
+        can_treat=can_treat,
+        schedule=schedule,
+        urgent_referral_required=urgent,
+    )
+    return {
+        "code": result.code,
+        "phrase": result.phrase,
+        "ready": bool(values.get("facility")),
+        "recommendation": seven_day_recommendation(
+            facility_present=bool(values.get("facility")),
+            did_not_leave_vm=did_not_leave_vm,
+            accepting=accepting,
+            schedule=schedule,
+            urgent_referral_required=urgent,
+        )
+        or "Choose a facility and complete the availability fields.",
+    }
+
+
+@role_required(ADMIN, URA)
+@require_POST
+def call_result_preview(request):
+    return render(
+        request,
+        "tracker/_call_result_preview.html",
+        {"preview": _call_result_preview(request.POST)},
+    )
 
 
 @role_required(ADMIN, URA, VIEWER)
@@ -177,13 +227,35 @@ def provider_search(request):
     if form.is_valid():
         results = search_providers(form.cleaned_data)
     page = Paginator(results, 12).get_page(request.GET.get("page"))
-    return render(request, "tracker/provider_search.html", {"form": form, "page": page, "searched": searched})
+    more_filters_open = any(
+        request.GET.get(name)
+        for name in (
+            "facility_type",
+            "accepting_status",
+            "scheduling_status",
+            "last_verified_days",
+            "data_quality_status",
+        )
+    )
+    return render(
+        request,
+        "tracker/provider_search.html",
+        {
+            "form": form,
+            "page": page,
+            "searched": searched,
+            "more_filters_open": more_filters_open,
+        },
+    )
 
 
 @role_required(ADMIN, URA, VIEWER, AUDITOR)
 def call_log(request):
     form = CallLogFilterForm(request.GET or None)
-    queryset = filtered_calls(form.cleaned_data) if form.is_valid() else ProviderCall.objects.none()
+    if form.is_bound and not form.is_valid():
+        queryset = ProviderCall.objects.none()
+    else:
+        queryset = filtered_calls(form.cleaned_data if form.is_bound else {})
     export = request.GET.get("export")
     if export == "csv":
         return calls_csv_response(queryset)
@@ -397,7 +469,7 @@ def imports(request):
         except (OSError, ValueError) as exc:
             form.add_error("workbook", str(exc))
         finally:
-            __import__("os").unlink(temporary_path)
+            os.unlink(temporary_path)
     batches = ImportBatch.objects.all()[:12]
     rejected = ImportRowResult.objects.filter(status="rejected").select_related("batch")[:12]
     return render(
@@ -433,11 +505,6 @@ def audit_history(request):
         queryset = queryset.filter(action__icontains=action)
     page = Paginator(queryset, 30).get_page(request.GET.get("page"))
     return render(request, "tracker/audit.html", {"page": page, "action": action})
-
-
-@role_required(ADMIN, URA, VIEWER, AUDITOR)
-def comparison(request):
-    return render(request, "tracker/comparison.html")
 
 
 def permission_denied(request, exception=None):

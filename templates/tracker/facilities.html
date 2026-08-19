@@ -1,7 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Facilities — Provider Tracker{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">Provider directory</span><h1>Facilities</h1><p>Find facility contact details, specialties, locations, and recent calls.</p></div></div>
-<section class="panel search-panel"><form method="get" class="inline-filters"><div class="field grow"><label for="q">Search facility, city, or ZIP</label><input class="input" id="q" name="q" value="{{ query }}" placeholder="Start typing…"></div><div class="field"><label for="quality">Data quality</label><select class="input" id="quality" name="quality"><option value="">Any status</option>{% for value,label in quality_choices %}<option value="{{ value }}" {% if quality == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div><button class="button primary" type="submit">Search</button></form></section>
-<section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Facility</th><th>Type</th><th>Contact</th><th>Specialties</th><th>Calls</th><th>Data quality</th><th></th></tr></thead><tbody>{% for facility in page %}<tr><td><a href="{% url 'facility_detail' facility.pk %}"><strong>{{ facility.name }}</strong><small>{{ facility.city }}, {{ facility.state|default:"—" }} {{ facility.postal_code }}</small></a></td><td>{{ facility.facility_type }}</td><td><strong>{{ facility.phone_display|default:"Not available" }}</strong></td><td>{{ facility.specialty_count }}</td><td>{{ facility.call_count }}</td><td><span class="badge {% if facility.data_quality_status == 'verified' %}success{% elif facility.data_quality_status == 'missing_coordinates' %}warning{% else %}danger{% endif %}">{{ facility.get_data_quality_status_display }}</span></td><td><a href="{% url 'facility_detail' facility.pk %}">View</a></td></tr>{% empty %}<tr><td colspan="7"><div class="empty-state"><strong>No facilities found</strong><span>Try a different search.</span></div></td></tr>{% endfor %}</tbody></table></div>{% include "tracker/_pagination.html" with page=page %}</section>
+  <header class="page-heading">
+    <div><h1>Provider directory</h1><p>Find facility contact details, specialties, locations, and recent calls.</p></div>
+  </header>
+  <form method="get" class="toolbar-form">
+    <div class="field grow"><label for="q">Facility, city, or ZIP</label><input class="input" id="q" name="q" value="{{ query }}"></div>
+    <div class="field">
+      <label for="quality">Data quality</label>
+      <select class="input" id="quality" name="quality">
+        <option value="">Any status</option>
+        {% for value,label in quality_choices %}<option value="{{ value }}" {% if quality == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <button class="button primary" type="submit">Search</button>
+  </form>
+  <section class="work-panel table-panel">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Facility</th><th>Type</th><th>Contact</th><th>Specialties</th><th>Calls</th><th>Data quality</th><th></th></tr></thead>
+        <tbody>
+          {% for facility in page %}
+            <tr>
+              <td>
+                <a href="{% url 'facility_detail' facility.pk %}">
+                  <strong>{{ facility.name }}</strong>
+                  <small>{{ facility.city }}, {{ facility.state|default:"—" }} {{ facility.postal_code }}</small>
+                </a>
+              </td>
+              <td>{{ facility.facility_type }}</td>
+              <td>{{ facility.phone_display|default:"Not available" }}</td>
+              <td>{{ facility.specialty_count }}</td><td>{{ facility.call_count }}</td>
+              <td><span class="status {{ facility.data_quality_status }}">{{ facility.get_data_quality_status_display }}</span></td>
+              <td><a href="{% url 'facility_detail' facility.pk %}">View</a></td>
+            </tr>
+          {% empty %}<tr><td colspan="7"><p class="empty-copy">No facilities found. Try a different search.</p></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "tracker/_pagination.html" with page=page %}
+  </section>
 {% endblock %}

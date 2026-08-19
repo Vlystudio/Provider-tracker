@@ -24,6 +24,7 @@ def audit(*, actor, action, instance, summary, request=None, metadata=None):
 
 @transaction.atomic
 def create_authorization_call(cleaned_data, *, actor, request=None):
+    """Save a call and its duplicate, follow-up, and audit records as one transaction."""
     authorization, created = Authorization.objects.get_or_create(
         authorization_number=cleaned_data["authorization_number"].strip().upper(),
         defaults={
@@ -92,6 +93,7 @@ def create_authorization_call(cleaned_data, *, actor, request=None):
         },
     )
     if duplicate_group.call_count > 1:
+        # The form requires a reason for repeat calls; the queue keeps the exception reviewable.
         ReviewTask.objects.get_or_create(
             automation_key=f"duplicate:{group_key}",
             defaults={
