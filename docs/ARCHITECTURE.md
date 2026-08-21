@@ -13,6 +13,10 @@
 
 Browser requests pass through the Next.js proxy, then the page or route handler, the central authorization helper, the service layer, Drizzle, and PostgreSQL. Page checks keep users out of routes they cannot use. Route and service checks remain the security boundary for direct HTTP requests.
 
+In production the browser first reaches an IT-managed HTTPS proxy or load balancer. The proxy routes only ready instances. The application sends structured logs to stdout and exposes token-protected process metrics. PostgreSQL/PostGIS, log collection, monitoring, backup storage, certificates, DNS, and traffic management are external infrastructure owned by IT.
+
+The application runs as a persistent Node.js process. It creates one bounded PostgreSQL pool per process, applies connection/idle/statement timeouts, and closes the pool on termination. Migrations, backups, restores, and housekeeping are explicit commands run by deployment or scheduler infrastructure; no background timer runs inside web instances.
+
 ## Application areas
 
 - dashboard and summary pages

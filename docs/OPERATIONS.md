@@ -8,6 +8,7 @@ Set these as runtime secrets or configuration in the hosting platform:
 - `APP_DATA_MODE=database`
 - `DATABASE_URL`
 - `DATABASE_POOL_SIZE`
+- database idle, connection, and statement timeouts from `.env.example`
 - `VERIFICATION_ACCEPTING_FRESH_DAYS` and `VERIFICATION_ACCEPTING_STALE_DAYS`
 - equivalent scheduling, specialty, diagnosis, and contact freshness settings from `.env.example`
 - `BETTER_AUTH_URL` using the public HTTPS origin
@@ -16,6 +17,11 @@ Set these as runtime secrets or configuration in the hosting platform:
 - `AUDIT_LOG_IP_SALT` as a separate random value with at least 32 characters
 - `AUTH_CLIENT_IP_HEADER` only when a trusted reverse proxy overwrites that header
 - `TZ`
+- `APP_MAINTENANCE_MODE=off`
+- `LOG_LEVEL=info` (production rejects debug)
+- `REQUEST_ID_SOURCE=generate` unless a trusted proxy replaces the header
+- release/build metadata supplied by the release job
+- optional `OPERATIONS_TOKEN` when the protected metrics endpoint is scraped
 
 Generate the authentication secret and audit salt independently. Store them in the deployment secret manager. Do not put them in an image, source file, build argument, ticket, or log.
 
@@ -80,6 +86,8 @@ Do not add permissive credentialed CORS. The browser app and APIs are intended t
 Use TLS for remote database connections, encryption at rest, a least-privilege runtime identity, a separate migration identity where possible, automated backups, and scheduled restore tests. Restrict direct database network access to the application and approved administrative hosts.
 
 Review audit retention, log monitoring, BAA coverage, and incident response with the organization's security owner before live data is loaded.
+
+Use `BACKUP_RESTORE.md` for executable backup/restore steps and acceptance criteria. Use `DEPLOYMENT.md` for least-privilege roles, migration preflight, release order, and rollback. Run housekeeping from external cron/job infrastructure; its default is a read-only dry run and it never selects audit, provider history, merge, or import history for deletion.
 
 ## Phase 4 staging checks
 

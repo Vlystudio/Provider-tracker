@@ -1,45 +1,29 @@
 # Performance checks
 
-## Representative dataset
+## Geographic benchmark
 
-Run `npm run test:performance` against a disposable PostgreSQL/PostGIS database whose name ends in `_test`. The command opens one transaction, inserts synthetic records, runs `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`, prints the timings, and rolls the transaction back.
+Run `npm run test:performance` against a disposable PostgreSQL/PostGIS database whose name ends in `_test`. The command opens one transaction, inserts representative synthetic records, runs repeated `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` samples, prints results, and rolls everything back.
 
-The fixture contains:
+Defaults:
 
-- 5,000 facilities
-- 5,000 specialty relationships
-- 5,000 diagnosis relationships
-- 50,000 verification events
-- roughly 2,500 failed contact attempts
-- address-level coordinates around the 04103 origin
+- 10,000 facilities spread up to roughly 100 miles from the 04103 origin;
+- 10,000 specialty relationships;
+- 10,000 diagnosis relationships;
+- 100,000 verification-history records;
+- five timed samples per query.
 
-The query set covers the facility directory, 50-mile radius search, reverification queue, facility history, historical report, and duplicate candidate block.
+Set `BENCHMARK_FACILITIES=50000` for the larger staging run and `BENCHMARK_SAMPLES` from 3 through 10. The query set covers 10/25/50/100-mile radii, specialty + radius, diagnosis + radius, accepting + radius, freshness + radius, and recommended ranking under a radius constraint.
 
-## Local targets
+Output includes median, p95, returned rows, root plan, and index names. The broad p95 guardrail is 1.5 seconds per query so CI catches major regressions without relying on brittle workstation timings. It is not a production service-level guarantee.
 
-| Path | Target |
-| --- | ---: |
-| Facility directory | 150 ms |
-| 50-mile radius search | 250 ms |
-| Reverification queue | 200 ms |
-| Facility detail history | 100 ms |
-| Historical report | 300 ms |
-| Duplicate candidate block | 500 ms |
+## Review
 
-These are development targets, not production service-level guarantees. IT should capture staging plans and timings with the expected database size, hardware, connection latency, and statistics.
+Require the `facilities_geography_gist` expression index for `geog_point::geography` radius filters. Also review specialty/diagnosis join indexes, accepting/freshness indexes, row-estimate errors, disk reads, spills, and unnecessary nested loops. A passing wall-clock number with the wrong plan is not sufficient.
 
-## Required indexes
+Application histograms cover provider search, report generation, reverification queue work, and database checks. Run the bounded HTTP test only against local or explicitly approved staging targets:
 
-Phase 4 adds or uses indexes for:
+```bash
+LOAD_BASE_URL=http://127.0.0.1:3000 LOAD_REQUESTS=100 LOAD_CONCURRENCY=10 npm run test:load
+```
 
-- facility geography cast to PostGIS geography
-- active facility and verification date
-- accepting status and accepting verification date
-- facility-specialty search and freshness
-- diagnosis status search and freshness
-- facility verification history
-- contact history and outcome
-- duplicate decision/confidence/score
-- open reverification assignment
-
-Do not accept the benchmark solely from wall-clock output. Check the plan for sequential scans on large filtered relations, row-estimate errors, disk reads, and unnecessary nested loops.
+The script caps traffic at 500 requests and 25 workers, reporting error rate, p50, and p95 for health, readiness, sign-in, session, and provider-page paths. For production capacity planning, IT must repeat representative authenticated tests in staging while watching CPU, memory, database connections, pool waiting, and PostgreSQL query statistics.
