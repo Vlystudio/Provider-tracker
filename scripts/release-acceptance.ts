@@ -3,23 +3,24 @@ import { execFileSync, spawn } from 'node:child_process';
 
 function run(command: string, args: string[], extraEnv: Record<string, string | undefined> = {}): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, ...extraEnv }, windowsHide: true });
+    const child = spawn(command, args, { stdio: 'inherit', env: { ...process.env, ...extraEnv }, windowsHide: true });
     child.once('error', reject);
     child.once('exit', (code) => code === 0 ? resolve() : reject(new Error(`${command} ${args.join(' ')} exited with code ${code}.`)));
   });
 }
 
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npmCli = process.env.npm_execpath;
+if (!npmCli) throw new Error('Run release acceptance through npm so the package-manager path is available.');
 const repositoryStatus = execFileSync('git', ['status','--porcelain'], { encoding: 'utf8' }).trim();
 if (repositoryStatus) throw new Error('Release acceptance requires a clean repository.');
 const steps: Array<{ name: string; command: string; args: string[] }> = [
-  { name: 'lint', command: npm, args: ['run','lint'] },
-  { name: 'typecheck', command: npm, args: ['run','typecheck'] },
-  { name: 'tests', command: npm, args: ['test'] },
-  { name: 'security matrix', command: npm, args: ['run','test:security'] },
-  { name: 'production build', command: npm, args: ['run','build'] },
-  { name: 'dependency audit', command: npm, args: ['run','audit:production'] },
-  { name: 'secret scan', command: npm, args: ['run','scan:secrets'] },
+  { name: 'lint', command: process.execPath, args: [npmCli,'run','lint'] },
+  { name: 'typecheck', command: process.execPath, args: [npmCli,'run','typecheck'] },
+  { name: 'tests', command: process.execPath, args: [npmCli,'test'] },
+  { name: 'security matrix', command: process.execPath, args: [npmCli,'run','test:security'] },
+  { name: 'production build', command: process.execPath, args: [npmCli,'run','build'] },
+  { name: 'dependency audit', command: process.execPath, args: [npmCli,'run','audit:production'] },
+  { name: 'secret scan', command: process.execPath, args: [npmCli,'run','scan:secrets'] },
 ];
 const completed: string[] = [];
 completed.push('clean repository');
@@ -28,12 +29,12 @@ for (const step of steps) {
   completed.push(step.name);
 }
 if (process.env.RELEASE_RUN_DATABASE_GATES === 'true') {
-  await run(npm, ['run','db:preflight']);
-  await run(npm, ['run','test:postgis']);
+  await run(process.execPath, [npmCli,'run','db:preflight']);
+  await run(process.execPath, [npmCli,'run','test:postgis']);
   completed.push('migration preflight','PostGIS staging gate');
 }
 if (process.env.SMOKE_BASE_URL) {
-  await run(npm, ['run','test:smoke']);
+  await run(process.execPath, [npmCli,'run','test:smoke']);
   completed.push('deployment smoke');
 }
 process.stdout.write(`${JSON.stringify({ status: 'PASS', release: process.env.APP_RELEASE ?? process.env.BUILD_COMMIT ?? 'local', completed }, null, 2)}\n`);
