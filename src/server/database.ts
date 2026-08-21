@@ -140,7 +140,7 @@ export async function getDatabaseReadiness(): Promise<DatabaseReadiness> {
         EXISTS (
           SELECT 1 FROM pg_indexes
           WHERE schemaname = 'public' AND tablename = 'facilities'
-            AND indexdef ILIKE '%USING gist%geog_point%'
+            AND indexname = 'facilities_geography_gist' AND indexdef ILIKE '%USING gist%'
         ) AS spatial_index_ready`);
     observeDuration('provider_tracker_database_query_duration_ms', performance.now() - started, { operation: 'readiness' });
     const row = result.rows[0];

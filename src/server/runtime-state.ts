@@ -3,21 +3,27 @@ import { closeDatabasePool } from './database';
 import { logEvent, safeErrorFields } from './logger';
 import { getBuildMetadata } from './release';
 
-let initialized = false;
-let shuttingDown = false;
-let handlersInstalled = false;
+type RuntimeState = { initialized: boolean; shuttingDown: boolean; handlersInstalled: boolean };
+const runtimeStateKey = Symbol.for('provider-tracker.runtime-state');
+const runtimeGlobal = globalThis as typeof globalThis & { [runtimeStateKey]?: RuntimeState };
+
+function state(): RuntimeState {
+  runtimeGlobal[runtimeStateKey] ??= { initialized: true, shuttingDown: false, handlersInstalled: false };
+  return runtimeGlobal[runtimeStateKey];
+}
 
 export function getRuntimeState(): { initialized: boolean; shuttingDown: boolean } {
-  return { initialized, shuttingDown };
+  const current = state();
+  return { initialized: current.initialized, shuttingDown: current.shuttingDown };
 }
 
 export function markRuntimeInitialized(): void {
-  initialized = true;
+  state().initialized = true;
 }
 
 export async function shutdownRuntime(signal: string): Promise<void> {
-  if (shuttingDown) return;
-  shuttingDown = true;
+  if (state().shuttingDown) return;
+  state().shuttingDown = true;
   const timeoutMs = getServerConfig().GRACEFUL_SHUTDOWN_TIMEOUT_MS;
   logEvent('info', 'runtime.shutdown-started', { signal, timeoutMs });
   let timeout: NodeJS.Timeout | undefined;
@@ -39,8 +45,8 @@ export async function shutdownRuntime(signal: string): Promise<void> {
 }
 
 export function registerRuntimeLifecycle(): void {
-  if (handlersInstalled) return;
-  handlersInstalled = true;
+  if (state().handlersInstalled) return;
+  state().handlersInstalled = true;
   markRuntimeInitialized();
   logEvent('info', 'runtime.started', { environment: getServerConfig().APP_ENV, build: getBuildMetadata() });
 
@@ -55,7 +61,5 @@ export function registerRuntimeLifecycle(): void {
 }
 
 export function resetRuntimeStateForTest(): void {
-  initialized = false;
-  shuttingDown = false;
-  handlersInstalled = false;
+  runtimeGlobal[runtimeStateKey] = { initialized: false, shuttingDown: false, handlersInstalled: false };
 }

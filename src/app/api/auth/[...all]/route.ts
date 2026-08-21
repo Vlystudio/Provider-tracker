@@ -4,6 +4,7 @@ import { getPrincipal } from '@/server/authorization';
 import { hashAuditValue, recordAuditEventBestEffort } from '@/server/audit';
 import { incrementMetric } from '@/server/metrics';
 import { requestIdFromHeaders, resolveRequestId } from '@/server/request-context';
+import { getDatabasePool } from '@/server/database';
 
 const allowedGetPaths = new Set(['/api/auth/get-session']);
 const allowedPostPaths = new Set(['/api/auth/sign-in/email', '/api/auth/sign-out']);
@@ -19,7 +20,7 @@ const auditedActions: Record<string, string> = {
   '/api/auth/sign-out': 'auth.sign-out',
 };
 
-async function getSafeEmailHash(request: Request): Promise<string | null> {
+async function getSafeEmail(request: Request): Promise<string | null> {
   if (!request.url.endsWith('/sign-in/email') && !request.url.endsWith('/forget-password')) return null;
   try {
     const contentType = request.headers.get('content-type') ?? '';
@@ -27,7 +28,7 @@ async function getSafeEmailHash(request: Request): Promise<string | null> {
       ? await request.clone().json() as Record<string, unknown>
       : Object.fromEntries(await request.clone().formData());
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-    return email ? hashAuditValue(email) : null;
+    return email || null;
   } catch {
     return null;
   }
@@ -41,7 +42,8 @@ export async function POST(request: Request) {
 
   const requestId = requestIdFromHeaders(request.headers) ?? resolveRequestId(undefined);
   const principalBefore = action === 'auth.sign-out' ? await getPrincipal(request.headers) : null;
-  const emailHash = await getSafeEmailHash(request);
+  const signInEmail = await getSafeEmail(request);
+  const emailHash = signInEmail ? hashAuditValue(signInEmail) : null;
   const response = await toNextJsHandler(getAuth()).POST(request);
 
   let actorId = principalBefore?.id ?? null;
@@ -51,6 +53,10 @@ export async function POST(request: Request) {
       actorId = body.user?.id ?? null;
     } catch {
       actorId = null;
+    }
+    if (!actorId && signInEmail) {
+      const user = await getDatabasePool()?.query<{ id: string }>('SELECT id FROM users WHERE lower(email)=lower($1) LIMIT 1', [signInEmail]);
+      actorId = user?.rows[0]?.id ?? null;
     }
   }
 
