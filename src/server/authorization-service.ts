@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { auditEvents, authorizations } from '@/db/schema';
 import { assertPermission, type Principal } from './authorization';
@@ -42,6 +42,20 @@ export async function getAuthorizationForPrincipal(principal: Principal, id: str
     .where(authorizationScope(principal, id))
     .limit(1);
   return record ?? null;
+}
+
+export async function listAuthorizationsForPrincipal(principal: Principal) {
+  assertPermission(principal, 'operations:read');
+  const query = requireDatabaseClient()
+    .select(publicAuthorizationFields)
+    .from(authorizations);
+
+  return principal.role === 'admin'
+    ? query.orderBy(desc(authorizations.updatedAt)).limit(100)
+    : query
+        .where(eq(authorizations.createdBy, principal.id))
+        .orderBy(desc(authorizations.updatedAt))
+        .limit(100);
 }
 
 export async function updateAuthorizationForPrincipal(

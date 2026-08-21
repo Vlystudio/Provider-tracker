@@ -1,4 +1,4 @@
-import { providerResults, reportMetrics, reviewQueue, callLogRows, facilityRows, adminTasks, recentAuthorizations, statCards } from '@/lib/mock-data';
+import { providerResults, reviewQueue, callLogRows, facilityRows, adminTasks, recentAuthorizations, statCards } from '@/lib/mock-data';
 
 export type DashboardSummary = {
   cards: typeof statCards;
@@ -71,10 +71,21 @@ export function getDemoReviewQueue() {
   return reviewQueue;
 }
 
-export function getDemoReports() {
+export function getDemoReports(from = '2026-05-01', to = '2026-05-31') {
+  const calls = callLogRows.filter((call) => call.date >= from && call.date <= to);
+  const availabilityMet = calls.filter((call) => call.outcome.startsWith('meets availability')).length;
+  const unableToContact = calls.filter((call) => call.outcome === 'unable to contact').length;
+  const didNotMeet = calls.filter((call) => call.outcome === 'does not meet availability guidelines').length;
   return {
-    metrics: reportMetrics,
+    metrics: [
+      { label: 'Calls recorded', value: String(calls.length), detail: 'Calls logged in the selected period' },
+      { label: 'Availability met', value: String(availabilityMet), detail: `${availabilityMet} of ${calls.length} calls` },
+      { label: 'Unable to contact', value: String(unableToContact), detail: `${unableToContact} of ${calls.length} calls` },
+      { label: 'Did not meet', value: String(didNotMeet), detail: `${didNotMeet} of ${calls.length} calls` },
+    ],
     generatedAt: new Date().toISOString(),
+    period: { from, to },
+    total: calls.length,
   };
 }
 

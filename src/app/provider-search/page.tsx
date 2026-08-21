@@ -1,32 +1,53 @@
+import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
+import { EmptyState, InlineMessage, PageHeader, ResultsSummary, StatusBadge, type StatusTone } from '@/components/ui';
 import { providerSearchValidation } from '@/lib/domain';
+import { formatDate, humanizeKey } from '@/lib/format';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
 import { requirePagePermission } from '@/server/authorization';
 
-export default async function ProviderSearchPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ memberZip?: string; radius?: string; diagnosis?: string; specialty?: string }> | { memberZip?: string; radius?: string; diagnosis?: string; specialty?: string };
-}) {
-  const principal = await requirePagePermission('operations:read');
-  const params = (await Promise.resolve(searchParams ?? {})) as {
-    memberZip?: string;
-    radius?: string;
-    diagnosis?: string;
-    specialty?: string;
-  };
+type ProviderSearchParams = {
+  memberZip?: string;
+  radius?: string;
+  diagnosis?: string;
+  specialty?: string;
+  sort?: string;
+};
 
+function availabilityTone(value: string): StatusTone {
+  const normalized = value.toLowerCase();
+  if (normalized === 'yes' || normalized.includes('accepting')) return 'positive';
+  if (normalized === 'no' || normalized.includes('no current')) return 'danger';
+  return 'warning';
+}
+
+function verificationLabel(value: string | null): string {
+  if (!value) return 'Not verified';
+  const date = new Date(`${value}T00:00:00.000Z`);
+  const days = Math.max(0, Math.floor((Date.now() - date.valueOf()) / 86_400_000));
+  if (days > 30) return `Verification overdue · ${formatDate(value)}`;
+  if (days === 0) return `Verified today · ${formatDate(value)}`;
+  return `Verified ${days} ${days === 1 ? 'day' : 'days'} ago · ${formatDate(value)}`;
+}
+
+function verificationIsOverdue(value: string | null): boolean {
+  return Boolean(value) && Date.now() - new Date(`${value}T00:00:00.000Z`).valueOf() > 30 * 86_400_000;
+}
+
+export default async function ProviderSearchPage({ searchParams }: { searchParams?: Promise<ProviderSearchParams> }) {
+  const principal = await requirePagePermission('operations:read');
+  const params: ProviderSearchParams = await Promise.resolve(searchParams ?? {});
   const memberZip = params.memberZip?.trim() || '04530';
   const radius = Number(params.radius ?? '50');
-  const diagnosis = params.diagnosis?.trim() || 'J45';
+  const diagnosis = params.diagnosis === undefined ? 'J45' : params.diagnosis.trim();
   const specialty = params.specialty?.trim() || '';
+  const sort = params.sort === 'facility_name' || params.sort === 'last_call_date' ? params.sort : 'distance';
   const validation = providerSearchValidation({
     memberZip,
     radius,
     diagnosis: diagnosis || undefined,
     specialty: specialty || undefined,
   });
-
   const adapter = getAppDataAdapter();
   const dataMode = getResolvedDataMode();
   const state = await adapter.getProviderSearch(principal, {
@@ -34,83 +55,130 @@ export default async function ProviderSearchPage({
     radius,
     diagnosis: validation.success ? diagnosis : undefined,
     specialty: validation.success ? specialty : undefined,
+    sort,
     page: 1,
-    pageSize: 10,
+    pageSize: 50,
   });
-  const results = state.data ?? [];
+  const results = validation.success ? state.data ?? [] : [];
+  const activeFilters = [memberZip, radius, diagnosis, specialty, sort !== 'distance' ? sort : ''].filter(Boolean).length;
 
   return (
-    <AppShell user={principal} dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
-      <header className="card flex items-center justify-between p-5">
-        <div>
-          <p className="text-sm uppercase tracking-[0.22em] text-slate-500">Search</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">Provider Search</h1>
-        </div>
-      </header>
+    <AppShell user={principal} dataMode={dataMode} statusMessage={!state.ok && validation.success ? state.message : null}>
+      <PageHeader
+        eyebrow="Operations"
+        title="Provider search"
+        summary="Search by member location and clinical need. Results explain the current availability signal and when it was last checked."
+      />
 
-      <section className="card p-5">
-        <form method="get" action="/provider-search" className="grid gap-4 md:grid-cols-4">
-          <label className="text-sm text-slate-600">
+      <form method="get" action="/provider-search" className="filter-bar" aria-label="Provider search filters">
+        <div className="filter-grid xl:grid-cols-5">
+          <label className="form-label">
             Member ZIP
-            <input name="memberZip" defaultValue={memberZip} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" />
+            <input
+              name="memberZip"
+              defaultValue={memberZip}
+              inputMode="numeric"
+              maxLength={5}
+              required
+              aria-invalid={!validation.success}
+              aria-describedby={!validation.success ? 'provider-search-error' : undefined}
+              className="form-control"
+            />
           </label>
-          <label className="text-sm text-slate-600">
+          <label className="form-label">
             Radius
-            <select name="radius" defaultValue={radius} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <select name="radius" defaultValue={radius} className="form-control">
               <option value={25}>25 miles</option>
               <option value={50}>50 miles</option>
               <option value={100}>100 miles</option>
               <option value={150}>150 miles</option>
             </select>
           </label>
-          <label className="text-sm text-slate-600">
+          <label className="form-label">
             Diagnosis
-            <input name="diagnosis" defaultValue={diagnosis} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" />
+            <input name="diagnosis" defaultValue={diagnosis} className="form-control" />
           </label>
-          <label className="text-sm text-slate-600">
-            Specialty
-            <input name="specialty" defaultValue={specialty} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" placeholder="Optional" />
+          <label className="form-label">
+            Specialty <span className="font-normal text-slate-500">(optional)</span>
+            <input name="specialty" defaultValue={specialty} className="form-control" placeholder="Example: Pulmonology" />
           </label>
-          <div className="md:col-span-4 flex justify-end">
-            <button type="submit" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Search providers</button>
-          </div>
-        </form>
+          <label className="form-label">
+            Sort by
+            <select name="sort" defaultValue={sort} className="form-control">
+              <option value="distance">Distance</option>
+              <option value="facility_name">Facility name</option>
+              <option value="last_call_date">Last verified</option>
+            </select>
+          </label>
+        </div>
 
         {!validation.success ? (
-          <p className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{validation.error}</p>
+          <div id="provider-search-error" className="mt-4">
+            <InlineMessage tone="error" role="alert">{validation.error}</InlineMessage>
+          </div>
         ) : null}
-      </section>
 
-      <section className="card p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Search results</h2>
-          <span className="text-sm text-slate-500">{results.length} providers</span>
+        <div className="filter-actions">
+          <ResultsSummary count={results.length} noun="provider" activeFilters={activeFilters} />
+          <div className="flex gap-2">
+            <Link className="button button-secondary" href="/provider-search">Reset</Link>
+            <button type="submit" className="button button-primary">Search providers</button>
+          </div>
         </div>
+      </form>
 
-        <div className="space-y-3">
-          {results.length ? results.map((result) => (
-            <div key={result.facilityId} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-lg font-semibold text-slate-900">{result.facilityName}</p>
-                  <p className="text-sm text-slate-500">{result.city} · {result.specialty}</p>
-                </div>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">{result.latestAcceptingStatus}</span>
-              </div>
-              <div className="mt-3 grid gap-3 text-sm text-slate-600 md:grid-cols-4">
-                <span>Distance: {result.distanceMiles} mi</span>
-                <span>Phone: {result.phone}</span>
-                <span>Outcome: {result.recommendation}</span>
-                <span>Next step: {result.recommendation}</span>
-              </div>
-            </div>
-          )) : (
-            <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-              {!validation.success ? 'Fix the validation issue to continue.' : 'No providers match the search criteria.'}
-            </p>
-          )}
-        </div>
-      </section>
+      {results.length ? (
+        <section className="table-shell" aria-labelledby="provider-results-heading">
+          <div className="border-b border-slate-300 px-4 py-3">
+            <h2 id="provider-results-heading" className="section-title">Search results</h2>
+          </div>
+          <div className="table-scroll">
+            <table className="data-table min-w-[64rem]">
+              <thead>
+                <tr>
+                  <th scope="col">Provider</th>
+                  <th scope="col">Match</th>
+                  <th scope="col">Availability</th>
+                  <th scope="col">Verification</th>
+                  <th scope="col">Distance</th>
+                  <th scope="col">Phone</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((result) => (
+                  <tr key={result.facilityId}>
+                    <td>
+                      <span className="block font-semibold text-slate-950">{result.facilityName}</span>
+                      <span className="block text-xs text-slate-500">{result.city} · {result.specialty}</span>
+                    </td>
+                    <td>
+                      <span className="block">{humanizeKey(result.latestTreatmentStatus)} for diagnosis</span>
+                      <span className="mt-1 block text-xs text-slate-500">{result.recommendation}</span>
+                    </td>
+                    <td>
+                      <StatusBadge tone={availabilityTone(result.latestAcceptingStatus)}>{result.latestAcceptingStatus}</StatusBadge>
+                      <span className="mt-2 block text-xs text-slate-500">Scheduling: {humanizeKey(result.latestSchedulingStatus)}</span>
+                    </td>
+                    <td>
+                      <span className={verificationIsOverdue(result.lastCallDate) ? 'font-medium text-amber-800' : undefined}>
+                        {verificationLabel(result.lastCallDate)}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap">{result.distanceMiles.toFixed(1)} mi</td>
+                    <td className="whitespace-nowrap">{result.phone || 'Not recorded'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : validation.success && state.ok ? (
+        <EmptyState
+          title="No providers match this search"
+          description="Check the ZIP, widen the radius, or remove a clinical filter."
+          action={<Link className="button button-secondary" href="/provider-search">Reset search</Link>}
+        />
+      ) : null}
     </AppShell>
   );
 }
