@@ -40,6 +40,14 @@ docker build \
 
 Use a clean, reviewed commit and retain the image digest. The release appears in JSON logs and `X-App-Release`. Health and readiness response bodies stay minimal.
 
+`APP_RELEASE` also becomes the Next.js deployment identifier at build time. Every instance in one release must use the same value. A later release must use a new value so a browser cannot mix client assets from two rolling versions.
+
+Create the source/SBOM record with `npm run release:evidence`. CI retains the source commit, lockfile hash, SBOM hash, image record, and container scan. Promotion must use the same image digest certified in staging.
+
+## Production configuration and drift
+
+`config/production.env.template` lists the required keys without real values. Export staging and production profiles into access-controlled temporary files, then run `npm run audit:configuration-drift -- --staging <file> --production <file>`. The audit rejects public/local mode, weak proxy trust, debug logs, non-HTTPS origins, broad proxy ranges, database connections without `sslmode=verify-full`, missing secret categories, altered session limits, and missing release identity. It never prints or compares secret values. Remove temporary files after the approved record is retained.
+
 ## Database roles
 
 Use three login roles. The database owner or managed-service administrator creates PostGIS; the application role must not own the schema. Start from `config/postgres/runtime-role.sql` and adapt identifiers to local policy.
@@ -95,6 +103,8 @@ Production preflight also requires `BACKUP_FILE` to point to the approved artifa
 Before deployment:
 
 - [ ] clean reviewed commit and immutable image digest recorded
+- [ ] staging and production configuration drift reviewed without secret disclosure
+- [ ] approved identity/MFA strategy and authentication-path decision recorded
 - [ ] CI, dependency audit, secret scan, security matrix, and staging acceptance pass
 - [ ] target database and migration role confirmed
 - [ ] current backup restored successfully in an isolated database
@@ -114,12 +124,15 @@ After deployment:
 - [ ] verify sign-in, provider radius search, reports, and audit writes
 - [ ] inspect 5xx, latency, pool waiting, and authentication-failure metrics
 - [ ] record release, migration, operator, backup, and smoke result
+- [ ] complete the Phase 9 evidence record and retain the final status
 
 ## Rollback
 
 Rollback the application image when the prior image remains schema-compatible. Stop or drain traffic first if writes could make the old code unsafe. Do not automatically reverse a schema migration. Additive migrations normally remain in place; unsafe data transformations require a forward fix or restore to a new database. A restore is a separate incident decision because it discards writes made after the recovery point.
 
 After an application rollback, wait for readiness, run smoke tests, verify authentication and geographic search, and record the incident. Never drop a column or table merely to make an older image start.
+
+For a rolling deployment, confirm readiness removes each instance before shutdown, active requests finish inside the drain window, all new instances carry the intended release/deployment ID, sessions remain valid, and no scheduler job runs twice. If the platform cannot prove those points, use a controlled stop/start change instead of claiming zero downtime.
 
 ## Common deployment failures
 

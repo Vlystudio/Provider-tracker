@@ -62,6 +62,8 @@ npm run test:automation-performance
 npm run test:migration
 npm run test:migration-performance
 npm run test:smoke
+npm run audit:configuration-drift -- --staging <file> --production <file>
+npm run phase9:status -- --file <evidence.json>
 ```
 
 The live security matrix needs a disposable PostgreSQL database whose name ends in `_test`:
@@ -74,7 +76,7 @@ That command drops and recreates its acceptance schema in the named test databas
 
 The performance command also requires a disposable database ending in `_test`, with the full migration set and PostGIS. It inserts at least 10,000 synthetic facilities in one transaction and rolls the transaction back. See `docs/PERFORMANCE.md`.
 
-Operational commands include `db:preflight`, `test:postgis`, `db:backup`, `test:restore`, `db:housekeeping`, `db:audit-integrity`, `test:load`, and `verify:release`. Each command has target guards; read the linked operations documents before using it outside a disposable environment.
+Operational commands include `db:preflight`, `test:postgis`, `db:backup`, `test:restore`, `db:housekeeping`, `db:audit-integrity`, `test:load`, `test:public-exposure`, `test:staging-network`, `release:evidence`, and `verify:release`. Each command has target guards; read the linked operations documents before using it outside a disposable environment.
 
 Scheduled provider-work commands are `jobs:daily` and `jobs:weekly`. Run one dry check with `npm run jobs:run -- --job reverification_scan --dry-run`. Scheduling, locks, recovery, and alert rules are in `docs/AUTOMATION.md`; in-app notification behavior is in `docs/NOTIFICATIONS.md`.
 
@@ -109,7 +111,7 @@ npm start
 
 The included `Dockerfile` builds a pinned, unprivileged Next.js standalone runtime image. Environment values are supplied when the container starts, not during the image build. `docker-compose.production.example.yml` publishes no app or database port directly and applies read-only/non-root runtime controls; IT must adapt and validate it on the approved platform.
 
-Start with `docs/IT_HANDOFF.md` and `docs/SECURITY_INFRASTRUCTURE_HANDOFF.md`. Deployment and rollback are in `docs/DEPLOYMENT.md`; recovery is in `docs/BACKUP_RESTORE.md`; probes, logs, metrics, and alerts are in `docs/MONITORING.md`; incident steps are in `docs/INCIDENT_RUNBOOKS.md`; and the staging gate is in `docs/STAGING_ACCEPTANCE.md`. Account procedures remain in `docs/OPERATIONS.md`. Provider history, freshness, search, and merge rules are in `docs/PROVIDER_INTELLIGENCE.md`. The full security route map, attack surface, threat model, malicious-code review, OWASP matrix and ASVS matrix are under `docs/SECURITY_*`, `docs/OWASP_*` and `docs/ASVS_*`.
+Start with `docs/IT_HANDOFF.md`, `docs/SECURITY_INFRASTRUCTURE_HANDOFF.md`, and `docs/STAGING_CERTIFICATION.md`. Network tests are in `docs/NETWORK_SECURITY_VALIDATION.md`; the corporate identity decision is in `docs/IDENTITY_INTEGRATION.md`; pilot steps are in `docs/PILOT_ROLLOUT.md`; and final cutover/rollback is in `docs/PRODUCTION_CUTOVER.md`. Deployment is in `docs/DEPLOYMENT.md`; recovery is in `docs/BACKUP_RESTORE.md`; probes, logs, metrics, and alerts are in `docs/MONITORING.md`; incident steps are in `docs/INCIDENT_RUNBOOKS.md`. Account procedures remain in `docs/OPERATIONS.md`. Provider history, freshness, search, and merge rules are in `docs/PROVIDER_INTELLIGENCE.md`. The security route map, attack surface, threat model, malicious-code review, OWASP matrix, and ASVS matrix are under `docs/SECURITY_*`, `docs/OWASP_*`, and `docs/ASVS_*`.
 
 ## Product interface
 

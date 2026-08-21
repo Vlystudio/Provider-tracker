@@ -2,6 +2,8 @@
 
 Production is allowed only after every blocking row has dated evidence and an owner approval. Repository settings do not prove a VPN, firewall, certificate, private database, vault, log collector, or encrypted backup.
 
+Phase 9 evidence is recorded outside Git. Create the full blank gate list with `npm run phase9:status -- --template > work/phase9-evidence.json`, attach dated evidence and approvers, then evaluate it with `npm run phase9:status -- --file work/phase9-evidence.json`. The evaluator cannot approve a gate that lacks availability/configuration/testability fields, dated evidence, and an approver.
+
 ## Required topology
 
 ```text
@@ -59,11 +61,13 @@ $env:PUBLIC_PROBE_DATABASE_PORT='5432'
 npm run test:public-exposure
 ```
 
-The command tests the root, sign-in, health, readiness, session API, and optional database TCP endpoint. DNS is recorded as an observation. Any HTTP response or database TCP connection is `EXPOSED` and fails the command. An application `401`, `403`, `404`, or redirect is still public reachability and is therefore a failure.
+Add `PUBLIC_PROBE_ADDITIONAL_BASE_URLS`, `PUBLIC_PROBE_ORIGIN_TARGETS`, and `PUBLIC_PROBE_APPLICATION_HOSTNAME` so every alternate hostname and direct origin is covered. The command tests pages, authentication, health, readiness, session, metrics, user/admin APIs, direct origins, and the optional database TCP endpoint. DNS is recorded as an observation. Any HTTP response, direct-origin application response, or database TCP connection is `EXPOSED` and fails. An application `401`, `403`, `404`, or redirect is still public reachability and is therefore a failure.
 
 Also probe the origin directly, not just the friendly hostname. Repeat from more than one external network. Save the exact command environment without secrets, output, tester, source network, date, ingress/firewall logs, and final approval.
 
 ## On-VPN and internal segmentation tests
+
+Start with the ordinary-client check in `NETWORK_SECURITY_VALIDATION.md` (`npm run test:staging-network`), then:
 
 1. Connect through the approved VPN and resolve the private name.
 2. Confirm the sign-in page is reachable over valid HTTPS.

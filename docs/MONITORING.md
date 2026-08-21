@@ -16,6 +16,8 @@ Central redaction removes passwords, cookies, authorization values, tokens, secr
 
 Next.js server errors pass through a vendor-neutral reporting boundary in `src/server/error-reporting.ts`. An external tracker can replace that reporter, but it may receive only correlation ID, route template, method, environment, release, safe stack, and error category—never bodies, cookies, tokens, or clinical content.
 
+Before pilot, create one safe staging failure and retain the response request ID. Find the same ID in application stdout and the central logging destination, then confirm a related error metric exists. Record the collector query, timestamps, release, and tester. The application runtime identity must not be able to delete or rewrite the central security record.
+
 ## Metrics
 
 Set a random `OPERATIONS_TOKEN` of at least 32 characters to enable `GET /api/metrics`. Call it with `Authorization: Bearer <token>` over the monitoring network. Without the token the endpoint returns 404. Metric labels are fixed route/operation/status categories and never include user IDs, provider IDs, email addresses, or request IDs.
@@ -41,6 +43,8 @@ Warning (investigate during support coverage):
 - database storage above 75% or rapid week-over-week growth.
 
 Tune thresholds after two to four weeks of staging/production baseline data. Do not page on one failed request.
+
+Exercise the application-unavailable, readiness, database, scheduler, sustained-error, repeated-sign-in-failure, and suspicious privileged-access alerts with safe staging conditions. Record trigger time, threshold, delivery time, destination, owner, ticket, and closure. Classify each rule as immediate page, urgent ticket/message, daily review, or dashboard only. Review false positives during the pilot before changing a threshold.
 
 ## PostgreSQL monitoring
 

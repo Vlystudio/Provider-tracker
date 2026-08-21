@@ -52,6 +52,12 @@ Audit retention is an organization decision. Until approved, retain audit, verif
 
 An HTTP `401`, `403`, `404`, redirect, health response or sign-in page observed from outside VPN is still public exposure. Network removes the route and locks down the origin first. Application and security owners then review ingress logs from the earliest possible exposure time, authentication attempts, sessions, administrative actions and data access. Run the outside-VPN probe again from two networks only after configuration is corrected.
 
+## Pilot stop rules
+
+Stop the pilot immediately for suspected public/origin/database exposure, authentication bypass, privilege escalation, data exfiltration, code execution, data corruption, or loss of the required audit trail. Treat those events as P0. Contain access, preserve VPN/identity/ingress/application/database/platform evidence, invoke the incident owner, and require a new security GO decision before resuming.
+
+A blocked primary workflow without a safe workaround is P1. A major issue with a documented workaround is P2. A minor issue or preference is P3. Severity does not replace the separate rollback rules in `PRODUCTION_CUTOVER.md`.
+
 ## Credential rotation notes
 
 Test rotations in staging first. Runtime database, metrics, IdP and backup credentials can be independently replaced through the secret store. A Better Auth secret change may invalidate every session; schedule and communicate a forced login if the deployed version cannot overlap secrets. Changing the audit HMAC salt changes future pseudonymous identifiers, so use a recorded versioned cutover and preserve the old salt only under approved forensic custody. Never rewrite old audit events.

@@ -1,6 +1,6 @@
 # IT handoff
 
-Legacy data cutover is covered by [MIGRATION.md](MIGRATION.md), [CUTOVER.md](CUTOVER.md), [RECONCILIATION.md](RECONCILIATION.md), and [UAT.md](UAT.md). Apply all database migrations through `0010_abandoned_metal_master.sql` before using the migration screen.
+Legacy data cutover is covered by [MIGRATION.md](MIGRATION.md), [CUTOVER.md](CUTOVER.md), [RECONCILIATION.md](RECONCILIATION.md), and [UAT.md](UAT.md). Apply all database migrations through `0011_fair_bastion.sql` before using the migration screen.
 
 For a release that includes legacy data, add these commands to the normal acceptance run:
 
@@ -17,7 +17,9 @@ Use a database name ending in `_test` for the migration acceptance command. Prod
 | PostGIS | compatible PostGIS installed and extension enabled by privileged owner | `npm run test:postgis` | database team |
 | Database roles | separate migration, runtime, and backup identities; runtime is not owner/superuser | permission output plus staging smoke | database/security teams |
 | Credentials | unique per environment in approved secret manager; rotation procedure | production startup and sign-in smoke | security/platform team |
+| Corporate identity | approved local-MFA or enterprise identity strategy; stable user linking; privileged MFA | identity matrix in `IDENTITY_INTEGRATION.md` | identity/security teams |
 | HTTPS and DNS | trusted certificate, HTTP redirect, correct host/protocol forwarding | browser/curl and secure cookie test | network/platform team |
+| VPN and origin | no public route; private DNS; direct origin blocked; database segmented | outside/on-VPN commands in `NETWORK_SECURITY_VALIDATION.md` | network/security teams |
 | Compute | Node.js 22 image/process, `SIGTERM`, health/readiness routing, at least two instances if availability requires | controlled restart and drain test | platform team |
 | Backup destination | encrypted, access-controlled, separate failure domain, retention job | backup job, checksum, isolated restore | database/backup team |
 | Monitoring | collect JSON stdout, scrape protected metrics, configure probes and alerts | staging alert and request-ID trace | monitoring team |
@@ -28,6 +30,14 @@ Use a database name ending in `_test` for the migration acceptance command. Prod
 ## Required runtime configuration
 
 Supply every active setting in `.env.example`. Production requires database mode, HTTPS Better Auth URL and trusted origin, independent authentication/audit secrets, non-debug logging, explicit maintenance mode, pool/timeouts, freshness policy, time zone, and immutable release values. `OPERATIONS_TOKEN` is optional; without it metrics are disabled. `AUTH_CLIENT_IP_HEADER` and `REQUEST_ID_SOURCE=trusted-proxy` are allowed only when the proxy overwrites inbound values.
+
+Use `config/production.env.template` as the key list. It contains no deployable credentials. Before approval, export secret-safe staging and production environment files from the platform and run:
+
+```text
+npm run audit:configuration-drift -- --staging <staging-file> --production <production-file>
+```
+
+The command validates each profile and reports differences without printing or comparing secret values.
 
 Recommended starting pool size is 5–10 connections per instance. Confirm `instances × pool size + migration/admin headroom` stays below the database connection limit. Adjust using pool waiting and query latency, not a hard-coded production assumption. Defaults are a 30-second idle timeout, 10-second connection timeout, 15-second statement timeout, and 20-second graceful shutdown window.
 
@@ -58,4 +68,4 @@ Capture stdout/stderr and alert on a non-zero exit. Do not place database creden
 
 ## Approval boundary
 
-The application team can mark repository work ready and provide passing local checks. IT must separately approve staging PostGIS, HTTPS, database roles, monitoring delivery, backups/restores, capacity, and production change controls. Until those checks run, status is **APPLICATION PRODUCTION-READY — INFRASTRUCTURE APPROVAL PENDING**.
+The application team can mark repository work ready and provide passing local checks. IT must separately approve the Phase 9 network, identity/MFA, TLS, secrets, PostGIS, database isolation, container, monitoring, backup/restore, scheduler, migration, and pilot gates in [STAGING_CERTIFICATION.md](STAGING_CERTIFICATION.md). Until those checks run, status is **PRODUCTION PILOT BLOCKED — INFRASTRUCTURE VALIDATION REQUIRED**.
