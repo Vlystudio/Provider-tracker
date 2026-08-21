@@ -45,9 +45,12 @@ jobs:
       - run: npm ci
       - run: npm run verify:ci
       - run: npm run db:migrate
+      - run: npm run test:migration
+      - run: npm run test:migration-performance
       - run: npm run db:preflight
       - run: npm run test:postgis
       - run: npm run test:performance
       - run: npm run test:security
+      - run: npm run test:automation
       - run: npm run db:audit-integrity
       - run: npm run test:restore

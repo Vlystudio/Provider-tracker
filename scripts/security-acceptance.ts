@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { hashPassword } from 'better-auth/crypto';
+import { strToU8, zipSync } from 'fflate';
 import { Pool } from 'pg';
 
 const databaseUrl = process.env.SECURITY_TEST_DATABASE_URL?.trim();
@@ -39,6 +40,25 @@ function record(scenario: string, expected: string, actual: string, pass: boolea
 
 function password() {
   return `Aa1!${randomBytes(18).toString('base64url')}`;
+}
+
+function emptyAdminWorkbook() {
+  const sheets = [
+    { name: 'Facilities', headers: ['Facility Name', 'City'] },
+    { name: 'Facility-Specialty Map', headers: ['Facility Name', 'Specialty'] },
+    { name: 'Zip Coordinates', headers: ['Zip Code', 'Latitude', 'Longitude'] },
+    { name: 'tblWeeklyCallLog', headers: ['Facility Name', 'Call Date'] },
+    { name: 'Monthly Archive', headers: ['Facility Name', 'Call Date'] },
+  ];
+  const entries: Record<string, Uint8Array> = {
+    'xl/workbook.xml': strToU8(`<?xml version="1.0"?><workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((sheet, index) => `<sheet name="${sheet.name}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('')}</sheets></workbook>`),
+    'xl/_rels/workbook.xml.rels': strToU8(`<?xml version="1.0"?><Relationships>${sheets.map((_sheet, index) => `<Relationship Id="rId${index + 1}" Target="worksheets/sheet${index + 1}.xml"/>`).join('')}</Relationships>`),
+  };
+  sheets.forEach((sheet, index) => {
+    const cells = sheet.headers.map((header, cellIndex) => `<c r="${String.fromCharCode(65 + cellIndex)}1" t="inlineStr"><is><t>${header}</t></is></c>`).join('');
+    entries[`xl/worksheets/sheet${index + 1}.xml`] = strToU8(`<?xml version="1.0"?><worksheet><sheetData><row r="1">${cells}</row></sheetData></worksheet>`);
+  });
+  return zipSync(entries);
 }
 
 function cookieFrom(response: Response): string {
@@ -103,12 +123,18 @@ async function waitForServer() {
 
 async function createTestSchema() {
   await pool.query(`
-    DROP TABLE IF EXISTS operational_digests, coverage_alert_events, coverage_watches, operational_change_events,
+    DROP TABLE IF EXISTS legacy_value_mappings, legacy_actors, migration_reconciliations, migration_diagnostics, migration_sources, migration_runs,
+      operational_digests, coverage_alert_events, coverage_watches, operational_change_events,
       operational_work_items, notifications, notification_preferences, automation_settings, automation_job_executions,
       facility_merge_records, reverification_assignments, facility_contact_attempts, facility_verification_events,
       facility_diagnosis_capabilities, facility_specialties, facilities, diagnoses, specialties,
       audit_events, authorizations, auth_rate_limits, verification_tokens, sessions, accounts, users CASCADE;
     DROP TYPE IF EXISTS assignment_status CASCADE;
+    DROP TYPE IF EXISTS migration_diagnostic_status CASCADE;
+    DROP TYPE IF EXISTS migration_readiness CASCADE;
+    DROP TYPE IF EXISTS migration_run_status CASCADE;
+    DROP TYPE IF EXISTS legacy_actor_status CASCADE;
+    DROP TYPE IF EXISTS workbook_kind CASCADE;
     DROP TYPE IF EXISTS coverage_state CASCADE;
     DROP TYPE IF EXISTS work_item_status CASCADE;
     DROP TYPE IF EXISTS digest_frequency CASCADE;
@@ -123,6 +149,11 @@ async function createTestSchema() {
     DROP TYPE IF EXISTS authorization_status CASCADE;
     DROP TYPE IF EXISTS user_role CASCADE;
     CREATE TYPE user_role AS ENUM ('admin', 'ura_user', 'report_viewer', 'auditor');
+    CREATE TYPE workbook_kind AS ENUM ('admin', 'user');
+    CREATE TYPE migration_run_status AS ENUM ('previewed', 'approved', 'running', 'failed', 'applied', 'reconciled', 'cancelled', 'reversed');
+    CREATE TYPE migration_diagnostic_status AS ENUM ('open', 'resolved', 'deferred', 'skipped');
+    CREATE TYPE migration_readiness AS ENUM ('go', 'go_with_warnings', 'no_go');
+    CREATE TYPE legacy_actor_status AS ENUM ('unmapped', 'mapped', 'retired');
     CREATE TYPE authorization_status AS ENUM ('open', 'complete', 'cancelled');
     CREATE TYPE data_quality_status AS ENUM ('clean', 'needs_review', 'rejected');
     CREATE TYPE coordinate_quality AS ENUM ('exact', 'address', 'zip_centroid', 'manual', 'unknown');
@@ -144,6 +175,13 @@ async function createTestSchema() {
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX users_role_active_idx ON users(role, is_active);
+    CREATE TABLE legacy_actors (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), source_value text NOT NULL, normalized_value text NOT NULL UNIQUE,
+      display_name text NOT NULL, status legacy_actor_status NOT NULL DEFAULT 'unmapped',
+      mapped_user_id uuid REFERENCES users(id) ON DELETE SET NULL, mapping_reason text,
+      mapped_by uuid REFERENCES users(id) ON DELETE SET NULL, mapped_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE accounts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), account_id text NOT NULL, provider_id text NOT NULL, issuer text NOT NULL,
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, access_token text, refresh_token text,
@@ -198,7 +236,8 @@ async function createTestSchema() {
       scheduling_verified_at timestamptz, phone_verified_at timestamptz, address_verified_at timestamptz,
       last_verified_at timestamptz, merged_into_facility_id uuid, archived_at timestamptz, archived_by uuid,
       active boolean NOT NULL DEFAULT true, data_quality_status data_quality_status NOT NULL DEFAULT 'clean',
-      source_metadata jsonb NOT NULL DEFAULT '{}'::jsonb, optimistic_lock_version integer NOT NULL DEFAULT 0,
+      source_metadata jsonb NOT NULL DEFAULT '{}'::jsonb, migration_baseline_at timestamptz,
+      optimistic_lock_version integer NOT NULL DEFAULT 0,
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE(normalized_name, normalized_city)
     );
@@ -218,7 +257,7 @@ async function createTestSchema() {
     );
     CREATE TABLE facility_verification_events (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_id uuid NOT NULL, verified_at timestamptz NOT NULL,
-      verified_by uuid, method verification_method NOT NULL, confidence source_confidence NOT NULL DEFAULT 'direct',
+      verified_by uuid, legacy_actor_id uuid, method verification_method NOT NULL, confidence source_confidence NOT NULL DEFAULT 'direct',
       contact_person text, contact_channel text, accepting_status verification_answer, specialty_id uuid,
       specialty_status verification_answer, diagnosis_id uuid, diagnosis_status verification_answer,
       scheduling_within_four_weeks verification_answer, urgent_referral_status verification_answer,
@@ -229,7 +268,7 @@ async function createTestSchema() {
     );
     CREATE TABLE facility_contact_attempts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_id uuid NOT NULL, attempted_at timestamptz NOT NULL,
-      attempted_by uuid, method verification_method NOT NULL, outcome contact_outcome NOT NULL,
+      attempted_by uuid, legacy_actor_id uuid, method verification_method NOT NULL, outcome contact_outcome NOT NULL,
       contact_person text, contact_channel text, comments text, related_call_id uuid,
       created_at timestamptz NOT NULL DEFAULT now()
     );
@@ -252,6 +291,48 @@ async function createTestSchema() {
     );
     CREATE INDEX audit_events_entity_idx ON audit_events(entity_type, entity_id, created_at);
     CREATE INDEX audit_events_actor_created_idx ON audit_events(actor_id, created_at);
+    CREATE TABLE migration_runs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), importer_version text NOT NULL,
+      status migration_run_status NOT NULL DEFAULT 'previewed', release_version text NOT NULL,
+      source_manifest jsonb NOT NULL DEFAULT '{}'::jsonb, preview_counts jsonb NOT NULL DEFAULT '{}'::jsonb,
+      apply_counts jsonb NOT NULL DEFAULT '{}'::jsonb, reconciliation jsonb NOT NULL DEFAULT '{}'::jsonb,
+      readiness migration_readiness NOT NULL DEFAULT 'no_go', notification_baseline_at timestamptz,
+      previewed_by uuid REFERENCES users(id), approved_by uuid REFERENCES users(id), executed_by uuid REFERENCES users(id),
+      reversed_by uuid REFERENCES users(id), failure_category text, failure_message text, approval_reason text,
+      reversal_reason text, approved_at timestamptz, started_at timestamptz, completed_at timestamptz,
+      reversed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE migration_sources (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), migration_run_id uuid NOT NULL REFERENCES migration_runs(id) ON DELETE CASCADE,
+      workbook_kind workbook_kind NOT NULL, source_file_name text NOT NULL, source_hash text NOT NULL,
+      source_size_bytes integer NOT NULL, schema_version text NOT NULL, sheets jsonb NOT NULL DEFAULT '[]'::jsonb,
+      rows_scanned integer NOT NULL DEFAULT 0, formula_cells integer NOT NULL DEFAULT 0, hidden_rows integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(migration_run_id,source_hash)
+    );
+    CREATE TABLE migration_diagnostics (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), migration_run_id uuid NOT NULL REFERENCES migration_runs(id) ON DELETE CASCADE,
+      source_hash text NOT NULL, workbook_kind workbook_kind NOT NULL, entity_type text NOT NULL, sheet_name text NOT NULL,
+      source_row integer NOT NULL, row_key text, issue_code text NOT NULL, severity text NOT NULL, message text NOT NULL,
+      suggested_action text, status migration_diagnostic_status NOT NULL DEFAULT 'open', resolution_action text,
+      target_entity_id uuid, resolution_note text, resolved_by uuid REFERENCES users(id), resolved_at timestamptz,
+      optimistic_lock_version integer NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(migration_run_id,source_hash,entity_type,sheet_name,source_row,issue_code)
+    );
+    CREATE TABLE migration_reconciliations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), migration_run_id uuid NOT NULL UNIQUE REFERENCES migration_runs(id) ON DELETE CASCADE,
+      source_rows integer NOT NULL, reconciled_rows integer NOT NULL, imported_rows integer NOT NULL DEFAULT 0,
+      updated_rows integer NOT NULL DEFAULT 0, unchanged_rows integer NOT NULL DEFAULT 0, skipped_rows integer NOT NULL DEFAULT 0,
+      conflict_rows integer NOT NULL DEFAULT 0, invalid_rows integer NOT NULL DEFAULT 0, reconciliation_percent double precision NOT NULL,
+      relationship_counts jsonb NOT NULL DEFAULT '{}'::jsonb, state_distribution jsonb NOT NULL DEFAULT '{}'::jsonb,
+      report_comparison jsonb NOT NULL DEFAULT '{}'::jsonb, discrepancies jsonb NOT NULL DEFAULT '[]'::jsonb,
+      readiness migration_readiness NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE legacy_value_mappings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), mapping_type text NOT NULL, source_value text NOT NULL,
+      normalized_value text NOT NULL, target_entity_id uuid, decision text NOT NULL DEFAULT 'mapped',
+      created_by uuid REFERENCES users(id), created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(mapping_type,normalized_value)
+    );
     CREATE TABLE automation_job_executions (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), execution_key text NOT NULL UNIQUE, job_type text NOT NULL,
       trigger text NOT NULL, scheduled_for timestamptz NOT NULL, started_at timestamptz NOT NULL DEFAULT now(),
@@ -442,6 +523,8 @@ async function main() {
   record('Anonymous → authenticated page', 'BLOCKED', `HTTP ${response.status} → ${anonymousRedirect}`, response.status >= 300 && response.status < 400 && anonymousRedirectPath === '/sign-in');
   response = await request('/api/session');
   record('Anonymous → protected API', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
+  response = await request('/api/admin/migrations');
+  record('Anonymous migration history', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
   response = await request('/api/auth/sign-up/email', {
     method: 'POST',
     headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
@@ -560,6 +643,14 @@ async function main() {
   record('User → admin page', 'BLOCKED', `HTTP ${response.status} → ${response.headers.get('location')}`, response.status >= 300 && response.status < 400 && response.headers.get('location')?.endsWith('/forbidden') === true);
   response = await mutation(`/api/admin/users/${userB.id}`, userLogin.cookie, 'PATCH', { role: 'admin' });
   record('User → admin API', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await request('/migration', { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
+  record('User migration console', 'BLOCKED', `HTTP ${response.status}`, response.status >= 300 && response.status < 400 && response.headers.get('location')?.endsWith('/forbidden') === true);
+  response = await request('/api/admin/migrations', { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
+  record('User migration history API', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await mutation(`/api/admin/migrations/${crypto.randomUUID()}/diagnostics/${crypto.randomUUID()}`, userLogin.cookie, 'PATCH', { action: 'skip', note: 'Not authorized', version: 0 });
+  record('User migration diagnostic mutation', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await request(`/api/admin/migrations/${crypto.randomUUID()}/diagnostics.csv`, { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
+  record('User migration diagnostic export', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
   response = await request(`/api/admin/users/${userB.id}`, {
     method: 'PATCH', cookie: userLogin.cookie, clientIp: '192.0.2.11',
     headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'x-user-role': 'admin' },
@@ -574,6 +665,26 @@ async function main() {
   record('Cross-site mutation request', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
 
   const adminLogin = await signIn(fixtures.admin.email, fixtures.admin.password, '192.0.2.10');
+  response = await request('/api/admin/migrations/not-a-uuid', { cookie: adminLogin.cookie, clientIp: '192.0.2.10' });
+  record('Invalid migration route identifier', 'BLOCKED', `HTTP ${response.status}`, response.status === 400);
+  const noOriginUpload = new FormData();
+  noOriginUpload.set('admin', new File(['not a workbook'], 'legacy.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  response = await request('/api/admin/migrations', { method: 'POST', cookie: adminLogin.cookie, clientIp: '192.0.2.10', body: noOriginUpload });
+  record('Missing CSRF origin on migration preview', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  const macroUpload = new FormData();
+  macroUpload.set('admin', new File(['not a workbook'], 'legacy.xlsm', { type: 'application/vnd.ms-excel.sheet.macroEnabled.12' }));
+  response = await request('/api/admin/migrations', { method: 'POST', cookie: adminLogin.cookie, clientIp: '192.0.2.10', headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin' }, body: macroUpload });
+  record('Macro-enabled migration upload', 'BLOCKED', `HTTP ${response.status}`, response.status === 400);
+  const validMigrationUpload = new FormData();
+  validMigrationUpload.set('admin', new File([Buffer.from(emptyAdminWorkbook())], 'legacy-admin.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  response = await request('/api/admin/migrations', { method: 'POST', cookie: adminLogin.cookie, clientIp: '192.0.2.10', headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin' }, body: validMigrationUpload });
+  const migrationPreviewBody = response.ok ? await response.clone().json() as { run?: { id?: string; readiness?: string } } : {};
+  const migrationRunId = migrationPreviewBody.run?.id;
+  record('Admin migration preview', 'PASS', `HTTP ${response.status}`, response.status === 201 && migrationPreviewBody.run?.readiness === 'go' && Boolean(migrationRunId));
+  response = migrationRunId ? await request(`/api/admin/migrations/${migrationRunId}`, { cookie: adminLogin.cookie, clientIp: '192.0.2.10' }) : new Response(null, { status: 500 });
+  record('Admin migration detail access', 'PASS', `HTTP ${response.status}`, response.status === 200);
+  response = migrationRunId ? await request(`/api/admin/migrations/${migrationRunId}/diagnostics.csv`, { cookie: adminLogin.cookie, clientIp: '192.0.2.10' }) : new Response(null, { status: 500 });
+  record('Admin migration diagnostic export', 'PASS', `HTTP ${response.status}; ${response.headers.get('content-type')}`, response.status === 200 && response.headers.get('content-type')?.startsWith('text/csv') === true);
   response = await request('/api/notifications?limit=50', { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
   const ownNotificationBody = response.ok ? await response.clone().json() as { rows?: Array<{ id: string }> } : {};
   record('Notification list ownership', 'PASS', `HTTP ${response.status}`, response.status === 200 && ownNotificationBody.rows?.some((row) => row.id === notificationA.id) === true && ownNotificationBody.rows?.every((row) => row.id !== notificationB.id) === true);
@@ -723,10 +834,10 @@ async function main() {
   const auditRows = await pool.query<{ action: string; metadata: unknown }>(
     `SELECT action, metadata FROM audit_events
      WHERE action = ANY($1::text[])`,
-    [['auth.sign-in', 'auth.sign-out', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge']],
+    [['auth.sign-in', 'auth.sign-out', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge', 'migration.preview']],
   );
   const auditedActionsFound = new Set(auditRows.rows.map((row) => row.action));
-  const requiredAuditActions = ['auth.sign-in', 'auth.sign-out', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge'];
+  const requiredAuditActions = ['auth.sign-in', 'auth.sign-out', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge', 'migration.preview'];
   const serializedAuditRows = JSON.stringify(auditRows.rows);
   const sensitiveFixtureValues = [
     ...Object.values(fixtures).flatMap((fixture) => [fixture.email, fixture.password]),

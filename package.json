@@ -38,7 +38,9 @@
     "verify:release": "tsx scripts/release-acceptance.ts",
     "db:studio": "drizzle-kit studio",
     "admin:bootstrap": "node --conditions=react-server --import tsx scripts/bootstrap-admin.ts",
-    "import:workbooks": "tsx scripts/import-workbooks.ts"
+    "import:workbooks": "tsx scripts/import-workbooks.ts",
+    "test:migration": "tsx scripts/migration-acceptance.ts",
+    "test:migration-performance": "tsx scripts/migration-performance.ts"
   },
   "dependencies": {
     "@tanstack/react-table": "^9.1.2",

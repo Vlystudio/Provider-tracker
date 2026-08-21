@@ -27,6 +27,7 @@ async function main() {
   let adminId = '';
   let userId = '';
   let facilityId = '';
+  let baselineFacilityId = '';
   let watchId = '';
   try {
     const people = await client.query<{ id: string; role: 'admin' | 'ura_user' }>(`
@@ -93,6 +94,23 @@ async function main() {
     const afterReopen = await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM coverage_alert_events WHERE watch_id=$1`, [watchId]);
     record('Recurring coverage gap starts a new cycle', state.state === 'alerting' && state.cycle === 2 && afterReopen.rows[0].count === 3, `cycle=${state.cycle}, events=${afterReopen.rows[0].count}`);
 
+    const baselineFacility = await client.query<{ id: string }>(`
+      INSERT INTO facilities
+        (facility_name,city,normalized_name,normalized_city,display_key,data_quality_status,migration_baseline_at,updated_at)
+      VALUES ($1,'Portland',$2,'portland',$3,'needs_review',now(),now()) RETURNING id`,
+    [`Migrated Baseline Clinic ${runId}`, `migrated-baseline-clinic-${runId}`, `Migrated Baseline Clinic ${runId}|Portland`]);
+    baselineFacilityId = baselineFacility.rows[0].id;
+    await runAutomationJob('data_quality_scan', { executionKey: `${keyPrefix}:baseline:1`, trigger: 'manual' });
+    let baselineWork = await client.query<{ id: string; cycle: number }>(`SELECT id,cycle FROM operational_work_items WHERE deduplication_key=$1`, [`data_quality:${baselineFacilityId}`]);
+    let baselineNotifications = await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM notifications WHERE issue_key=$1`, [`work:${baselineWork.rows[0]?.id}`]);
+    record('Migrated backlog creates work without an initial alert', baselineWork.rows.length === 1 && baselineNotifications.rows[0].count === 0, `work=${baselineWork.rows.length}, notifications=${baselineNotifications.rows[0].count}`);
+    await client.query(`UPDATE operational_work_items SET status='completed',completed_at=now(),updated_at=now() WHERE id=$1`, [baselineWork.rows[0].id]);
+    await client.query(`UPDATE facilities SET updated_at=migration_baseline_at + interval '10 minutes' WHERE id=$1`, [baselineFacilityId]);
+    await runAutomationJob('data_quality_scan', { executionKey: `${keyPrefix}:baseline:2`, trigger: 'manual' });
+    baselineWork = await client.query<{ id: string; cycle: number }>(`SELECT id,cycle FROM operational_work_items WHERE deduplication_key=$1`, [`data_quality:${baselineFacilityId}`]);
+    baselineNotifications = await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM notifications WHERE issue_key=$1`, [`work:${baselineWork.rows[0]?.id}`]);
+    record('Later work cycle follows normal notification rules', baselineWork.rows[0].cycle === 2 && baselineNotifications.rows[0].count === 1, `cycle=${baselineWork.rows[0].cycle}, notifications=${baselineNotifications.rows[0].count}`);
+
     const concurrentKey = `${keyPrefix}:concurrent`;
     const concurrent = await Promise.all([
       runAutomationJob('data_quality_scan', { executionKey: concurrentKey, trigger: 'manual', dryRun: true }),
@@ -114,7 +132,7 @@ async function main() {
     record('Digest retry does not duplicate the period', digests.rows[0].count === 1, `digests=${digests.rows[0].count}`);
 
     const executionHistory = await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM automation_job_executions WHERE execution_key LIKE $1`, [`${keyPrefix}:%`]);
-    record('Job execution history is persistent', executionHistory.rows[0].count >= 7, `executions=${executionHistory.rows[0].count}`);
+    record('Job execution history is persistent', executionHistory.rows[0].count >= 9, `executions=${executionHistory.rows[0].count}`);
   } finally {
     await client.query('DELETE FROM notifications WHERE source=$1 OR deduplication_key LIKE $2', ['automation_acceptance', `${keyPrefix}:%`]).catch(() => undefined);
     if (watchId) await client.query('DELETE FROM coverage_watches WHERE id=$1', [watchId]).catch(() => undefined);
@@ -122,6 +140,10 @@ async function main() {
       await client.query('DELETE FROM operational_work_items WHERE target_id=$1', [facilityId]).catch(() => undefined);
       await client.query('DELETE FROM reverification_assignments WHERE facility_id=$1', [facilityId]).catch(() => undefined);
       await client.query('DELETE FROM facilities WHERE id=$1', [facilityId]).catch(() => undefined);
+    }
+    if (baselineFacilityId) {
+      await client.query('DELETE FROM operational_work_items WHERE target_id=$1', [baselineFacilityId]).catch(() => undefined);
+      await client.query('DELETE FROM facilities WHERE id=$1', [baselineFacilityId]).catch(() => undefined);
     }
     await client.query('DELETE FROM operational_digests WHERE audience_key IN ($1,$2)', [`user:${adminId}`, `user:${userId}`]).catch(() => undefined);
     await client.query('DELETE FROM automation_job_executions WHERE execution_key LIKE $1', [`${keyPrefix}:%`]).catch(() => undefined);

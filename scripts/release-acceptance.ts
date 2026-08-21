@@ -17,6 +17,7 @@ const steps: Array<{ name: string; command: string; args: string[] }> = [
   { name: 'lint', command: process.execPath, args: [npmCli,'run','lint'] },
   { name: 'typecheck', command: process.execPath, args: [npmCli,'run','typecheck'] },
   { name: 'tests', command: process.execPath, args: [npmCli,'test'] },
+  { name: 'migration performance', command: process.execPath, args: [npmCli,'run','test:migration-performance'] },
   { name: 'security matrix', command: process.execPath, args: [npmCli,'run','test:security'] },
   { name: 'production build', command: process.execPath, args: [npmCli,'run','build'] },
   { name: 'dependency audit', command: process.execPath, args: [npmCli,'run','audit:production'] },
@@ -31,7 +32,8 @@ for (const step of steps) {
 if (process.env.RELEASE_RUN_DATABASE_GATES === 'true') {
   await run(process.execPath, [npmCli,'run','db:preflight']);
   await run(process.execPath, [npmCli,'run','test:postgis']);
-  completed.push('migration preflight','PostGIS staging gate');
+  await run(process.execPath, [npmCli,'run','test:migration']);
+  completed.push('migration preflight','PostGIS staging gate','migration acceptance');
 }
 if (process.env.SMOKE_BASE_URL) {
   await run(process.execPath, [npmCli,'run','test:smoke']);

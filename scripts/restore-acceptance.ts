@@ -37,6 +37,12 @@ const criticalTables = [
   'facility_merge_records',
   'report_snapshots',
   'import_batches',
+  'migration_runs',
+  'migration_sources',
+  'migration_diagnostics',
+  'migration_reconciliations',
+  'legacy_actors',
+  'legacy_value_mappings',
   'audit_events',
   'automation_job_executions',
   'notification_preferences',
@@ -71,7 +77,20 @@ try {
 
   sourcePool = new pg.Pool({ connectionString, max: 1 });
   const sourceCounts = await tableCounts(sourcePool);
-  const required = ['users', 'accounts', 'facilities', 'facility_verification_events', 'facility_contact_attempts', 'audit_events'];
+  const required = [
+    'users',
+    'accounts',
+    'facilities',
+    'facility_verification_events',
+    'facility_contact_attempts',
+    'migration_runs',
+    'migration_sources',
+    'migration_diagnostics',
+    'migration_reconciliations',
+    'legacy_actors',
+    'legacy_value_mappings',
+    'audit_events',
+  ];
   const missing = required.filter((table) => !(table in sourceCounts));
   if (missing.length) throw new Error(`Source test database is missing critical tables: ${missing.join(', ')}`);
 
