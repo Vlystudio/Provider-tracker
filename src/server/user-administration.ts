@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import { hashPassword } from 'better-auth/crypto';
 import { z } from 'zod';
 import { accounts, auditEvents, sessions, users } from '@/db/schema';
@@ -203,4 +203,22 @@ export async function activeAdministratorCount(): Promise<number> {
     .from(users)
     .where(and(eq(users.role, 'admin'), eq(users.isActive, true), eq(users.isServiceAccount, false)));
   return row?.count ?? 0;
+}
+
+export async function listUsersForAdministrator(principal: Principal) {
+  assertPermission(principal, 'admin:read');
+  return requireDatabaseClient()
+    .select({
+      id: users.id,
+      name: users.name,
+      displayName: users.displayName,
+      email: users.email,
+      role: users.role,
+      isActive: users.isActive,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    })
+    .from(users)
+    .where(eq(users.isServiceAccount, false))
+    .orderBy(asc(users.name), asc(users.email));
 }
