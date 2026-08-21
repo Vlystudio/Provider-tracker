@@ -103,11 +103,27 @@ async function waitForServer() {
 
 async function createTestSchema() {
   await pool.query(`
-    DROP TABLE IF EXISTS audit_events, authorizations, auth_rate_limits, verification_tokens, sessions, accounts, users CASCADE;
+    DROP TABLE IF EXISTS facility_merge_records, reverification_assignments, facility_contact_attempts, facility_verification_events,
+      facility_diagnosis_capabilities, facility_specialties, facilities, diagnoses, specialties,
+      audit_events, authorizations, auth_rate_limits, verification_tokens, sessions, accounts, users CASCADE;
+    DROP TYPE IF EXISTS assignment_status CASCADE;
+    DROP TYPE IF EXISTS contact_outcome CASCADE;
+    DROP TYPE IF EXISTS source_confidence CASCADE;
+    DROP TYPE IF EXISTS verification_method CASCADE;
+    DROP TYPE IF EXISTS verification_answer CASCADE;
+    DROP TYPE IF EXISTS coordinate_quality CASCADE;
+    DROP TYPE IF EXISTS data_quality_status CASCADE;
     DROP TYPE IF EXISTS authorization_status CASCADE;
     DROP TYPE IF EXISTS user_role CASCADE;
     CREATE TYPE user_role AS ENUM ('admin', 'ura_user', 'report_viewer', 'auditor');
     CREATE TYPE authorization_status AS ENUM ('open', 'complete', 'cancelled');
+    CREATE TYPE data_quality_status AS ENUM ('clean', 'needs_review', 'rejected');
+    CREATE TYPE coordinate_quality AS ENUM ('exact', 'address', 'zip_centroid', 'manual', 'unknown');
+    CREATE TYPE verification_answer AS ENUM ('yes', 'no', 'unknown', 'not_asked', 'unable_to_verify', 'not_applicable');
+    CREATE TYPE verification_method AS ENUM ('phone', 'fax', 'portal', 'website', 'email', 'internal_source', 'other');
+    CREATE TYPE source_confidence AS ENUM ('direct', 'authoritative', 'secondary', 'unverified');
+    CREATE TYPE contact_outcome AS ENUM ('verified', 'no_answer', 'voicemail_left', 'voicemail_not_left', 'disconnected', 'wrong_number', 'fax_only', 'callback_requested', 'unable_to_verify');
+    CREATE TYPE assignment_status AS ENUM ('open', 'completed', 'dismissed');
     CREATE TABLE users (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, email text NOT NULL UNIQUE,
       email_verified boolean NOT NULL DEFAULT false, display_name text, image text,
@@ -146,6 +162,76 @@ async function createTestSchema() {
       status authorization_status NOT NULL DEFAULT 'open', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX authorizations_status_updated_idx ON authorizations(status, updated_at);
+    CREATE TABLE specialties (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), canonical_name text NOT NULL, normalized_name text NOT NULL UNIQUE,
+      active boolean NOT NULL DEFAULT true, aliases jsonb NOT NULL DEFAULT '[]'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE diagnoses (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text NOT NULL UNIQUE, description text NOT NULL,
+      active boolean NOT NULL DEFAULT true, aliases jsonb NOT NULL DEFAULT '[]'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE facilities (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_name text NOT NULL, city text NOT NULL,
+      normalized_name text NOT NULL, normalized_city text NOT NULL, display_key text NOT NULL,
+      facility_type text NOT NULL DEFAULT 'Hospital', address_line_1 text, address_line_2 text, state_code text,
+      auto_fill_specialty boolean NOT NULL DEFAULT false, phone_raw text, phone_normalized text, postal_code text,
+      latitude double precision, longitude double precision, geog_point text, coordinate_provenance text,
+      coordinate_quality coordinate_quality NOT NULL DEFAULT 'unknown',
+      current_accepting_status verification_answer NOT NULL DEFAULT 'unknown',
+      current_scheduling_status verification_answer NOT NULL DEFAULT 'unknown',
+      current_urgent_referral_status verification_answer NOT NULL DEFAULT 'unknown',
+      next_available_date date, estimated_wait_days integer, accepting_verified_at timestamptz,
+      scheduling_verified_at timestamptz, phone_verified_at timestamptz, address_verified_at timestamptz,
+      last_verified_at timestamptz, merged_into_facility_id uuid, archived_at timestamptz, archived_by uuid,
+      active boolean NOT NULL DEFAULT true, data_quality_status data_quality_status NOT NULL DEFAULT 'clean',
+      source_metadata jsonb NOT NULL DEFAULT '{}'::jsonb, optimistic_lock_version integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE(normalized_name, normalized_city)
+    );
+    CREATE TABLE facility_specialties (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_id uuid NOT NULL, specialty_id uuid NOT NULL,
+      treatment_status text NOT NULL DEFAULT 'unknown', verification_status verification_answer NOT NULL DEFAULT 'unknown',
+      active boolean NOT NULL DEFAULT true, notes text, last_confirmed_at timestamptz, confirming_call_id uuid,
+      source_metadata jsonb NOT NULL DEFAULT '{}'::jsonb, optimistic_lock_version integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(facility_id,specialty_id)
+    );
+    CREATE TABLE facility_diagnosis_capabilities (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_id uuid NOT NULL, diagnosis_id uuid NOT NULL,
+      status verification_answer NOT NULL DEFAULT 'unknown', active boolean NOT NULL DEFAULT true, notes text,
+      last_verified_at timestamptz, source_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      optimistic_lock_version integer NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(facility_id,diagnosis_id)
+    );
+    CREATE TABLE facility_verification_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_id uuid NOT NULL, verified_at timestamptz NOT NULL,
+      verified_by uuid, method verification_method NOT NULL, confidence source_confidence NOT NULL DEFAULT 'direct',
+      contact_person text, contact_channel text, accepting_status verification_answer, specialty_id uuid,
+      specialty_status verification_answer, diagnosis_id uuid, diagnosis_status verification_answer,
+      scheduling_within_four_weeks verification_answer, urgent_referral_status verification_answer,
+      next_available_date date, estimated_wait_days integer, comments text, related_call_id uuid,
+      related_contact_attempt_id uuid, import_batch_id uuid, previous_state jsonb NOT NULL DEFAULT '{}'::jsonb,
+      resulting_state jsonb NOT NULL DEFAULT '{}'::jsonb, source_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE facility_contact_attempts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_id uuid NOT NULL, attempted_at timestamptz NOT NULL,
+      attempted_by uuid, method verification_method NOT NULL, outcome contact_outcome NOT NULL,
+      contact_person text, contact_channel text, comments text, related_call_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE reverification_assignments (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_id uuid NOT NULL, assigned_to uuid, assigned_by uuid,
+      status assignment_status NOT NULL DEFAULT 'open', reason_codes jsonb NOT NULL DEFAULT '[]'::jsonb,
+      completed_at timestamptz, completed_by uuid, created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE facility_merge_records (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), survivor_facility_id uuid NOT NULL, merged_facility_id uuid NOT NULL,
+      candidate_id uuid, merged_by uuid, reason text NOT NULL, restore_snapshot jsonb NOT NULL,
+      undone_at timestamptz, undone_by uuid, undo_reason text, created_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE audit_events (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), actor_id uuid REFERENCES users(id) ON DELETE SET NULL,
       action text NOT NULL, result text NOT NULL DEFAULT 'success', entity_type text NOT NULL, entity_id text,
@@ -192,6 +278,39 @@ async function main() {
   );
   const [authorizationA, authorizationB] = insertedAuthorizations.rows;
   if (!authorizationA || !authorizationB) throw new Error('Failed to create acceptance-test authorizations.');
+  const insertedFacility = await pool.query<{ id: string }>(
+    `INSERT INTO facilities (facility_name, city, normalized_name, normalized_city, display_key, phone_raw, phone_normalized, postal_code)
+     VALUES ('Acceptance Clinic', 'Portland', 'acceptance clinic', 'portland', 'Acceptance Clinic|Portland', '(207) 555-0100', '2075550100', '04103') RETURNING id`,
+  );
+  const facility = insertedFacility.rows[0];
+  if (!facility) throw new Error('Failed to create the acceptance-test facility.');
+  const mergedFixture = await pool.query<{ id: string }>(
+    `INSERT INTO facilities (facility_name, city, normalized_name, normalized_city, display_key, phone_raw, phone_normalized, postal_code)
+     VALUES ('Acceptance Clinic East', 'Portland', 'acceptance clinic east', 'portland', 'Acceptance Clinic East|Portland', '(207) 555-0101', '2075550101', '04103') RETURNING id`,
+  );
+  const mergedFacility = mergedFixture.rows[0];
+  if (!mergedFacility) throw new Error('Failed to create the merge fixture.');
+  const specialtyFixture = await pool.query<{ id: string }>(
+    `INSERT INTO specialties (canonical_name, normalized_name) VALUES ('Oncology', 'oncology') RETURNING id`,
+  );
+  const diagnosisFixture = await pool.query<{ id: string }>(
+    `INSERT INTO diagnoses (code, description) VALUES ('C50', 'Breast cancer') RETURNING id`,
+  );
+  await pool.query(
+    `INSERT INTO facility_specialties (facility_id, specialty_id, verification_status, last_confirmed_at)
+     VALUES ($1, $2, 'yes', now() - interval '1 day')`,
+    [mergedFacility.id, specialtyFixture.rows[0]?.id],
+  );
+  await pool.query(
+    `INSERT INTO facility_diagnosis_capabilities (facility_id, diagnosis_id, status, last_verified_at)
+     VALUES ($1, $2, 'yes', now() - interval '1 day')`,
+    [mergedFacility.id, diagnosisFixture.rows[0]?.id],
+  );
+  await pool.query(
+    `INSERT INTO facility_verification_events (facility_id, verified_at, verified_by, method, accepting_status)
+     VALUES ($1, now() - interval '1 day', $2, 'phone', 'yes')`,
+    [mergedFacility.id, userA.id],
+  );
 
   const nextExecutable = fileURLToPath(new URL('../node_modules/next/dist/bin/next', import.meta.url));
   runtime.server = spawn(process.execPath, [nextExecutable, 'start', '-H', '127.0.0.1', '-p', new URL(baseUrl).port], {
@@ -255,6 +374,71 @@ async function main() {
       sessionCookieAttributes.includes('samesite=lax') &&
       sessionCookieAttributes.includes('path=/'),
   );
+  response = await mutation(`/api/facilities/${facility.id}/verifications`, userLogin.cookie, 'POST', {
+    expectedVersion: 0,
+    verifiedAt: new Date().toISOString(),
+    method: 'phone',
+    confidence: 'direct',
+    acceptingStatus: 'yes',
+    schedulingWithinFourWeeks: 'yes',
+  });
+  const verifiedState = await pool.query<{ status: string; version: number; event_count: number }>(
+    `SELECT f.current_accepting_status::text AS status, f.optimistic_lock_version AS version,
+      (SELECT count(*)::int FROM facility_verification_events WHERE facility_id=f.id) AS event_count
+     FROM facilities f WHERE f.id=$1`, [facility.id],
+  );
+  record(
+    'User creates facility verification',
+    'PASS',
+    `HTTP ${response.status}; status ${verifiedState.rows[0]?.status}; events ${verifiedState.rows[0]?.event_count}`,
+    response.status === 201 && verifiedState.rows[0]?.status === 'yes' && verifiedState.rows[0]?.event_count === 1,
+  );
+  const freshnessBeforeContact = await pool.query<{ verified_at: Date | null }>(
+    'SELECT accepting_verified_at AS verified_at FROM facilities WHERE id=$1', [facility.id],
+  );
+  response = await mutation(`/api/facilities/${facility.id}/contact-attempts`, userLogin.cookie, 'POST', {
+    attemptedAt: new Date().toISOString(), method: 'phone', outcome: 'no_answer', comments: 'Acceptance test.',
+  });
+  const freshnessAfterContact = await pool.query<{ verified_at: Date | null; attempt_count: number }>(
+    `SELECT accepting_verified_at AS verified_at,
+      (SELECT count(*)::int FROM facility_contact_attempts WHERE facility_id=facilities.id) AS attempt_count
+     FROM facilities WHERE id=$1`, [facility.id],
+  );
+  record(
+    'Failed contact does not refresh verification',
+    'PASS',
+    `HTTP ${response.status}; attempts ${freshnessAfterContact.rows[0]?.attempt_count}`,
+    response.status === 201 && freshnessAfterContact.rows[0]?.attempt_count === 1 &&
+      freshnessAfterContact.rows[0]?.verified_at?.valueOf() === freshnessBeforeContact.rows[0]?.verified_at?.valueOf(),
+  );
+  response = await mutation(`/api/facilities/${facility.id}/verifications`, userLogin.cookie, 'POST', {
+    expectedVersion: 1, verifiedAt: new Date().toISOString(), method: 'phone', acceptingStatus: 'no', verifiedBy: admin.id,
+  });
+  record('Verification mass assignment', 'BLOCKED', `HTTP ${response.status}`, response.status === 400);
+  response = await mutation(`/api/facilities/${facility.id}/verifications`, userLogin.cookie, 'POST', {
+    expectedVersion: 0, verifiedAt: new Date().toISOString(), method: 'phone', acceptingStatus: 'no',
+  });
+  record('Stale facility update', 'BLOCKED', `HTTP ${response.status}`, response.status === 409);
+  response = await request(`/api/facilities/${facility.id}/verifications`, {
+    method: 'POST', clientIp: '192.0.2.51',
+    headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+    body: JSON.stringify({ expectedVersion: 1, verifiedAt: new Date().toISOString(), method: 'phone', acceptingStatus: 'no' }),
+  });
+  record('Anonymous facility verification', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
+  response = await request(`/api/facilities/${facility.id}/contact-attempts`, {
+    method: 'POST', cookie: userLogin.cookie, clientIp: '192.0.2.11', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ attemptedAt: new Date().toISOString(), method: 'phone', outcome: 'no_answer' }),
+  });
+  record('Missing CSRF origin on facility activity', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await mutation('/api/admin/facilities/merge', userLogin.cookie, 'POST', {
+    survivorFacilityId: facility.id, mergedFacilityId: crypto.randomUUID(), reason: 'Acceptance test',
+    survivorExpectedVersion: 1, mergedExpectedVersion: 0, confirmation: 'MERGE',
+  });
+  record('User facility merge', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await mutation('/api/admin/reverification/assign', userLogin.cookie, 'POST', {
+    facilityIds: [facility.id], assignedTo: userA.id, reasonCodes: ['stale_accepting'],
+  });
+  record('User bulk assignment', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
   response = await request(`/api/authorizations/${authorizationA.id}`, { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
   record('User → authorized resource', 'PASS', `HTTP ${response.status}`, response.status === 200);
   response = await request(`/api/authorizations/${authorizationB.id}`, { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
@@ -300,6 +484,34 @@ async function main() {
   record('Cross-site mutation request', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
 
   const adminLogin = await signIn(fixtures.admin.email, fixtures.admin.password, '192.0.2.10');
+  response = await mutation('/api/admin/reverification/assign', adminLogin.cookie, 'POST', {
+    facilityIds: [facility.id], assignedTo: userA.id, reasonCodes: ['stale_accepting'],
+  });
+  const assignmentCount = await pool.query<{ count: number }>('SELECT count(*)::int AS count FROM reverification_assignments WHERE facility_id=$1', [facility.id]);
+  record('Admin bulk assignment', 'PASS', `HTTP ${response.status}; rows ${assignmentCount.rows[0]?.count}`, response.status === 200 && assignmentCount.rows[0]?.count === 1);
+  response = await mutation('/api/admin/facilities/merge', adminLogin.cookie, 'POST', {
+    survivorFacilityId: facility.id,
+    mergedFacilityId: mergedFacility.id,
+    reason: 'Acceptance-test duplicate confirmed by administrator.',
+    survivorExpectedVersion: 1,
+    mergedExpectedVersion: 0,
+    confirmation: 'MERGE',
+  });
+  const mergeState = await pool.query<{ archived: boolean; destination: string | null; history: number; specialties: number; diagnoses: number; merge_records: number }>(
+    `SELECT NOT source.active AS archived, source.merged_into_facility_id AS destination,
+      (SELECT count(*)::int FROM facility_verification_events WHERE facility_id=source.id) AS history,
+      (SELECT count(*)::int FROM facility_specialties WHERE facility_id=$1) AS specialties,
+      (SELECT count(*)::int FROM facility_diagnosis_capabilities WHERE facility_id=$1) AS diagnoses,
+      (SELECT count(*)::int FROM facility_merge_records WHERE survivor_facility_id=$1 AND merged_facility_id=source.id) AS merge_records
+     FROM facilities source WHERE source.id=$2`, [facility.id, mergedFacility.id],
+  );
+  record(
+    'Admin merge preserves history and relationships',
+    'PASS',
+    `HTTP ${response.status}; history ${mergeState.rows[0]?.history}; specialties ${mergeState.rows[0]?.specialties}; diagnoses ${mergeState.rows[0]?.diagnoses}`,
+    response.status === 201 && mergeState.rows[0]?.archived === true && mergeState.rows[0]?.destination === facility.id &&
+      mergeState.rows[0]?.history === 1 && mergeState.rows[0]?.specialties === 1 && mergeState.rows[0]?.diagnoses === 1 && mergeState.rows[0]?.merge_records === 1,
+  );
   response = await mutation(`/api/admin/users/${userB.id}`, adminLogin.cookie, 'PATCH', { role: 'report_viewer' });
   record('Admin → approved admin operation', 'PASS', `HTTP ${response.status}`, response.status === 200);
   response = await mutation(`/api/admin/users/${admin.id}`, adminLogin.cookie, 'PATCH', { role: 'ura_user' });
@@ -383,10 +595,10 @@ async function main() {
   const auditRows = await pool.query<{ action: string; metadata: unknown }>(
     `SELECT action, metadata FROM audit_events
      WHERE action = ANY($1::text[])`,
-    [['auth.sign-in', 'auth.sign-out', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate']],
+    [['auth.sign-in', 'auth.sign-out', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge']],
   );
   const auditedActionsFound = new Set(auditRows.rows.map((row) => row.action));
-  const requiredAuditActions = ['auth.sign-in', 'auth.sign-out', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate'];
+  const requiredAuditActions = ['auth.sign-in', 'auth.sign-out', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge'];
   const serializedAuditRows = JSON.stringify(auditRows.rows);
   const sensitiveFixtureValues = [
     ...Object.values(fixtures).flatMap((fixture) => [fixture.email, fixture.password]),

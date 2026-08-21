@@ -6,7 +6,10 @@ import {
   calls,
   diagnoses,
   facilities,
+  facilityContactAttempts,
+  facilityDiagnosisCapabilities,
   facilitySpecialties,
+  facilityVerificationEvents,
   importBatches,
   importRowResults,
   linesOfBusiness,
@@ -20,6 +23,20 @@ import { safeImportSummary } from './reconcile';
 import type { ImportPlan } from './types';
 
 const CHUNK_SIZE = 250;
+
+function verificationAnswer(value: string): 'yes' | 'no' | 'unknown' | 'not_applicable' | 'unable_to_verify' {
+  if (value === 'yes' || value === 'no' || value === 'not_applicable') return value;
+  if (value === 'unable_to_tell_without_triage') return 'unable_to_verify';
+  return 'unknown';
+}
+
+function schedulingAnswer(value: string) {
+  return value === 'urgent_referral_required' ? ('yes' as const) : verificationAnswer(value);
+}
+
+function isConfirmed(value: string) {
+  return value === 'yes' || value === 'no' || value === 'not_applicable';
+}
 
 function chunks<T>(values: T[], size = CHUNK_SIZE) {
   const result: T[][] = [];
@@ -219,6 +236,12 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
                     : centroid
                       ? 'zip_centroid'
                       : null,
+                coordinateQuality:
+                  facility.latitude !== null && facility.longitude !== null
+                    ? ('manual' as const)
+                    : centroid
+                      ? ('zip_centroid' as const)
+                      : ('unknown' as const),
                 dataQualityStatus: facility.issues.length ? ('needs_review' as const) : ('clean' as const),
                 sourceMetadata: {
                   workbookKind: facility.source.workbookKind,
@@ -233,20 +256,19 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
           .onConflictDoUpdate({
             target: [facilities.normalizedName, facilities.normalizedCity],
             set: {
-              facilityName: sql`excluded.facility_name`,
-              city: sql`excluded.city`,
               displayKey: sql`excluded.display_key`,
               facilityType: sql`excluded.facility_type`,
               autoFillSpecialty: sql`excluded.auto_fill_specialty`,
-              phoneRaw: sql`excluded.phone_raw`,
-              phoneNormalized: sql`excluded.phone_normalized`,
-              postalCode: sql`excluded.postal_code`,
-              latitude: sql`excluded.latitude`,
-              longitude: sql`excluded.longitude`,
-              geogPoint: sql`excluded.geog_point`,
-              coordinateProvenance: sql`excluded.coordinate_provenance`,
-              dataQualityStatus: sql`excluded.data_quality_status`,
-              sourceMetadata: sql`excluded.source_metadata`,
+              phoneRaw: sql`case when ${facilities.phoneVerifiedAt} is null then excluded.phone_raw else ${facilities.phoneRaw} end`,
+              phoneNormalized: sql`case when ${facilities.phoneVerifiedAt} is null then excluded.phone_normalized else ${facilities.phoneNormalized} end`,
+              postalCode: sql`case when ${facilities.addressVerifiedAt} is null then excluded.postal_code else ${facilities.postalCode} end`,
+              latitude: sql`case when ${facilities.addressVerifiedAt} is null then excluded.latitude else ${facilities.latitude} end`,
+              longitude: sql`case when ${facilities.addressVerifiedAt} is null then excluded.longitude else ${facilities.longitude} end`,
+              geogPoint: sql`case when ${facilities.addressVerifiedAt} is null then excluded.geog_point else ${facilities.geogPoint} end`,
+              coordinateProvenance: sql`case when ${facilities.addressVerifiedAt} is null then excluded.coordinate_provenance else ${facilities.coordinateProvenance} end`,
+              coordinateQuality: sql`case when ${facilities.addressVerifiedAt} is null then excluded.coordinate_quality else ${facilities.coordinateQuality} end`,
+              dataQualityStatus: sql`case when ${facilities.dataQualityStatus} = 'rejected' then ${facilities.dataQualityStatus} else excluded.data_quality_status end`,
+              sourceMetadata: sql`${facilities.sourceMetadata} || excluded.source_metadata`,
               optimisticLockVersion: sql`${facilities.optimisticLockVersion} + 1`,
               updatedAt: sql`now()`,
             },
@@ -368,9 +390,9 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
           .onConflictDoUpdate({
             target: [facilitySpecialties.facilityId, facilitySpecialties.specialtyId],
             set: {
-              treatmentStatus: sql`excluded.treatment_status`,
-              notes: sql`excluded.notes`,
-              sourceMetadata: sql`excluded.source_metadata`,
+              treatmentStatus: sql`case when ${facilitySpecialties.lastConfirmedAt} is null then excluded.treatment_status else ${facilitySpecialties.treatmentStatus} end`,
+              notes: sql`case when ${facilitySpecialties.lastConfirmedAt} is null then excluded.notes else ${facilitySpecialties.notes} end`,
+              sourceMetadata: sql`${facilitySpecialties.sourceMetadata} || excluded.source_metadata`,
               updatedAt: sql`now()`,
             },
           });
@@ -410,6 +432,7 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
       );
 
       let insertedCalls = 0;
+      const callByFingerprint = new Map(plan.calls.map((call) => [call.fingerprint, call]));
       for (const batch of chunks(plan.calls)) {
         const inserted = await tx
           .insert(calls)
@@ -461,8 +484,98 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
             })),
           )
           .onConflictDoNothing({ target: calls.importFingerprint })
-          .returning({ id: calls.id });
+          .returning({ id: calls.id, fingerprint: calls.importFingerprint });
         insertedCalls += inserted.length;
+        for (const record of inserted) {
+          const call = record.fingerprint ? callByFingerprint.get(record.fingerprint) : undefined;
+          if (!call) continue;
+          const facilityId = facilityIdByKey.get(call.normalizedFacilityKey);
+          if (!facilityId) continue;
+          const callAt = new Date(call.callAt);
+          const callerUserId = call.callerInitials ? userIdByInitials.get(call.callerInitials) ?? null : null;
+          if (call.resultCode === 'unable_to_contact') {
+            await tx.insert(facilityContactAttempts).values({
+              facilityId,
+              attemptedAt: callAt,
+              attemptedBy: callerUserId,
+              method: 'phone',
+              outcome: call.didNotLeaveVm ? 'voicemail_not_left' : 'no_answer',
+              relatedCallId: record.id,
+            });
+            continue;
+          }
+          const specialtyId = call.normalizedSpecialty ? specialtyIdByName.get(call.normalizedSpecialty) ?? null : null;
+          const diagnosisId = call.diagnosisCode ? diagnosisIdByCode.get(call.diagnosisCode) ?? null : null;
+          const acceptingStatus = verificationAnswer(call.acceptingNewPatients);
+          const specialtyStatus = verificationAnswer(call.specialtyConfirmed);
+          const diagnosisStatus = verificationAnswer(call.canTreatDiagnosis);
+          const schedulingStatus = schedulingAnswer(call.canScheduleWithinFourWeeks);
+          await tx.insert(facilityVerificationEvents).values({
+            facilityId,
+            verifiedAt: callAt,
+            verifiedBy: callerUserId,
+            method: 'internal_source',
+            confidence: 'secondary',
+            acceptingStatus,
+            specialtyId,
+            specialtyStatus,
+            diagnosisId,
+            diagnosisStatus,
+            schedulingWithinFourWeeks: schedulingStatus,
+            urgentReferralStatus: call.canScheduleWithinFourWeeks === 'urgent_referral_required' ? 'yes' : null,
+            relatedCallId: record.id,
+            importBatchId: batchIdByHash.get(call.source.sourceHash) ?? null,
+            sourceMetadata: {
+              sourceHash: call.source.sourceHash,
+              sourceFileName: call.source.sourceFileName,
+              sheetName: call.source.sheetName,
+              rowNumber: call.source.rowNumber,
+            },
+          });
+          await tx.update(facilities).set({
+            ...(isConfirmed(acceptingStatus) ? {
+              currentAcceptingStatus: sql`case when ${facilities.acceptingVerifiedAt} is null or ${facilities.acceptingVerifiedAt} < ${callAt} then ${acceptingStatus}::verification_answer else ${facilities.currentAcceptingStatus} end`,
+              acceptingVerifiedAt: sql`greatest(${facilities.acceptingVerifiedAt}, ${callAt})`,
+            } : {}),
+            ...(isConfirmed(schedulingStatus) ? {
+              currentSchedulingStatus: sql`case when ${facilities.schedulingVerifiedAt} is null or ${facilities.schedulingVerifiedAt} < ${callAt} then ${schedulingStatus}::verification_answer else ${facilities.currentSchedulingStatus} end`,
+              ...(call.canScheduleWithinFourWeeks === 'urgent_referral_required' ? {
+                currentUrgentReferralStatus: sql`case when ${facilities.schedulingVerifiedAt} is null or ${facilities.schedulingVerifiedAt} < ${callAt} then 'yes'::verification_answer else ${facilities.currentUrgentReferralStatus} end`,
+              } : {}),
+              schedulingVerifiedAt: sql`greatest(${facilities.schedulingVerifiedAt}, ${callAt})`,
+            } : {}),
+            lastVerifiedAt: sql`greatest(${facilities.lastVerifiedAt}, ${callAt})`,
+            optimisticLockVersion: sql`${facilities.optimisticLockVersion} + 1`,
+            updatedAt: sql`now()`,
+          }).where(eq(facilities.id, facilityId));
+          if (specialtyId) {
+            await tx.update(facilitySpecialties).set({
+              verificationStatus: specialtyStatus,
+              ...(isConfirmed(specialtyStatus) ? { lastConfirmedAt: sql`greatest(${facilitySpecialties.lastConfirmedAt}, ${callAt})` } : {}),
+              confirmingCallId: record.id,
+              optimisticLockVersion: sql`${facilitySpecialties.optimisticLockVersion} + 1`,
+              updatedAt: sql`now()`,
+            }).where(and(eq(facilitySpecialties.facilityId, facilityId), eq(facilitySpecialties.specialtyId, specialtyId), sql`${facilitySpecialties.lastConfirmedAt} is null or ${facilitySpecialties.lastConfirmedAt} <= ${callAt}`));
+          }
+          if (diagnosisId) {
+            await tx.insert(facilityDiagnosisCapabilities).values({
+              facilityId,
+              diagnosisId,
+              status: diagnosisStatus,
+              lastVerifiedAt: isConfirmed(diagnosisStatus) ? callAt : null,
+              sourceMetadata: { sourceHash: call.source.sourceHash, sourceRow: call.source.rowNumber },
+            }).onConflictDoUpdate({
+              target: [facilityDiagnosisCapabilities.facilityId, facilityDiagnosisCapabilities.diagnosisId],
+              set: {
+                status: sql`case when ${facilityDiagnosisCapabilities.lastVerifiedAt} is null or ${facilityDiagnosisCapabilities.lastVerifiedAt} <= ${callAt} then excluded.status else ${facilityDiagnosisCapabilities.status} end`,
+                lastVerifiedAt: sql`greatest(${facilityDiagnosisCapabilities.lastVerifiedAt}, excluded.last_verified_at)`,
+                sourceMetadata: sql`${facilityDiagnosisCapabilities.sourceMetadata} || excluded.source_metadata`,
+                optimisticLockVersion: sql`${facilityDiagnosisCapabilities.optimisticLockVersion} + 1`,
+                updatedAt: sql`now()`,
+              },
+            });
+          }
+        }
       }
 
       const safeSummary = safeImportSummary(plan, 10);
@@ -494,7 +607,8 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
           .where(eq(importBatches.id, batchId));
         await tx.insert(auditEvents).values({
           actorId,
-          action: 'workbook_import_applied',
+           action: 'workbook.import.applied',
+           result: 'success',
           entityType: 'import_batch',
           entityId: batchId,
           afterJson: { sourceHash: source.sourceHash, importerVersion: plan.importerVersion, counts: sourceCounts },
