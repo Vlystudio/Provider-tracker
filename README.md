@@ -57,6 +57,8 @@ npm run scan:secrets
 npm run test:performance
 npm run test:automation
 npm run test:automation-performance
+npm run test:migration
+npm run test:migration-performance
 npm run test:smoke
 ```
 
@@ -76,7 +78,9 @@ Scheduled provider-work commands are `jobs:daily` and `jobs:weekly`. Run one dry
 
 ## Workbook import
 
-The import command reads the two source workbooks without changing them. Run a preview first:
+Administrators can use `/migration` to preview the legacy workbooks, review matches, apply an approved run, and download reconciliation issues. The screen stores file hashes and results; it does not keep uploaded workbook contents.
+
+IT can also run a command-line preview:
 
 ```bash
 npm run import:workbooks -- --admin "C:\path\URA_Provider_Availability_Tracker_ADMIN_MASTER.xlsx" --user "C:\path\URA_Provider_Availability_Tracker_USER_ACTIVE.xlsx" --output work/import-summary.json
@@ -88,7 +92,7 @@ After reviewing the preview, import the data:
 npm run import:workbooks -- --admin "C:\path\URA_Provider_Availability_Tracker_ADMIN_MASTER.xlsx" --user "C:\path\URA_Provider_Availability_Tracker_USER_ACTIVE.xlsx" --apply
 ```
 
-With no file arguments, the command looks under `reference/`. Workbook files and exports in that folder are excluded from Git. See `docs/IMPORTING_WORKBOOKS.md` for matching and rejection rules.
+With no file arguments, the command looks under `reference/`. Workbook files and exports in that folder are excluded from Git. Start with `docs/MIGRATION.md`; field rules are in `docs/LEGACY_DATA_MAPPING.md`, and cutover steps are in `docs/CUTOVER.md`.
 
 ## Production
 
@@ -107,4 +111,4 @@ Start with `docs/IT_HANDOFF.md`. Deployment and rollback are in `docs/DEPLOYMENT
 
 ## Product interface
 
-The current interface rules are in `docs/DESIGN_SYSTEM.md`. The screen inventory and Figma link are in `docs/FIGMA_HANDOFF.md`. Acceptance records are in `docs/PHASE3_ACCEPTANCE.md`, `docs/PHASE4_ACCEPTANCE.md`, `docs/PHASE5_ACCEPTANCE.md`, and `docs/PHASE6_ACCEPTANCE.md`.
+The current interface rules are in `docs/DESIGN_SYSTEM.md`. The screen inventory and Figma link are in `docs/FIGMA_HANDOFF.md`. Acceptance records are in the `docs/PHASE*_ACCEPTANCE.md` files, including the staging evidence still required for legacy cutover.

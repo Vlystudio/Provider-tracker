@@ -1,5 +1,11 @@
 # Operations
 
+## Legacy data cutover
+
+Use the Data Migration screen for the final workbook load. Preview first, resolve blocking issues, and have a second named administrator approve the recorded counts and hashes. Keep scheduled automation stopped until reconciliation and smoke tests pass. The detailed steps and rollback rules are in [CUTOVER.md](CUTOVER.md).
+
+After apply, check work-item and notification counts before enabling schedules. Migrated backlog conditions are baselined: the first derived work item may be created without sending an in-app alert. A later work cycle follows the normal notification rules.
+
 ## Required production settings
 
 Set these as runtime secrets or configuration in the hosting platform:

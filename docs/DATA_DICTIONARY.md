@@ -1,10 +1,23 @@
 # Data Dictionary
 
+## Migration and legacy history
+
+| Table | Purpose |
+| --- | --- |
+| `migration_runs` | One preview/apply/reconciliation lifecycle with approvers, release, readiness, baseline, failure, and reversal fields. |
+| `migration_sources` | Sanitized source filename, SHA-256 hash, size, workbook kind, schema version, sheet facts, formulas, and hidden rows. |
+| `migration_diagnostics` | Row-level matching, mapping, validation, review decision, target, note, reviewer, and optimistic version. |
+| `migration_reconciliations` | Explained-row totals, relationship totals, answer-state distribution, report comparison, discrepancies, and readiness. |
+| `legacy_actors` | Historical workbook identity kept separately from current login accounts, with an optional reviewed user link. |
+| `legacy_value_mappings` | Reusable specialty, diagnosis, and actor mapping decisions. |
+
+`import_batches.migration_run_id` connects applied batches to the reviewed run. Calls, verification events, and contact attempts may carry `legacy_actor_id`. `facilities.migration_baseline_at` prevents initial imported backlog from creating a notification flood.
+
 ## Core entities
 
 ### users
 
-Stores authenticated staff with role-based access and URA initials for workflow continuity.
+Stores authenticated staff with role-based access and staff initials for current workflows. Historical workbook initials stay in `legacy_actors` unless a reviewed exact match links them.
 
 - id: UUID primary key
 - email: email identity

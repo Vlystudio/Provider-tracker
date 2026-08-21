@@ -51,6 +51,7 @@ Defaults are configurable in the environment:
 - compressed workbook: 100 MB
 - expanded ZIP content: 512 MB
 - rows per source sheet: 100,000
-- accepted containers: XLSX or XLSM
+- accepted container: macro-free XLSX
+- rejected containers/content: XLSM, VBA, external relationships, embedded objects, ActiveX, and executable files
 
 Encrypted archives, unsafe ZIP paths, missing workbook metadata, and missing required source sheets fail before any database write.

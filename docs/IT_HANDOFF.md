@@ -1,5 +1,16 @@
 # IT handoff
 
+Legacy data cutover is covered by [MIGRATION.md](MIGRATION.md), [CUTOVER.md](CUTOVER.md), [RECONCILIATION.md](RECONCILIATION.md), and [UAT.md](UAT.md). Apply all database migrations through `0010_abandoned_metal_master.sql` before using the migration screen.
+
+For a release that includes legacy data, add these commands to the normal acceptance run:
+
+```text
+npm run test:migration
+npm run test:migration-performance
+```
+
+Use a database name ending in `_test` for the migration acceptance command. Production workbook files should stay in IT-controlled storage; the application keeps hashes and review records, not uploaded workbook contents.
+
 | Item | Requirement | Validation | Owner |
 | --- | --- | --- | --- |
 | PostgreSQL | PostgreSQL 16, encrypted storage/transport, private network, capacity monitoring | connection and version in `npm run db:preflight` | database team |
