@@ -20,9 +20,15 @@ try {
     SELECT c.relname AS table_name, format_type(a.atttypid,a.atttypmod) AS formatted_type
     FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname='public' AND a.attname='geog_point' AND c.relname IN ('facilities','postal_code_centroids') AND NOT a.attisdropped`);
-  if (columns.rows.length !== 2 || columns.rows.some((row) => !/geometry\(Point,4326\)/i.test(row.formatted_type))) {
-    throw new Error(`Expected SRID 4326 point columns were not found: ${JSON.stringify(columns.rows)}`);
+  if (columns.rows.length !== 2 || columns.rows.some((row) => !/geometry\(Point(?:,4326)?\)/i.test(row.formatted_type))) {
+    throw new Error(`Expected point columns were not found: ${JSON.stringify(columns.rows)}`);
   }
+  const constraints = await pool.query<{ conname: string; definition: string }>(`
+    SELECT conname,pg_get_constraintdef(oid) AS definition FROM pg_constraint
+    WHERE conname IN ('facilities_geog_srid_check','postal_code_centroids_geog_srid_check') ORDER BY conname`);
+  const requiredConstraints = ['facilities_geog_srid_check','postal_code_centroids_geog_srid_check'];
+  const missingConstraints = requiredConstraints.filter((name) => !constraints.rows.some((row) => row.conname===name && /st_srid.*4326/i.test(row.definition)));
+  if (missingConstraints.length) throw new Error(`Missing SRID 4326 constraints: ${missingConstraints.join(', ')}`);
   const indexes = await pool.query<{ indexname: string; indexdef: string }>(`
     SELECT indexname,indexdef FROM pg_indexes WHERE schemaname='public'
       AND indexname IN ('facilities_geog_gist','facilities_geography_gist','postal_code_centroids_geog_gist') ORDER BY indexname`);
@@ -59,6 +65,7 @@ try {
     database,
     postgisVersion: extension.rows[0].version,
     columns: columns.rows,
+    sridConstraints: constraints.rows.map((row) => row.conname),
     indexes: indexes.rows.map((row) => row.indexname),
     radiusBoundary: result,
     distanceUnits: 'miles converted to meters with 1609.344',

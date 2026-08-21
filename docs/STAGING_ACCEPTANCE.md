@@ -13,7 +13,7 @@ npm run db:migrate
 npm run test:postgis
 ```
 
-Expected PostGIS result is JSON with `status: PASS`, two `geometry(Point,4326)` columns, `facilities_geog_gist`, `facilities_geography_gist`, `postal_code_centroids_geog_gist`, a 9.9-mile point inside, a 10.1-mile point outside, and null coordinates excluded. Distance inputs use miles × 1609.344 meters. Creating the extension requires the DBA/managed-service role; the runtime role does not need extension privileges.
+Expected PostGIS result is JSON with `status: PASS`, two point columns with enforced SRID 4326 constraints, `facilities_geog_gist`, `facilities_geography_gist`, `postal_code_centroids_geog_gist`, a 9.9-mile point inside, a 10.1-mile point outside, and null coordinates excluded. Distance inputs use miles × 1609.344 meters. Creating the extension requires the DBA/managed-service role; the runtime role does not need extension privileges.
 
 Then use a disposable fully migrated database ending in `_test`:
 

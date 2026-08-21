@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 
 function run(command: string, args: string[], extraEnv: Record<string, string | undefined> = {}): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -10,10 +10,9 @@ function run(command: string, args: string[], extraEnv: Record<string, string | 
 }
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const git = process.platform === 'win32' ? 'git.exe' : 'git';
+const repositoryStatus = execFileSync('git', ['status','--porcelain'], { encoding: 'utf8' }).trim();
+if (repositoryStatus) throw new Error('Release acceptance requires a clean repository.');
 const steps: Array<{ name: string; command: string; args: string[] }> = [
-  { name: 'repository status', command: git, args: ['diff','--quiet'] },
-  { name: 'staged repository status', command: git, args: ['diff','--cached','--quiet'] },
   { name: 'lint', command: npm, args: ['run','lint'] },
   { name: 'typecheck', command: npm, args: ['run','typecheck'] },
   { name: 'tests', command: npm, args: ['test'] },
@@ -23,6 +22,7 @@ const steps: Array<{ name: string; command: string; args: string[] }> = [
   { name: 'secret scan', command: npm, args: ['run','scan:secrets'] },
 ];
 const completed: string[] = [];
+completed.push('clean repository');
 for (const step of steps) {
   await run(step.command, step.args);
   completed.push(step.name);
