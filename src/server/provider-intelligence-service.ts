@@ -15,6 +15,7 @@ import {
   facilityVerificationEvents,
   reverificationAssignments,
   specialties,
+  users,
 } from '@/db/schema';
 import {
   calculateReverificationPriority,
@@ -420,7 +421,15 @@ export async function listReverificationQueue(principal: Principal, input: {
       .where(and(inArray(facilityVerificationEvents.facilityId, ids), sql`${facilityVerificationEvents.verifiedAt} >= now() - interval '14 days'`))
       .groupBy(facilityVerificationEvents.facilityId)
       .having(sql`count(distinct ${facilityVerificationEvents.acceptingStatus}) filter (where ${facilityVerificationEvents.acceptingStatus} in ('yes','no')) > 1`),
-    db.select().from(reverificationAssignments).where(and(inArray(reverificationAssignments.facilityId, ids), eq(reverificationAssignments.status, 'open'))),
+    db.select({
+      id: reverificationAssignments.id,
+      facilityId: reverificationAssignments.facilityId,
+      assignedTo: reverificationAssignments.assignedTo,
+      assignedName: sql<string | null>`coalesce(${users.displayName}, ${users.name})`,
+      reasonCodes: reverificationAssignments.reasonCodes,
+      createdAt: reverificationAssignments.createdAt,
+    }).from(reverificationAssignments).leftJoin(users, eq(reverificationAssignments.assignedTo, users.id))
+      .where(and(inArray(reverificationAssignments.facilityId, ids), eq(reverificationAssignments.status, 'open'))),
   ]) : [[], [], [], [], [], []];
   const specialtyById = new Map(specialtyDates.map((row) => [row.facilityId, row.latest]));
   const diagnosisById = new Map(diagnosisDates.map((row) => [row.facilityId, row.latest]));
@@ -450,7 +459,7 @@ export async function listReverificationQueue(principal: Principal, input: {
       hasConflict: conflictIds.has(facility.id),
     }, now, policy);
     if (!priority.reasons.length) return [];
-    return [{ ...facility, acceptingFreshness, priority, assignment: assignment ?? null }];
+    return [{ ...facility, facilityId: facility.id, acceptingFreshness, priority, assignment: assignment ?? null }];
   }).sort((left, right) => right.priority.score - left.priority.score || left.facilityName.localeCompare(right.facilityName));
   const offset = (page - 1) * pageSize;
   return { rows: queue.slice(offset, offset + pageSize), total: queue.length, page, pageSize };
@@ -691,9 +700,43 @@ export async function getFacilityDetail(principal: Principal, facilityId: string
     db.select({ id: facilityDiagnosisCapabilities.id, diagnosisId: diagnoses.id, code: diagnoses.code, description: diagnoses.description, status: facilityDiagnosisCapabilities.status, active: facilityDiagnosisCapabilities.active, lastVerifiedAt: facilityDiagnosisCapabilities.lastVerifiedAt, notes: facilityDiagnosisCapabilities.notes })
       .from(facilityDiagnosisCapabilities).innerJoin(diagnoses, eq(facilityDiagnosisCapabilities.diagnosisId, diagnoses.id))
       .where(inArray(facilityDiagnosisCapabilities.facilityId, historyIds)).orderBy(diagnoses.code),
-    db.select().from(facilityVerificationEvents).where(inArray(facilityVerificationEvents.facilityId, historyIds))
+    db.select({
+      id: facilityVerificationEvents.id,
+      facilityId: facilityVerificationEvents.facilityId,
+      verifiedAt: facilityVerificationEvents.verifiedAt,
+      verifiedBy: facilityVerificationEvents.verifiedBy,
+      actorName: sql<string | null>`coalesce(${users.displayName}, ${users.name})`,
+      method: facilityVerificationEvents.method,
+      confidence: facilityVerificationEvents.confidence,
+      contactPerson: facilityVerificationEvents.contactPerson,
+      acceptingStatus: facilityVerificationEvents.acceptingStatus,
+      specialtyStatus: facilityVerificationEvents.specialtyStatus,
+      diagnosisStatus: facilityVerificationEvents.diagnosisStatus,
+      schedulingWithinFourWeeks: facilityVerificationEvents.schedulingWithinFourWeeks,
+      urgentReferralStatus: facilityVerificationEvents.urgentReferralStatus,
+      nextAvailableDate: facilityVerificationEvents.nextAvailableDate,
+      estimatedWaitDays: facilityVerificationEvents.estimatedWaitDays,
+      comments: facilityVerificationEvents.comments,
+      previousState: facilityVerificationEvents.previousState,
+      resultingState: facilityVerificationEvents.resultingState,
+      relatedCallId: facilityVerificationEvents.relatedCallId,
+    }).from(facilityVerificationEvents).leftJoin(users, eq(facilityVerificationEvents.verifiedBy, users.id))
+      .where(inArray(facilityVerificationEvents.facilityId, historyIds))
       .orderBy(desc(facilityVerificationEvents.verifiedAt)).limit(100),
-    db.select().from(facilityContactAttempts).where(inArray(facilityContactAttempts.facilityId, historyIds))
+    db.select({
+      id: facilityContactAttempts.id,
+      facilityId: facilityContactAttempts.facilityId,
+      attemptedAt: facilityContactAttempts.attemptedAt,
+      attemptedBy: facilityContactAttempts.attemptedBy,
+      actorName: sql<string | null>`coalesce(${users.displayName}, ${users.name})`,
+      method: facilityContactAttempts.method,
+      outcome: facilityContactAttempts.outcome,
+      contactPerson: facilityContactAttempts.contactPerson,
+      contactChannel: facilityContactAttempts.contactChannel,
+      comments: facilityContactAttempts.comments,
+      relatedCallId: facilityContactAttempts.relatedCallId,
+    }).from(facilityContactAttempts).leftJoin(users, eq(facilityContactAttempts.attemptedBy, users.id))
+      .where(inArray(facilityContactAttempts.facilityId, historyIds))
       .orderBy(desc(facilityContactAttempts.attemptedAt)).limit(100),
     db.select().from(facilityDuplicateCandidates).where(and(
       sql`${facilityDuplicateCandidates.decision} in ('pending', 'deferred')`,
@@ -701,6 +744,21 @@ export async function getFacilityDetail(principal: Principal, facilityId: string
     )).orderBy(desc(facilityDuplicateCandidates.score)),
   ]);
   return { facility, specialties: specialtyRows, diagnoses: diagnosisRows, verifications: verificationRows, contacts: contactRows, duplicateCandidates: duplicateRows };
+}
+
+export async function listFacilityReferenceOptions(principal: Principal) {
+  assertPermission(principal, 'operations:read');
+  const db = requireDatabaseClient();
+  const [specialtyRows, diagnosisRows] = await Promise.all([
+    db.select({ id: specialties.id, label: specialties.canonicalName }).from(specialties)
+      .where(eq(specialties.active, true)).orderBy(specialties.canonicalName),
+    db.select({ id: diagnoses.id, code: diagnoses.code, description: diagnoses.description }).from(diagnoses)
+      .where(eq(diagnoses.active, true)).orderBy(diagnoses.code),
+  ]);
+  return {
+    specialties: specialtyRows,
+    diagnoses: diagnosisRows.map((row) => ({ id: row.id, label: `${row.code} · ${row.description}` })),
+  };
 }
 
 export function providerServiceErrorResponse(error: unknown): Response | null {

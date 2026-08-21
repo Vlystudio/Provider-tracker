@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseFreshnessPolicy, type FreshnessPolicy } from '@/lib/provider-intelligence';
+import { parseFreshnessPolicy, type FreshnessPolicy } from '../lib/provider-intelligence';
 
 export const appDataModeSchema = z.enum(['database', 'demo']);
 export const appEnvironmentSchema = z.enum(['development', 'test', 'production']);

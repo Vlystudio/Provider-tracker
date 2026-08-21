@@ -33,20 +33,36 @@ export function getDemoDashboard(): DashboardSummary {
 }
 
 export function getDemoProviderResults() {
-  return providerResults.map((result) => ({
+  return providerResults.map((result, index) => ({
     facilityId: `demo-${result.facility.toLowerCase().replace(/\s+/g, '-')}`,
     facilityName: result.facility,
     city: result.city,
+    stateCode: 'ME',
+    postalCode: index === 0 ? '04011' : index === 1 ? '04530' : '04086',
     distanceMiles: Number.parseFloat(result.distance),
     phone: result.phone,
-    specialty: result.specialty,
-    latestAcceptingStatus: result.status,
-    latestTreatmentStatus: 'yes',
-    latestSchedulingStatus: 'yes',
-    lastCallDate: '2026-05-04',
-    recommendation: result.nextStep,
-    coordinateProvenance: 'demo',
+    specialties: result.specialty,
+    specialtyMatch: true,
+    diagnosisMatch: index !== 1,
+    acceptingStatus: result.status.includes('Accepting') ? ('yes' as const) : ('no' as const),
+    schedulingStatus: index === 1 ? ('no' as const) : ('yes' as const),
+    urgentReferralStatus: index === 2 ? ('yes' as const) : ('no' as const),
+    nextAvailableDate: index === 0 ? '2026-08-28' : null,
+    estimatedWaitDays: index === 0 ? 7 : index === 2 ? 18 : 60,
+    acceptingVerifiedAt: index === 0 ? '2026-08-19T14:00:00.000Z' : index === 1 ? '2026-06-01T14:00:00.000Z' : null,
+    lastVerifiedAt: index === 0 ? '2026-08-19T14:00:00.000Z' : index === 1 ? '2026-06-01T14:00:00.000Z' : null,
+    freshness: index === 0 ? ('fresh' as const) : index === 1 ? ('stale' as const) : ('never_verified' as const),
+    freshnessLabel: index === 0 ? 'Verified 2 days ago' : index === 1 ? 'Stale · verified 81 days ago' : 'Never verified',
+    coordinateQuality: 'zip_centroid',
+    coordinateProvenance: 'demo_zip_centroid',
     dataQualityStatus: 'clean',
+    rankScore: 90 - index * 15,
+    matchReasons: index === 0
+      ? ['Specialty match', 'Treats diagnosis', 'Accepting new patients', 'Schedules within four weeks']
+      : index === 1
+        ? ['Specialty match', 'Stale · verified 81 days ago']
+        : ['Specialty match', 'Treats diagnosis', 'Urgent referrals accepted', 'Never verified'],
+    optimisticLockVersion: 0,
   }));
 }
 
@@ -55,14 +71,17 @@ export function getDemoCallLog() {
 }
 
 export function getDemoFacilities() {
-  return facilityRows.map((facility) => ({
+  return facilityRows.map((facility, index) => ({
     facilityId: `demo-${facility.name.toLowerCase().replace(/\s+/g, '-')}`,
     facilityName: facility.name,
     city: facility.city,
     facilityType: facility.type,
-    specialty: facility.specialty,
-    status: facility.status,
-    lastCallDate: '2026-05-04',
+    specialties: facility.specialty,
+    acceptingStatus: index === 1 ? ('no' as const) : ('yes' as const),
+    freshness: index === 0 ? ('fresh' as const) : index === 1 ? ('aging' as const) : index === 2 ? ('never_verified' as const) : ('stale' as const),
+    freshnessLabel: index === 0 ? 'Verified 2 days ago' : index === 1 ? 'Aging · verified 38 days ago' : index === 2 ? 'Never verified' : 'Stale · verified 70 days ago',
+    recordStatus: facility.status === 'Needs review' ? ('Needs review' as const) : ('Active' as const),
+    lastVerifiedAt: index === 2 ? null : index === 0 ? '2026-08-19T14:00:00.000Z' : '2026-06-12T14:00:00.000Z',
     dataQualityStatus: 'clean',
   }));
 }

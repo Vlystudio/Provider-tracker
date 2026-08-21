@@ -1,27 +1,13 @@
 import { z } from 'zod';
-import { and, gte, lte, sql } from 'drizzle-orm';
-import { calls } from '@/db/schema';
 import { getDatabaseHealth, getDatabaseClient } from './database';
 import { getDemoAdminOverview, getDemoCallLog, getDemoDashboard, getDemoFacilities, getDemoProviderResults, getDemoReports, getDemoReviewQueue } from './demo-data';
 import { getDataMode, getServerConfig } from './config';
 import { assertPermission, type Principal } from './authorization';
+import { providerSearchInputSchema, searchProviders, type ProviderSearchPage } from './provider-search-service';
+import { facilityDirectoryInputSchema, listFacilities, type FacilityDirectoryPage } from './facility-directory-service';
+import { getOperationalReport, reportingInputSchema, type OperationalReport } from './provider-reporting-service';
 
-const searchInputSchema = z.object({
-  memberZip: z.string().trim().regex(/^\d{5}$/).default('04530'),
-  radius: z.coerce.number().positive().max(500).default(50),
-  diagnosis: z.string().optional(),
-  specialty: z.string().optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(50).default(10),
-  sort: z.enum(['distance', 'facility_name', 'last_call_date']).default('distance'),
-});
-
-const reportInputSchema = z.object({
-  from: z.string().date(),
-  to: z.string().date(),
-}).refine((range) => range.from <= range.to, { message: 'The start date must be on or before the end date.' });
-
-export type ReportRange = z.infer<typeof reportInputSchema>;
+export type ReportRange = z.input<typeof reportingInputSchema>;
 
 type DataMode = 'database' | 'demo';
 type DataState<T> = {
@@ -36,11 +22,11 @@ export type DashboardPageState = DataState<ReturnType<typeof getDemoDashboard>>;
 
 export interface AppDataAdapter {
   getDashboard(principal: Principal): Promise<DashboardPageState>;
-  getProviderSearch(principal: Principal, input: z.input<typeof searchInputSchema>): Promise<DataState<ReturnType<typeof getDemoProviderResults>>>;
+  getProviderSearch(principal: Principal, input: z.input<typeof providerSearchInputSchema>): Promise<DataState<ProviderSearchPage>>;
   getCallLog(principal: Principal, input?: Record<string, string | number>): Promise<DataState<ReturnType<typeof getDemoCallLog>>>;
-  getFacilities(principal: Principal): Promise<DataState<ReturnType<typeof getDemoFacilities>>>;
+  getFacilities(principal: Principal, input?: z.input<typeof facilityDirectoryInputSchema>): Promise<DataState<FacilityDirectoryPage>>;
   getReviewQueue(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>>;
-  getReports(principal: Principal, input: ReportRange): Promise<DataState<ReturnType<typeof getDemoReports>>>;
+  getReports(principal: Principal, input: ReportRange): Promise<DataState<OperationalReport>>;
   getAdminOverview(principal: Principal): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>>;
   getDatabaseHealth(principal: Principal): Promise<{ ok: boolean; message: string }>;
 }
@@ -51,9 +37,9 @@ class DemoDataAdapter implements AppDataAdapter {
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoDashboard() };
   }
 
-  async getProviderSearch(principal: Principal, input: z.input<typeof searchInputSchema>): Promise<DataState<ReturnType<typeof getDemoProviderResults>>> {
+  async getProviderSearch(principal: Principal, input: z.input<typeof providerSearchInputSchema>): Promise<DataState<ProviderSearchPage>> {
     assertPermission(principal, 'operations:read');
-    const parsed = searchInputSchema.safeParse(input);
+    const parsed = providerSearchInputSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, dataMode: 'demo', databaseAvailable: false, message: parsed.error.issues[0]?.message ?? 'Invalid search parameters.' };
     }
@@ -62,15 +48,35 @@ class DemoDataAdapter implements AppDataAdapter {
     let results = getDemoProviderResults().filter((result) =>
       result.distanceMiles <= parsed.data.radius
       && parsed.data.memberZip === '04530'
-      && (!querySpecialty || result.specialty.toLowerCase().includes(querySpecialty))
-      && (!queryDiagnosis || queryDiagnosis === 'J45'),
+      && (!querySpecialty || result.specialties.toLowerCase().includes(querySpecialty))
+      && (!queryDiagnosis || (queryDiagnosis === 'J45' && result.diagnosisMatch))
+      && (!parsed.data.accepting || result.acceptingStatus === parsed.data.accepting)
+      && (!parsed.data.scheduling || result.schedulingStatus === parsed.data.scheduling)
+      && (!parsed.data.urgentReferral || result.urgentReferralStatus === parsed.data.urgentReferral)
+      && (!parsed.data.freshness || result.freshness === parsed.data.freshness)
+      && (!parsed.data.facilityName || result.facilityName.toLowerCase().includes(parsed.data.facilityName.toLowerCase())),
     );
     results = [...results].sort((left, right) => {
-      if (parsed.data.sort === 'facility_name') return left.facilityName.localeCompare(right.facilityName);
-      if (parsed.data.sort === 'last_call_date') return String(right.lastCallDate).localeCompare(String(left.lastCallDate));
+      if (parsed.data.sort === 'name') return left.facilityName.localeCompare(right.facilityName);
+      if (parsed.data.sort === 'recently_verified') return String(right.lastVerifiedAt).localeCompare(String(left.lastVerifiedAt));
+      if (parsed.data.sort === 'soonest_availability') return (left.estimatedWaitDays ?? 9999) - (right.estimatedWaitDays ?? 9999);
+      if (parsed.data.sort === 'recommended') return right.rankScore - left.rankScore || left.distanceMiles - right.distanceMiles;
       return left.distanceMiles - right.distanceMiles;
     });
-    return { ok: true, dataMode: 'demo', databaseAvailable: false, data: results.slice(0, parsed.data.pageSize) };
+    const offset = (parsed.data.page - 1) * parsed.data.pageSize;
+    return {
+      ok: true,
+      dataMode: 'demo',
+      databaseAvailable: false,
+      data: {
+        rows: results.slice(offset, offset + parsed.data.pageSize),
+        total: results.length,
+        page: parsed.data.page,
+        pageSize: parsed.data.pageSize,
+        originFound: parsed.data.memberZip === '04530',
+        excludedForMissingCoordinates: 0,
+      },
+    };
   }
 
   async getCallLog(principal: Principal): Promise<DataState<ReturnType<typeof getDemoCallLog>>> {
@@ -78,9 +84,22 @@ class DemoDataAdapter implements AppDataAdapter {
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoCallLog() };
   }
 
-  async getFacilities(principal: Principal): Promise<DataState<ReturnType<typeof getDemoFacilities>>> {
+  async getFacilities(principal: Principal, input: z.input<typeof facilityDirectoryInputSchema> = {}): Promise<DataState<FacilityDirectoryPage>> {
     assertPermission(principal, 'operations:read');
-    return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoFacilities() };
+    const parsed = facilityDirectoryInputSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, dataMode: 'demo', databaseAvailable: false, message: parsed.error.issues[0]?.message };
+    let rows = getDemoFacilities().filter((row) =>
+      (!parsed.data.query || `${row.facilityName} ${row.city} ${row.facilityType} ${row.specialties}`.toLowerCase().includes(parsed.data.query.toLowerCase()))
+      && (!parsed.data.status || row.recordStatus.toLowerCase().replace(' ', '_') === parsed.data.status)
+      && (!parsed.data.freshness || row.freshness === parsed.data.freshness),
+    );
+    rows = [...rows].sort((left, right) => parsed.data.sort === 'city'
+      ? left.city.localeCompare(right.city)
+      : parsed.data.sort === 'last_verified'
+        ? String(right.lastVerifiedAt).localeCompare(String(left.lastVerifiedAt))
+        : left.facilityName.localeCompare(right.facilityName));
+    const offset = (parsed.data.page - 1) * parsed.data.pageSize;
+    return { ok: true, dataMode: 'demo', databaseAvailable: false, data: { rows: rows.slice(offset, offset + parsed.data.pageSize), total: rows.length, page: parsed.data.page, pageSize: parsed.data.pageSize } };
   }
 
   async getReviewQueue(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>> {
@@ -88,13 +107,14 @@ class DemoDataAdapter implements AppDataAdapter {
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoReviewQueue() };
   }
 
-  async getReports(principal: Principal, input: ReportRange): Promise<DataState<ReturnType<typeof getDemoReports>>> {
+  async getReports(principal: Principal, input: ReportRange): Promise<DataState<OperationalReport>> {
     assertPermission(principal, 'reports:read');
-    const parsed = reportInputSchema.safeParse(input);
+    const parsed = reportingInputSchema.safeParse(input);
     if (!parsed.success) {
-      return { ok: false, dataMode: 'demo', databaseAvailable: false, message: parsed.error.issues[0]?.message ?? 'Invalid report range.', data: getDemoReports() };
+      return { ok: false, dataMode: 'demo', databaseAvailable: false, message: parsed.error.issues[0]?.message ?? 'Invalid report range.', data: { ...getDemoReports(), trend: [], coverage: [], drilldown: [] } };
     }
-    return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoReports(parsed.data.from, parsed.data.to) };
+    const demo = getDemoReports(parsed.data.from, parsed.data.to);
+    return { ok: true, dataMode: 'demo', databaseAvailable: false, data: { ...demo, trend: [], coverage: [], drilldown: [] } };
   }
 
   async getAdminOverview(principal: Principal): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>> {
@@ -118,8 +138,8 @@ class DatabaseDataAdapter implements AppDataAdapter {
     };
   }
 
-  private emptyProviderResults() {
-    return [];
+  private emptyProviderResults(input: { page?: number; pageSize?: number } = {}): ProviderSearchPage {
+    return { rows: [], total: 0, page: input.page ?? 1, pageSize: input.pageSize ?? 25, originFound: true, excludedForMissingCoordinates: 0 };
   }
 
   async getDashboard(principal: Principal): Promise<DashboardPageState> {
@@ -142,9 +162,9 @@ class DatabaseDataAdapter implements AppDataAdapter {
     }
   }
 
-  async getProviderSearch(principal: Principal, input: z.input<typeof searchInputSchema>): Promise<DataState<ReturnType<typeof getDemoProviderResults>>> {
+  async getProviderSearch(principal: Principal, input: z.input<typeof providerSearchInputSchema>): Promise<DataState<ProviderSearchPage>> {
     assertPermission(principal, 'operations:read');
-    const parsed = searchInputSchema.safeParse(input);
+    const parsed = providerSearchInputSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, dataMode: 'database', databaseAvailable: false, message: parsed.error.issues[0]?.message ?? 'Request validation failed.', data: this.emptyProviderResults() };
     }
@@ -160,15 +180,15 @@ class DatabaseDataAdapter implements AppDataAdapter {
     }
 
     try {
-      await db.execute(`SELECT 1 as ok`);
-      return { ok: true, dataMode: 'database', databaseAvailable: true, data: this.emptyProviderResults().slice(0, parsed.data.pageSize) };
+      const page = await searchProviders(principal, parsed.data);
+      return { ok: true, dataMode: 'database', databaseAvailable: true, data: page };
     } catch {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
         message: 'The provider search could not be completed.',
-        data: this.emptyProviderResults(),
+        data: this.emptyProviderResults(parsed.data),
       };
     }
   }
@@ -199,28 +219,27 @@ class DatabaseDataAdapter implements AppDataAdapter {
     }
   }
 
-  async getFacilities(principal: Principal): Promise<DataState<ReturnType<typeof getDemoFacilities>>> {
+  async getFacilities(principal: Principal, input: z.input<typeof facilityDirectoryInputSchema> = {}): Promise<DataState<FacilityDirectoryPage>> {
     assertPermission(principal, 'operations:read');
     const health = await getDatabaseHealth();
     if (!health.ok) {
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: [] };
+      return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: { rows: [], total: 0, page: 1, pageSize: 25 } };
     }
 
     const db = getDatabaseClient();
     if (!db) {
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message: 'Database configuration is missing.', data: [] };
+      return { ok: false, dataMode: 'database', databaseAvailable: false, message: 'Database configuration is missing.', data: { rows: [], total: 0, page: 1, pageSize: 25 } };
     }
 
     try {
-      await db.execute(`SELECT 1 as ok`);
-      return { ok: true, dataMode: 'database', databaseAvailable: true, data: [] };
+      return { ok: true, dataMode: 'database', databaseAvailable: true, data: await listFacilities(principal, input) };
     } catch {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
         message: 'The facilities list could not be loaded.',
-        data: [],
+        data: { rows: [], total: 0, page: 1, pageSize: 25 },
       };
     }
   }
@@ -251,64 +270,37 @@ class DatabaseDataAdapter implements AppDataAdapter {
     }
   }
 
-  async getReports(principal: Principal, input: ReportRange): Promise<DataState<ReturnType<typeof getDemoReports>>> {
+  async getReports(principal: Principal, input: ReportRange): Promise<DataState<OperationalReport>> {
     assertPermission(principal, 'reports:read');
-    const parsed = reportInputSchema.safeParse(input);
+    const parsed = reportingInputSchema.safeParse(input);
     if (!parsed.success) {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
         message: parsed.error.issues[0]?.message ?? 'Invalid report range.',
-        data: { metrics: [], generatedAt: new Date().toISOString(), period: input, total: 0 },
+        data: { metrics: [], generatedAt: new Date().toISOString(), period: { from: input.from, to: input.to }, total: 0, trend: [], coverage: [], drilldown: [] },
       };
     }
     const health = await getDatabaseHealth();
     if (!health.ok) {
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: { metrics: [], generatedAt: new Date().toISOString(), period: parsed.data, total: 0 } };
+      return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: { metrics: [], generatedAt: new Date().toISOString(), period: parsed.data, total: 0, trend: [], coverage: [], drilldown: [] } };
     }
 
     const db = getDatabaseClient();
     if (!db) {
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message: 'Database configuration is missing.', data: { metrics: [], generatedAt: new Date().toISOString(), period: parsed.data, total: 0 } };
+      return { ok: false, dataMode: 'database', databaseAvailable: false, message: 'Database configuration is missing.', data: { metrics: [], generatedAt: new Date().toISOString(), period: parsed.data, total: 0, trend: [], coverage: [], drilldown: [] } };
     }
 
     try {
-      const from = new Date(`${parsed.data.from}T00:00:00.000Z`);
-      const to = new Date(`${parsed.data.to}T23:59:59.999Z`);
-      const grouped = await db
-        .select({ resultCode: calls.resultCode, count: sql<number>`count(*)::int` })
-        .from(calls)
-        .where(and(gte(calls.callAt, from), lte(calls.callAt, to)))
-        .groupBy(calls.resultCode);
-      const countFor = (code: typeof grouped[number]['resultCode']) => grouped.find((row) => row.resultCode === code)?.count ?? 0;
-      const total = grouped.reduce((sum, row) => sum + row.count, 0);
-      const availabilityMet = countFor('meets_availability_guidelines') + countFor('meets_availability_guidelines_urgent');
-      const unableToContact = countFor('unable_to_contact');
-      const didNotMeet = countFor('does_not_meet_availability_guidelines');
-      return {
-        ok: true,
-        dataMode: 'database',
-        databaseAvailable: true,
-        data: {
-          metrics: [
-            { label: 'Calls recorded', value: String(total), detail: 'Calls logged in the selected period' },
-            { label: 'Availability met', value: String(availabilityMet), detail: `${availabilityMet} of ${total} calls` },
-            { label: 'Unable to contact', value: String(unableToContact), detail: `${unableToContact} of ${total} calls` },
-            { label: 'Did not meet', value: String(didNotMeet), detail: `${didNotMeet} of ${total} calls` },
-          ],
-          generatedAt: new Date().toISOString(),
-          period: parsed.data,
-          total,
-        },
-      };
+      return { ok: true, dataMode: 'database', databaseAvailable: true, data: await getOperationalReport(principal, parsed.data) };
     } catch {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
         message: 'The reports could not be loaded.',
-        data: { metrics: [], generatedAt: new Date().toISOString(), period: parsed.data, total: 0 },
+        data: { metrics: [], generatedAt: new Date().toISOString(), period: parsed.data, total: 0, trend: [], coverage: [], drilldown: [] },
       };
     }
   }
