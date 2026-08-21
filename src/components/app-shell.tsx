@@ -16,6 +16,8 @@ const navItems = [
   { label: 'Call Log', href: '/call-log', permission: 'operations:read', section: 'Operations' },
   { label: 'Facilities', href: '/facilities', permission: 'operations:read', section: 'Operations' },
   { label: 'Reports', href: '/reports', permission: 'reports:read', section: 'Oversight' },
+  { label: 'Data Quality', href: '/data-quality', permission: 'admin:read', section: 'System' },
+  { label: 'Duplicate Review', href: '/duplicates', permission: 'admin:read', section: 'System' },
   { label: 'Audit', href: '/audit', permission: 'audit:read', section: 'Oversight' },
   { label: 'Administration', href: '/admin', permission: 'admin:read', section: 'System' },
 ] satisfies Array<{ label: string; href: string; permission: Permission; section: string }>;
