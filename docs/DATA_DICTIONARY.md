@@ -22,7 +22,7 @@ Canonical facility master record.
 
 - id
 - facility_name
-- city
+- address_line_1 / address_line_2 / city / state_code / postal_code
 - normalized_name
 - normalized_city
 - display_key: `Name | City`
@@ -31,6 +31,13 @@ Canonical facility master record.
 - latitude / longitude
 - geog_point
 - coordinate_provenance
+- coordinate_quality: exact | address | zip_centroid | manual | unknown
+- current_accepting_status / accepting_verified_at
+- current_scheduling_status / scheduling_verified_at
+- current_urgent_referral_status
+- next_available_date / estimated_wait_days
+- last_verified_at
+- merged_into_facility_id / archived_at / archived_by
 - active
 - source_metadata
 - optimistic_lock_version
@@ -42,10 +49,67 @@ Facility-to-specialty mapping with evidence and treatment status.
 - facility_id
 - specialty_id
 - treatment_status
+- verification_status
+- active
 - notes
 - last_confirmed_at
 - confirming_call_id
 - source_metadata
+- optimistic_lock_version
+
+### facility_diagnosis_capabilities
+
+Explicit facility-to-diagnosis treatment evidence. A specialty match does not create this relationship.
+
+- facility_id / diagnosis_id
+- status: yes | no | unknown | not_asked | unable_to_verify | not_applicable
+- active
+- notes
+- last_verified_at
+- source_metadata
+- optimistic_lock_version
+
+### facility_verification_events
+
+Append-only verification history. Fields are optional so one event can update only the facts that were checked.
+
+- facility_id / verified_at / verified_by
+- method: phone | fax | portal | website | email | internal_source | other
+- confidence: direct | authoritative | secondary | unverified
+- contact_person / contact_channel
+- accepting_status
+- specialty_id / specialty_status
+- diagnosis_id / diagnosis_status
+- scheduling_within_four_weeks
+- urgent_referral_status
+- next_available_date / estimated_wait_days
+- comments
+- related_call_id / related_contact_attempt_id / import_batch_id
+- previous_state / resulting_state
+- source_metadata
+
+### facility_contact_attempts
+
+Contact activity that may not have produced verified information.
+
+- facility_id / attempted_at / attempted_by
+- method
+- outcome: verified | no_answer | voicemail_left | voicemail_not_left | disconnected | wrong_number | fax_only | callback_requested | unable_to_verify
+- contact_person / contact_channel / comments
+- related_call_id
+
+### reverification_assignments
+
+Assignment history for queue work. Only one open assignment is allowed per facility.
+
+- facility_id / assigned_to / assigned_by
+- status: open | completed | dismissed
+- reason_codes
+- completed_at / completed_by
+
+### facility_duplicate_candidates and facility_merge_records
+
+Candidate rows store ordered facility pairs, confidence, deterministic score, reason codes, and a human decision. Merge records retain the survivor, archived source, actor, reason, reconstruction snapshot, and optional undo metadata.
 
 ### authorizations
 
@@ -100,7 +164,7 @@ Operational evidence record created from a facility contact attempt.
 - booking_out_buckets
 - postal_code_centroids
 
-## Derived reporting tables
+## Derived query models
 
 - latest_facility_observations
 - latest_facility_specialty_diagnosis_observations
@@ -109,6 +173,11 @@ Operational evidence record created from a facility contact attempt.
 - weekly_duplicate_groups
 - authorization_summary_stats
 - scheduling_trend_observations
+- verification freshness and reverification priority
+- data-quality issue groups
+- search ranking reasons
+- accepting/contact/verification trends
+- specialty coverage counts
 
 ## Audit and import tables
 

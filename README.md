@@ -1,6 +1,6 @@
 # Provider Tracker
 
-Provider Tracker is an internal web app for URA provider calls, availability checks, follow-up, and reporting. It runs on Next.js and PostgreSQL/PostGIS. Staff accounts are created by an administrator; there is no public registration.
+Provider Tracker is an internal web app for facility discovery, availability verification, follow-up, duplicate review, and historical reporting. It runs on Next.js and PostgreSQL/PostGIS. Staff accounts are created by an administrator; there is no public registration.
 
 ## Local setup
 
@@ -40,9 +40,10 @@ The bootstrap command stops if an active administrator already exists. Additiona
 npm run db:generate
 npm run db:migrate
 npm run db:seed
+npm run db:seed:phase4
 ```
 
-`db:seed` adds sample operational records for local testing. Production cannot run in demo data mode.
+`db:seed` adds reference values and the non-login import identity. `db:seed:phase4` resets only its named synthetic fixture records and is blocked in production. Production cannot run in demo data mode.
 
 ## Checks
 
@@ -53,6 +54,7 @@ npm run typecheck
 npm run build
 npm run audit:production
 npm run scan:secrets
+npm run test:performance
 ```
 
 The live security matrix needs a disposable PostgreSQL database whose name ends in `_test`:
@@ -61,7 +63,9 @@ The live security matrix needs a disposable PostgreSQL database whose name ends 
 SECURITY_TEST_DATABASE_URL=postgresql://user:password@localhost/provider_tracker_test npm run test:security
 ```
 
-That command drops and recreates only the authentication, authorization, and audit tables in the named test database. Never point it at a working database.
+That command drops and recreates its acceptance schema in the named test database. Never point it at a working database.
+
+The performance command also requires a disposable database ending in `_test`, with the full migration set and PostGIS. It inserts synthetic records in one transaction and rolls the transaction back. See `docs/PERFORMANCE.md`.
 
 ## Workbook import
 
@@ -92,8 +96,8 @@ npm start
 
 The included `Dockerfile` builds an unprivileged runtime image without development, optional, or peer-only packages. Environment values are supplied when the container starts, not during the image build.
 
-Deployment, account recovery, proxy, and session-revocation steps are in `docs/OPERATIONS.md`. The access model and endpoint map are in `docs/SECURITY_ARCHITECTURE.md`.
+Deployment, migration, PostGIS, account recovery, proxy, and session-revocation steps are in `docs/OPERATIONS.md`. Provider history, freshness, search, and merge rules are in `docs/PROVIDER_INTELLIGENCE.md`. The access model and endpoint map are in `docs/SECURITY_ARCHITECTURE.md`.
 
 ## Product interface
 
-The current interface rules are in `docs/DESIGN_SYSTEM.md`. Phase 3 audit findings are in `docs/UX_AUDIT.md`, the implemented-screen inventory and Figma link are in `docs/FIGMA_HANDOFF.md`, and acceptance results are in `docs/PHASE3_ACCEPTANCE.md`.
+The current interface rules are in `docs/DESIGN_SYSTEM.md`. The screen inventory and Figma link are in `docs/FIGMA_HANDOFF.md`. Acceptance records are in `docs/PHASE3_ACCEPTANCE.md` and `docs/PHASE4_ACCEPTANCE.md`.

@@ -17,6 +17,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",
+    "db:seed:phase4": "tsx scripts/seed-phase4-fixtures.ts",
+    "test:performance": "tsx scripts/phase4-performance.ts",
     "db:studio": "drizzle-kit studio",
     "admin:bootstrap": "node --conditions=react-server --import tsx scripts/bootstrap-admin.ts",
     "import:workbooks": "tsx scripts/import-workbooks.ts"

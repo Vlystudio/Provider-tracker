@@ -81,3 +81,5 @@ Navigation visibility is only a usability layer. Direct page and API access rema
 ## Handoff rule
 
 If the implementation changes, update the application first, verify the changed workflow, then refresh the affected Figma screen and screenshot. Do not use the Figma file to introduce controls or states that do not exist in the product.
+
+Phase 4 adds facility history, reverification, data-quality, duplicate-comparison, and reporting drill-down screens. The implementation remains the source of truth until the shared Figma plan has capacity for those materially new screens. Their reusable behavior is recorded in `DESIGN_SYSTEM.md`.

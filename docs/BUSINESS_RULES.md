@@ -32,9 +32,40 @@ The web app uses stable result codes instead of string comparisons. The presenta
 
 ## Review queue
 
-- `next_review_date = latest relevant call date + 7 days`
-- Due window is now to 7 days out
-- Rank overdue first, then nearest date, then facility name
+- Never verified: +50
+- Stale accepting status: +35; aging accepting status: +15
+- Stale specialty, diagnosis, or scheduling fact: +12 each
+- Conflicting recent accepting status: +25
+- High use: +15; regular use: +7
+- Unknown fields: +5 each, capped at +15
+- Repeated failed contacts: +2 each, capped at +10
+- The final score is capped at 100 and displayed with its reason labels
+
+Freshness thresholds are defined once in the server configuration. Failed contact attempts do not satisfy a queue reason.
+
+## Verification state
+
+- Yes, no, unknown, not asked, unable to verify, and not applicable are separate values.
+- An omitted field is not changed.
+- A supplied unknown or unable-to-verify value can change the displayed current answer but does not refresh that field's verified timestamp.
+- Yes, no, and not applicable refresh the verified timestamp.
+- A verification event and its current-state update commit together.
+- A stale optimistic version returns a conflict instead of overwriting another user's work.
+
+## Search matching
+
+- Radius filtering and distance calculation run in PostGIS.
+- Facilities without coordinates do not appear in radius results.
+- A diagnosis filter matches only an active explicit yes relationship.
+- A specialty filter matches an active controlled relationship or alias.
+- Recommended order is deterministic and the result lists the matching reasons.
+
+## Facility duplicates
+
+- Exact name, phone, ZIP, and coordinate signals contribute to a deterministic candidate score.
+- Name similarity alone cannot merge records.
+- Only an administrator can merge.
+- A merge archives the source record, copies current relationships, retains source history, and writes an audit event.
 
 ## FDM logic
 

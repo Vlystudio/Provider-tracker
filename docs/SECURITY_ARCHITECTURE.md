@@ -19,7 +19,7 @@ The proxy handles early page redirects. Every protected page repeats its permiss
 - Authenticated: dashboard and workflow pages plus `GET /api/session`.
 - Operations: provider, call, facility, review, and authorization views. Write operations require `operations:write`.
 - Reports: `/reports` requires `reports:read`.
-- Administrator: `/admin`, staff provisioning, role and activation changes, password resets, and authorization deletion.
+- Administrator: `/admin`, `/data-quality`, `/duplicates`, staff provisioning, role and activation changes, password resets, merges, duplicate decisions, bulk assignment, and authorization deletion.
 - User-owned: authorization reads and updates by `ura_user` include `created_by = authenticated user ID`. Administrators can read across owners.
 - Local-only operation: workbook import runs as a command and is not an HTTP upload endpoint.
 
@@ -44,6 +44,14 @@ New staff accounts default to `ura_user` inside the identity adapter. A protecte
 | Read authorization | database session | `operations:read`; owner match unless admin | `401`, `403`, or non-disclosing `404` |
 | Update authorization | database session | `operations:write`; owner match unless admin | `401`, `403`, `404`, `413`, or validation `400` |
 | Delete authorization | database session | `admin:manage-data` | `401`, `403`, or `404` |
+| Read facility and history | database session | `operations:read` | `401`, `403`, or `404` |
+| Update facility | database session | `operations:write`; optimistic version | `401`, `403`, `404`, `409`, or validation `400` |
+| Create verification | database session | `operations:write`; optimistic version | `401`, `403`, `404`, `409`, or validation `400` |
+| Record contact attempt | database session | `operations:write` | `401`, `403`, `404`, or validation `400` |
+| Review data quality | database session | `admin:read` | `401` or `403` |
+| Decide duplicate | database session | `admin:manage-data` | `401`, `403`, `404`, or validation `400` |
+| Merge facilities | database session | `admin:manage-data`; typed confirmation and two optimistic versions | `401`, `403`, `404`, `409`, or validation `400` |
+| Bulk assign reverification | database session | `admin:manage-data`; all selected facilities validated in one transaction | `401`, `403`, `409`, or validation `400` |
 | Create staff account | database session | `admin:manage-users` | `401`, `403`, `429`, or validation `400` |
 | Change role/activation | database session | `admin:manage-users`; not self; last admin protected | `401`, `403`, `404`, or `409` |
 | Reset staff password | database session | `admin:manage-users` | `401`, `403`, `404`, or validation `400` |
@@ -56,13 +64,13 @@ Sessions are opaque random tokens backed by PostgreSQL rows. Cookie contents do 
 
 ## Rate limits and client addresses
 
-Sign-in allows five attempts per minute for a client key. Administrative and authorization mutations have separate database-backed limits and return `429` with `Retry-After`.
+Sign-in allows five attempts per minute for a client key. Administrative, authorization, verification, contact, merge, duplicate, and bulk-assignment mutations have separate database-backed limits and return `429` with `Retry-After`.
 
 Forwarded client addresses are ignored by default. `AUTH_CLIENT_IP_HEADER` accepts only one documented header name and should be set only when a trusted proxy overwrites that header. Stored rate-limit keys and audit addresses are HMAC values, not raw addresses.
 
 ## Audit events
 
-The audit table records actor, action, target type and ID, time, result, request ID, a hashed source address when available, and small allowlisted metadata. Covered events include sign-in success/failure, sign-out, initial admin creation, staff creation, role and activation changes, password resets, authorization updates, and authorization deletion.
+The audit table records actor, action, target type and ID, time, result, request ID, a hashed source address when available, and small allowlisted metadata. Covered events include sign-in success/failure, sign-out, initial admin creation, staff creation, role and activation changes, password resets, authorization changes, facility verification and edits, contact attempts, duplicate decisions, merges, bulk assignments, and imports.
 
 Passwords, cookies, tokens, authorization headers, reset values, and raw network addresses are not stored in audit metadata.
 

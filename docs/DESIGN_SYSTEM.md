@@ -43,6 +43,16 @@ Page titles stay short. Supporting copy explains the task in one sentence and av
 
 Buttons, inputs, selects, date fields, and text areas share a 40px minimum control height and the same border, radius, focus ring, disabled treatment, and text size.
 
+## Provider intelligence patterns
+
+- Freshness always uses a text label with the badge; color is secondary.
+- Search results show short match reasons in the row instead of an unexplained score.
+- Facility history uses one chronological list for verification and contact activity.
+- Partial verification forms state that omitted fields are unchanged.
+- Failed contact forms state that verification freshness is not changed.
+- Facility merge stays inside a collapsed danger section and requires the user to type `MERGE`.
+- Data-quality totals link to the records behind the number.
+
 Button use:
 
 - Primary: one main action in a section.

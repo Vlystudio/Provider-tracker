@@ -18,10 +18,11 @@ Browser requests pass through the Next.js proxy, then the page or route handler,
 - dashboard and summary pages
 - call entry and call history
 - provider search
-- authorization summaries and review queue
-- facility maintenance
-- reports and audit views
-- administrator account and data operations
+- authorization summaries and reverification queue
+- facility detail, verification history, and contact activity
+- data quality and duplicate review
+- historical reports, drill-downs, and specialty coverage
+- administrator account, merge, assignment, and import operations
 
 ## Data rules
 
@@ -29,6 +30,10 @@ Browser requests pass through the Next.js proxy, then the page or route handler,
 - aliases are normalized while raw source values remain available for reconciliation
 - derived results come from versioned business rules
 - provider distance filtering uses indexed PostGIS queries
+- current facility status is updated in the same transaction as its verification event
+- failed contacts never update verification freshness
+- unknown, negative, not asked, unable to verify, and not applicable remain separate values
+- facility merges archive the source identity and retain its history
 - source workbooks stay read-only and outside version control
 
-The detailed trust boundaries, permissions, and endpoint rules are in `SECURITY_ARCHITECTURE.md`.
+Provider history and search rules are in `PROVIDER_INTELLIGENCE.md`. The trust boundaries, permissions, and endpoint rules are in `SECURITY_ARCHITECTURE.md`.

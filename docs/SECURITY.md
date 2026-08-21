@@ -12,6 +12,8 @@
 - State-changing application routes require an approved `Origin`, JSON bodies, strict schemas, and a 16 KiB body limit.
 - Sign-in and sensitive application routes use database-backed rate limits.
 - Authentication failures and security-sensitive account or record changes create structured audit events. IP addresses and email lookup values are HMAC-hashed before storage.
+- Facility verification, contact attempts, edits, duplicate decisions, merges, and bulk assignments use server permissions, same-origin checks, strict body schemas, rate limits, and safe audit metadata.
+- Facility and relationship writes use optimistic versions where concurrent edits would otherwise lose data.
 
 ## Browser and transport controls
 

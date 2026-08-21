@@ -30,6 +30,10 @@ Every workbook is keyed by SHA-256 plus importer version. A completed batch is a
 
 Lower-priority facility rows may fill a missing phone, ZIP, or coordinate, but do not rename an admin canonical record.
 
+An import never overwrites a phone or address that has a newer verified timestamp. A verified specialty relationship also takes precedence over an imported mapping. Source metadata is appended instead of replacing prior provenance.
+
+Imported completed calls create secondary-source verification history. Imported unsuccessful calls create contact attempts. A historical imported fact updates the current snapshot only when its call timestamp is newer than the field already on file.
+
 ## Row handling
 
 - rows are mapped by normalized header name, not column number

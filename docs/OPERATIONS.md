@@ -8,6 +8,8 @@ Set these as runtime secrets or configuration in the hosting platform:
 - `APP_DATA_MODE=database`
 - `DATABASE_URL`
 - `DATABASE_POOL_SIZE`
+- `VERIFICATION_ACCEPTING_FRESH_DAYS` and `VERIFICATION_ACCEPTING_STALE_DAYS`
+- equivalent scheduling, specialty, diagnosis, and contact freshness settings from `.env.example`
 - `BETTER_AUTH_URL` using the public HTTPS origin
 - `BETTER_AUTH_SECRET` with at least 32 random characters
 - `AUTH_TRUSTED_ORIGINS` as a comma-separated list of approved HTTPS origins, including `BETTER_AUTH_URL`
@@ -22,9 +24,10 @@ Generate the authentication secret and audit salt independently. Store them in t
 1. Back up the database and confirm the restore procedure.
 2. Run `npm ci` in the release job.
 3. Run `npm run db:migrate` with the migration identity.
-4. Run the automated checks and `npm run build`.
-5. Start the new application process with the production environment.
-6. Check `/sign-in`, response security headers, database connectivity after sign-in, and audit-event writes.
+4. Confirm PostGIS is enabled and the geography indexes exist.
+5. Run the automated checks and `npm run build`.
+6. Start the new application process with the production environment.
+7. Check `/sign-in`, response security headers, database connectivity after sign-in, and audit-event writes.
 
 The image build does not need runtime secrets. The production process exits when required settings are missing or unsafe.
 
@@ -77,3 +80,13 @@ Do not add permissive credentialed CORS. The browser app and APIs are intended t
 Use TLS for remote database connections, encryption at rest, a least-privilege runtime identity, a separate migration identity where possible, automated backups, and scheduled restore tests. Restrict direct database network access to the application and approved administrative hosts.
 
 Review audit retention, log monitoring, BAA coverage, and incident response with the organization's security owner before live data is loaded.
+
+## Phase 4 staging checks
+
+1. Restore a recent non-production backup into a staging database.
+2. Confirm the `postgis` extension is available.
+3. Apply migration `0006_strange_wendell_vaughn.sql` and review its call-history backfill counts.
+4. Run `npm run db:seed:phase4` only on an approved fixture database if UI examples are needed.
+5. Run `npm run test:performance` against a disposable database whose name ends in `_test`.
+6. Exercise one verification, failed contact, radius search, duplicate merge, and report drill-down.
+7. Compare active-facility, call, verification, and relationship counts before approving production migration.
