@@ -171,6 +171,14 @@ export async function createVerificationEvent(
     if (!facility) throw new RecordNotFoundError('The active facility was not found.');
     if (facility.optimisticLockVersion !== value.expectedVersion) throw new RecordConflictError();
 
+    const [previousSpecialty] = value.specialtyId
+      ? await tx.select({ status: facilitySpecialties.verificationStatus }).from(facilitySpecialties)
+          .where(and(eq(facilitySpecialties.facilityId, facility.id), eq(facilitySpecialties.specialtyId, value.specialtyId))).limit(1)
+      : [];
+    const [previousDiagnosis] = value.diagnosisId
+      ? await tx.select({ status: facilityDiagnosisCapabilities.status }).from(facilityDiagnosisCapabilities)
+          .where(and(eq(facilityDiagnosisCapabilities.facilityId, facility.id), eq(facilityDiagnosisCapabilities.diagnosisId, value.diagnosisId))).limit(1)
+      : [];
     const previousState = {
       acceptingStatus: facility.currentAcceptingStatus,
       schedulingWithinFourWeeks: facility.currentSchedulingStatus,
@@ -178,6 +186,8 @@ export async function createVerificationEvent(
       nextAvailableDate: facility.nextAvailableDate,
       estimatedWaitDays: facility.estimatedWaitDays,
       lastVerifiedAt: facility.lastVerifiedAt?.toISOString() ?? null,
+      ...(value.specialtyId ? { specialtyStatus: previousSpecialty?.status ?? null } : {}),
+      ...(value.diagnosisId ? { diagnosisStatus: previousDiagnosis?.status ?? null } : {}),
     };
     const facilityPatch: Partial<typeof facilities.$inferInsert> = {
       optimisticLockVersion: facility.optimisticLockVersion + 1,
@@ -264,6 +274,8 @@ export async function createVerificationEvent(
       nextAvailableDate: updated.nextAvailableDate,
       estimatedWaitDays: updated.estimatedWaitDays,
       lastVerifiedAt: updated.lastVerifiedAt?.toISOString() ?? null,
+      ...(value.specialtyId ? { specialtyStatus: value.specialtyStatus ?? previousSpecialty?.status ?? null } : {}),
+      ...(value.diagnosisId ? { diagnosisStatus: value.diagnosisStatus ?? previousDiagnosis?.status ?? null } : {}),
     };
     const [event] = await tx.insert(facilityVerificationEvents).values({
       facilityId: facility.id,

@@ -163,6 +163,29 @@ export const reportSnapshotTypeEnum = pgEnum('report_snapshot_type', [
   'scheduling_trend',
 ]);
 
+export const automationResultEnum = pgEnum('automation_result', [
+  'running',
+  'succeeded',
+  'failed',
+  'skipped',
+  'dry_run',
+]);
+export const notificationSeverityEnum = pgEnum('notification_severity', [
+  'informational',
+  'attention',
+  'important',
+]);
+export const digestFrequencyEnum = pgEnum('digest_frequency', ['none', 'daily', 'weekly']);
+export const workItemStatusEnum = pgEnum('work_item_status', [
+  'open',
+  'assigned',
+  'in_progress',
+  'completed',
+  'dismissed',
+  'blocked',
+]);
+export const coverageStateEnum = pgEnum('coverage_state', ['unknown', 'healthy', 'alerting']);
+
 export const users = pgTable(
   'users',
   {
@@ -778,3 +801,218 @@ export const auditEvents = pgTable(
     index('audit_events_actor_created_idx').on(table.actorId, table.createdAt),
   ],
 );
+
+export const automationJobExecutions = pgTable(
+  'automation_job_executions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    executionKey: text('execution_key').notNull(),
+    jobType: text('job_type').notNull(),
+    trigger: text('trigger').notNull(),
+    scheduledFor: timestamp('scheduled_for', { withTimezone: true }).notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    result: automationResultEnum('result').notNull().default('running'),
+    processedCount: integer('processed_count').notNull().default(0),
+    createdCount: integer('created_count').notNull().default(0),
+    skippedCount: integer('skipped_count').notNull().default(0),
+    errorCount: integer('error_count').notNull().default(0),
+    retryCount: integer('retry_count').notNull().default(0),
+    releaseVersion: text('release_version').notNull(),
+    errorCategory: text('error_category'),
+    errorMessage: text('error_message'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('automation_job_execution_key_unique').on(table.executionKey),
+    index('automation_job_type_started_idx').on(table.jobType, table.startedAt),
+    index('automation_job_result_started_idx').on(table.result, table.startedAt),
+  ],
+);
+
+export const notificationPreferences = pgTable('notification_preferences', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  inAppEnabled: boolean('in_app_enabled').notNull().default(true),
+  digestFrequency: digestFrequencyEnum('digest_frequency').notNull().default('daily'),
+  categories: jsonb('categories').$type<string[]>().notNull().default(['work', 'changes', 'coverage', 'digest']),
+  minimumSeverity: notificationSeverityEnum('minimum_severity').notNull().default('informational'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    recipientId: uuid('recipient_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    category: text('category').notNull(),
+    severity: notificationSeverityEnum('severity').notNull().default('informational'),
+    title: text('title').notNull(),
+    message: text('message').notNull(),
+    targetPath: text('target_path'),
+    source: text('source').notNull(),
+    deduplicationKey: text('deduplication_key').notNull(),
+    issueKey: text('issue_key'),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('notifications_recipient_dedup_unique').on(table.recipientId, table.deduplicationKey),
+    index('notifications_recipient_read_idx').on(table.recipientId, table.readAt, table.createdAt),
+    check('notifications_target_path_check', sql`${table.targetPath} is null or ${table.targetPath} like '/%'`),
+  ],
+);
+
+export const operationalWorkItems = pgTable(
+  'operational_work_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workType: text('work_type').notNull(),
+    priority: notificationSeverityEnum('priority').notNull().default('attention'),
+    targetType: text('target_type').notNull(),
+    targetId: uuid('target_id').notNull(),
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    reasonCodes: jsonb('reason_codes').$type<string[]>().notNull().default([]),
+    status: workItemStatusEnum('status').notNull().default('open'),
+    assignedTo: uuid('assigned_to').references(() => users.id, { onDelete: 'set null' }),
+    assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    source: text('source').notNull(),
+    deduplicationKey: text('deduplication_key').notNull(),
+    cycle: integer('cycle').notNull().default(1),
+    blockedReason: text('blocked_reason'),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    completedBy: uuid('completed_by').references(() => users.id, { onDelete: 'set null' }),
+    dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
+    dismissedBy: uuid('dismissed_by').references(() => users.id, { onDelete: 'set null' }),
+    dismissalReason: text('dismissal_reason'),
+    optimisticLockVersion: integer('optimistic_lock_version').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('operational_work_dedup_unique').on(table.deduplicationKey),
+    index('operational_work_assignee_status_idx').on(table.assignedTo, table.status, table.dueAt),
+    index('operational_work_type_status_idx').on(table.workType, table.status, table.dueAt),
+    check('operational_work_cycle_check', sql`${table.cycle} >= 1`),
+  ],
+);
+
+export const operationalChangeEvents = pgTable(
+  'operational_change_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    facilityId: uuid('facility_id').references(() => facilities.id, { onDelete: 'restrict' }),
+    eventType: text('event_type').notNull(),
+    severity: notificationSeverityEnum('severity').notNull().default('informational'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    sourceType: text('source_type').notNull(),
+    sourceId: uuid('source_id'),
+    deduplicationKey: text('deduplication_key').notNull(),
+    beforeValue: jsonb('before_value').$type<Record<string, unknown>>(),
+    afterValue: jsonb('after_value').$type<Record<string, unknown>>(),
+    specialtyId: uuid('specialty_id').references(() => specialties.id, { onDelete: 'set null' }),
+    diagnosisId: uuid('diagnosis_id').references(() => diagnoses.id, { onDelete: 'set null' }),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('operational_change_dedup_unique').on(table.deduplicationKey),
+    index('operational_change_occurred_idx').on(table.occurredAt, table.eventType),
+    index('operational_change_facility_idx').on(table.facilityId, table.occurredAt),
+  ],
+);
+
+export const coverageWatches = pgTable(
+  'coverage_watches',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    specialtyId: uuid('specialty_id').references(() => specialties.id, { onDelete: 'restrict' }),
+    diagnosisId: uuid('diagnosis_id').references(() => diagnoses.id, { onDelete: 'restrict' }),
+    postalCode: text('postal_code').notNull(),
+    radiusMiles: integer('radius_miles').notNull(),
+    minimumCount: integer('minimum_count').notNull(),
+    freshnessDays: integer('freshness_days').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    state: coverageStateEnum('state').notNull().default('unknown'),
+    cycle: integer('cycle').notNull().default(0),
+    lastCount: integer('last_count'),
+    lastEvaluatedAt: timestamp('last_evaluated_at', { withTimezone: true }),
+    createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('coverage_watches_enabled_idx').on(table.enabled, table.lastEvaluatedAt),
+    check('coverage_watches_radius_check', sql`${table.radiusMiles} in (10,25,50,100)`),
+    check('coverage_watches_minimum_check', sql`${table.minimumCount} between 1 and 100`),
+    check('coverage_watches_freshness_check', sql`${table.freshnessDays} between 1 and 365`),
+    check('coverage_watches_filter_check', sql`${table.specialtyId} is not null or ${table.diagnosisId} is not null`),
+  ],
+);
+
+export const coverageAlertEvents = pgTable(
+  'coverage_alert_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    watchId: uuid('watch_id').notNull().references(() => coverageWatches.id, { onDelete: 'cascade' }),
+    cycle: integer('cycle').notNull(),
+    state: text('state').notNull(),
+    observedCount: integer('observed_count').notNull(),
+    thresholdCount: integer('threshold_count').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('coverage_alert_cycle_state_unique').on(table.watchId, table.cycle, table.state),
+    index('coverage_alert_watch_created_idx').on(table.watchId, table.createdAt),
+    check('coverage_alert_state_check', sql`${table.state} in ('opened','resolved')`),
+  ],
+);
+
+export const operationalDigests = pgTable(
+  'operational_digests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    digestType: text('digest_type').notNull(),
+    audienceKey: text('audience_key').notNull(),
+    recipientId: uuid('recipient_id').references(() => users.id, { onDelete: 'cascade' }),
+    periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+    periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+    generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
+    sourceVersion: text('source_version').notNull(),
+    sections: jsonb('sections').$type<Array<{ key: string; label: string; count: number }>>().notNull().default([]),
+    executionId: uuid('execution_id').references(() => automationJobExecutions.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('operational_digest_period_unique').on(table.digestType, table.audienceKey, table.periodStart, table.periodEnd),
+    index('operational_digest_recipient_idx').on(table.recipientId, table.generatedAt),
+    check('operational_digest_period_check', sql`${table.periodStart} < ${table.periodEnd}`),
+  ],
+);
+
+export const automationSettings = pgTable('automation_settings', {
+  scope: text('scope').primaryKey().default('global'),
+  timeZone: text('time_zone').notNull().default('America/New_York'),
+  upcomingStaleDays: integer('upcoming_stale_days').notNull().default(7),
+  meaningfulWaitIncreaseDays: integer('meaningful_wait_increase_days').notNull().default(14),
+  meaningfulWaitIncreasePercent: integer('meaningful_wait_increase_percent').notNull().default(50),
+  highPriorityEscalationDays: integer('high_priority_escalation_days').notNull().default(3),
+  dailyDigestHour: integer('daily_digest_hour').notNull().default(7),
+  weeklyDigestDay: integer('weekly_digest_day').notNull().default(1),
+  batchSize: integer('batch_size').notNull().default(500),
+  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('automation_settings_scope_check', sql`${table.scope} = 'global'`),
+  check('automation_settings_upcoming_check', sql`${table.upcomingStaleDays} between 0 and 30`),
+  check('automation_settings_wait_days_check', sql`${table.meaningfulWaitIncreaseDays} between 1 and 180`),
+  check('automation_settings_wait_percent_check', sql`${table.meaningfulWaitIncreasePercent} between 1 and 500`),
+  check('automation_settings_escalation_check', sql`${table.highPriorityEscalationDays} between 1 and 30`),
+  check('automation_settings_daily_hour_check', sql`${table.dailyDigestHour} between 0 and 23`),
+  check('automation_settings_weekly_day_check', sql`${table.weeklyDigestDay} between 1 and 7`),
+  check('automation_settings_batch_check', sql`${table.batchSize} between 50 and 2000`),
+]);

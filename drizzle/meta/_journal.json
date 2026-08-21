@@ -50,6 +50,20 @@
       "when": 1787324398770,
       "tag": "0006_strange_wendell_vaughn",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787331073058,
+      "tag": "0007_wooden_champions",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787333008245,
+      "tag": "0008_shiny_shen",
+      "breakpoints": true
     }
   ]
 }

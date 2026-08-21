@@ -28,6 +28,18 @@ describe('access control policy', () => {
     expect(permissionForPage('/reports/weekly')).toBe('reports:read');
     expect(permissionForPage('/audit')).toBe('audit:read');
     expect(permissionForPage('/provider-search')).toBe('operations:read');
+    expect(permissionForPage('/notifications')).toBe('notifications:read');
+    expect(permissionForPage('/work')).toBe('work:read');
+    expect(permissionForPage('/changes')).toBe('changes:read');
+    expect(permissionForPage('/coverage')).toBe('coverage:read');
+    expect(permissionForPage('/automation')).toBe('automation:read');
     expect(permissionForPage('/sign-in')).toBeNull();
+  });
+
+  it('keeps automation settings and coverage rules admin-only', () => {
+    expect(can('admin', 'automation:manage')).toBe(true);
+    expect(can('admin', 'coverage:manage')).toBe(true);
+    expect(can('ura_user', 'automation:manage')).toBe(false);
+    expect(can('report_viewer', 'coverage:manage')).toBe(false);
   });
 });

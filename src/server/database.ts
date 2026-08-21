@@ -135,7 +135,10 @@ export async function getDatabaseReadiness(): Promise<DatabaseReadiness> {
           AND to_regclass('public.sessions') IS NOT NULL
           AND to_regclass('public.facilities') IS NOT NULL
           AND to_regclass('public.facility_verification_events') IS NOT NULL
-          AND to_regclass('public.audit_events') IS NOT NULL AS schema_ready,
+          AND to_regclass('public.audit_events') IS NOT NULL
+          AND to_regclass('public.automation_job_executions') IS NOT NULL
+          AND to_regclass('public.notifications') IS NOT NULL
+          AND to_regclass('public.operational_work_items') IS NOT NULL AS schema_ready,
         EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis') AS postgis_ready,
         EXISTS (
           SELECT 1 FROM pg_indexes

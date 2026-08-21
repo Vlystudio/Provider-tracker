@@ -6,6 +6,14 @@ export const permissions = [
   'operations:read',
   'operations:write',
   'reports:read',
+  'notifications:read',
+  'work:read',
+  'work:write',
+  'changes:read',
+  'coverage:read',
+  'coverage:manage',
+  'automation:read',
+  'automation:manage',
   'admin:read',
   'admin:manage-users',
   'admin:manage-data',
@@ -15,9 +23,9 @@ export type Permission = (typeof permissions)[number];
 
 const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
   admin: new Set(permissions),
-  ura_user: new Set(['app:access', 'operations:read', 'operations:write', 'reports:read']),
-  report_viewer: new Set(['app:access', 'reports:read']),
-  auditor: new Set(['app:access', 'reports:read', 'audit:read']),
+  ura_user: new Set(['app:access', 'operations:read', 'operations:write', 'reports:read', 'notifications:read', 'work:read', 'work:write', 'changes:read', 'coverage:read']),
+  report_viewer: new Set(['app:access', 'reports:read', 'notifications:read', 'changes:read', 'coverage:read']),
+  auditor: new Set(['app:access', 'reports:read', 'audit:read', 'notifications:read']),
 };
 
 export function isUserRole(value: unknown): value is UserRole {
@@ -31,6 +39,11 @@ export function can(role: UserRole, permission: Permission): boolean {
 export function permissionForPage(pathname: string): Permission | null {
   if (pathname === '/') return 'app:access';
   if (pathname.startsWith('/admin')) return 'admin:read';
+  if (pathname.startsWith('/automation')) return 'automation:read';
+  if (pathname.startsWith('/notifications')) return 'notifications:read';
+  if (pathname.startsWith('/work')) return 'work:read';
+  if (pathname.startsWith('/changes')) return 'changes:read';
+  if (pathname.startsWith('/coverage')) return 'coverage:read';
   if (pathname.startsWith('/data-quality') || pathname.startsWith('/duplicates')) return 'admin:read';
   if (pathname.startsWith('/audit')) return 'audit:read';
   if (pathname.startsWith('/reports')) return 'reports:read';

@@ -1,0 +1,1 @@
+ALTER TABLE "operational_work_items" ADD COLUMN "optimistic_lock_version" integer DEFAULT 0 NOT NULL;
