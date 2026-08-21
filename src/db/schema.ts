@@ -67,6 +67,71 @@ export const dataQualityStatusEnum = pgEnum('data_quality_status', [
   'rejected',
 ]);
 
+export const verificationAnswerEnum = pgEnum('verification_answer', [
+  'yes',
+  'no',
+  'unknown',
+  'not_asked',
+  'unable_to_verify',
+  'not_applicable',
+]);
+
+export const verificationMethodEnum = pgEnum('verification_method', [
+  'phone',
+  'fax',
+  'portal',
+  'website',
+  'email',
+  'internal_source',
+  'other',
+]);
+
+export const sourceConfidenceEnum = pgEnum('source_confidence', [
+  'direct',
+  'authoritative',
+  'secondary',
+  'unverified',
+]);
+
+export const contactOutcomeEnum = pgEnum('contact_outcome', [
+  'verified',
+  'no_answer',
+  'voicemail_left',
+  'voicemail_not_left',
+  'disconnected',
+  'wrong_number',
+  'fax_only',
+  'callback_requested',
+  'unable_to_verify',
+]);
+
+export const coordinateQualityEnum = pgEnum('coordinate_quality', [
+  'exact',
+  'address',
+  'zip_centroid',
+  'manual',
+  'unknown',
+]);
+
+export const duplicateConfidenceEnum = pgEnum('duplicate_confidence', [
+  'exact',
+  'probable',
+  'possible',
+]);
+
+export const duplicateDecisionEnum = pgEnum('duplicate_decision', [
+  'pending',
+  'not_duplicate',
+  'deferred',
+  'merged',
+]);
+
+export const assignmentStatusEnum = pgEnum('assignment_status', [
+  'open',
+  'completed',
+  'dismissed',
+]);
+
 export const workbookKindEnum = pgEnum('workbook_kind', ['admin', 'user']);
 export const importBatchStatusEnum = pgEnum('import_batch_status', [
   'pending',
@@ -302,6 +367,9 @@ export const facilities = pgTable(
     normalizedCity: text('normalized_city').notNull(),
     displayKey: text('display_key').notNull(),
     facilityType: text('facility_type').notNull().default('Hospital'),
+    addressLine1: text('address_line_1'),
+    addressLine2: text('address_line_2'),
+    stateCode: text('state_code'),
     autoFillSpecialty: boolean('auto_fill_specialty').notNull().default(false),
     phoneRaw: text('phone_raw'),
     phoneNormalized: text('phone_normalized'),
@@ -310,6 +378,20 @@ export const facilities = pgTable(
     longitude: doublePrecision('longitude'),
     geogPoint: geometry('geog_point', { type: 'point', mode: 'xy', srid: 4326 }),
     coordinateProvenance: text('coordinate_provenance'),
+    coordinateQuality: coordinateQualityEnum('coordinate_quality').notNull().default('unknown'),
+    currentAcceptingStatus: verificationAnswerEnum('current_accepting_status').notNull().default('unknown'),
+    currentSchedulingStatus: verificationAnswerEnum('current_scheduling_status').notNull().default('unknown'),
+    currentUrgentReferralStatus: verificationAnswerEnum('current_urgent_referral_status').notNull().default('unknown'),
+    nextAvailableDate: date('next_available_date'),
+    estimatedWaitDays: integer('estimated_wait_days'),
+    acceptingVerifiedAt: timestamp('accepting_verified_at', { withTimezone: true }),
+    schedulingVerifiedAt: timestamp('scheduling_verified_at', { withTimezone: true }),
+    phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
+    addressVerifiedAt: timestamp('address_verified_at', { withTimezone: true }),
+    lastVerifiedAt: timestamp('last_verified_at', { withTimezone: true }),
+    mergedIntoFacilityId: uuid('merged_into_facility_id'),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    archivedBy: uuid('archived_by').references(() => users.id, { onDelete: 'set null' }),
     active: boolean('active').notNull().default(true),
     dataQualityStatus: dataQualityStatusEnum('data_quality_status').notNull().default('clean'),
     sourceMetadata: jsonb('source_metadata').$type<Record<string, unknown>>().notNull().default({}),
@@ -323,6 +405,9 @@ export const facilities = pgTable(
     index('facilities_postal_code_idx').on(table.postalCode),
     index('facilities_active_name_idx').on(table.active, table.normalizedName),
     index('facilities_geog_gist').using('gist', table.geogPoint),
+    index('facilities_verification_queue_idx').on(table.active, table.lastVerifiedAt),
+    index('facilities_accepting_freshness_idx').on(table.currentAcceptingStatus, table.acceptingVerifiedAt),
+    index('facilities_merged_into_idx').on(table.mergedIntoFacilityId),
     check(
       'facilities_coordinate_pair_check',
       sql`(${table.latitude} is null and ${table.longitude} is null) or (${table.latitude} is not null and ${table.longitude} is not null)`,
@@ -331,6 +416,8 @@ export const facilities = pgTable(
       'facilities_geog_srid_check',
       sql`${table.geogPoint} is null or ST_SRID(${table.geogPoint}) = 4326`,
     ),
+    check('facilities_wait_days_check', sql`${table.estimatedWaitDays} is null or ${table.estimatedWaitDays} >= 0`),
+    check('facilities_merge_self_check', sql`${table.mergedIntoFacilityId} is null or ${table.mergedIntoFacilityId} <> ${table.id}`),
   ],
 );
 
@@ -450,14 +537,172 @@ export const facilitySpecialties = pgTable(
       .notNull()
       .references(() => specialties.id, { onDelete: 'cascade' }),
     treatmentStatus: treatmentStatusEnum('treatment_status').notNull().default('unknown'),
+    verificationStatus: verificationAnswerEnum('verification_status').notNull().default('unknown'),
+    active: boolean('active').notNull().default(true),
     notes: text('notes'),
     lastConfirmedAt: timestamp('last_confirmed_at', { withTimezone: true }),
     confirmingCallId: uuid('confirming_call_id').references(() => calls.id, { onDelete: 'set null' }),
     sourceMetadata: jsonb('source_metadata').$type<Record<string, unknown>>().notNull().default({}),
+    optimisticLockVersion: integer('optimistic_lock_version').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex('facility_specialty_unique_pair').on(table.facilityId, table.specialtyId)],
+  (table) => [
+    uniqueIndex('facility_specialty_unique_pair').on(table.facilityId, table.specialtyId),
+    index('facility_specialties_search_idx').on(table.specialtyId, table.active, table.verificationStatus),
+    index('facility_specialties_freshness_idx').on(table.facilityId, table.lastConfirmedAt),
+  ],
+);
+
+export const facilityDiagnosisCapabilities = pgTable(
+  'facility_diagnosis_capabilities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    facilityId: uuid('facility_id').notNull().references(() => facilities.id, { onDelete: 'cascade' }),
+    diagnosisId: uuid('diagnosis_id').notNull().references(() => diagnoses.id, { onDelete: 'cascade' }),
+    status: verificationAnswerEnum('status').notNull().default('unknown'),
+    active: boolean('active').notNull().default(true),
+    notes: text('notes'),
+    lastVerifiedAt: timestamp('last_verified_at', { withTimezone: true }),
+    sourceMetadata: jsonb('source_metadata').$type<Record<string, unknown>>().notNull().default({}),
+    optimisticLockVersion: integer('optimistic_lock_version').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('facility_diagnosis_unique_pair').on(table.facilityId, table.diagnosisId),
+    index('facility_diagnosis_search_idx').on(table.diagnosisId, table.active, table.status),
+    index('facility_diagnosis_freshness_idx').on(table.facilityId, table.lastVerifiedAt),
+  ],
+);
+
+export const facilityVerificationEvents = pgTable(
+  'facility_verification_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    facilityId: uuid('facility_id').notNull().references(() => facilities.id, { onDelete: 'restrict' }),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }).notNull(),
+    verifiedBy: uuid('verified_by').references(() => users.id, { onDelete: 'set null' }),
+    method: verificationMethodEnum('method').notNull(),
+    confidence: sourceConfidenceEnum('confidence').notNull().default('direct'),
+    contactPerson: text('contact_person'),
+    contactChannel: text('contact_channel'),
+    acceptingStatus: verificationAnswerEnum('accepting_status'),
+    specialtyId: uuid('specialty_id').references(() => specialties.id, { onDelete: 'set null' }),
+    specialtyStatus: verificationAnswerEnum('specialty_status'),
+    diagnosisId: uuid('diagnosis_id').references(() => diagnoses.id, { onDelete: 'set null' }),
+    diagnosisStatus: verificationAnswerEnum('diagnosis_status'),
+    schedulingWithinFourWeeks: verificationAnswerEnum('scheduling_within_four_weeks'),
+    urgentReferralStatus: verificationAnswerEnum('urgent_referral_status'),
+    nextAvailableDate: date('next_available_date'),
+    estimatedWaitDays: integer('estimated_wait_days'),
+    comments: text('comments'),
+    relatedCallId: uuid('related_call_id').references(() => calls.id, { onDelete: 'set null' }),
+    relatedContactAttemptId: uuid('related_contact_attempt_id'),
+    importBatchId: uuid('import_batch_id').references(() => importBatches.id, { onDelete: 'set null' }),
+    previousState: jsonb('previous_state').$type<Record<string, unknown>>().notNull().default({}),
+    resultingState: jsonb('resulting_state').$type<Record<string, unknown>>().notNull().default({}),
+    sourceMetadata: jsonb('source_metadata').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('facility_verification_history_idx').on(table.facilityId, table.verifiedAt),
+    index('facility_verification_user_idx').on(table.verifiedBy, table.verifiedAt),
+    index('facility_verification_specialty_idx').on(table.specialtyId, table.verifiedAt),
+    index('facility_verification_diagnosis_idx').on(table.diagnosisId, table.verifiedAt),
+    check('facility_verification_wait_days_check', sql`${table.estimatedWaitDays} is null or ${table.estimatedWaitDays} >= 0`),
+    check(
+      'facility_verification_has_fact_check',
+      sql`${table.acceptingStatus} is not null or ${table.specialtyStatus} is not null or ${table.diagnosisStatus} is not null or ${table.schedulingWithinFourWeeks} is not null or ${table.urgentReferralStatus} is not null or ${table.nextAvailableDate} is not null or ${table.estimatedWaitDays} is not null or nullif(trim(${table.comments}), '') is not null`,
+    ),
+  ],
+);
+
+export const facilityContactAttempts = pgTable(
+  'facility_contact_attempts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    facilityId: uuid('facility_id').notNull().references(() => facilities.id, { onDelete: 'restrict' }),
+    attemptedAt: timestamp('attempted_at', { withTimezone: true }).notNull(),
+    attemptedBy: uuid('attempted_by').references(() => users.id, { onDelete: 'set null' }),
+    method: verificationMethodEnum('method').notNull(),
+    outcome: contactOutcomeEnum('outcome').notNull(),
+    contactPerson: text('contact_person'),
+    contactChannel: text('contact_channel'),
+    comments: text('comments'),
+    relatedCallId: uuid('related_call_id').references(() => calls.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('facility_contact_history_idx').on(table.facilityId, table.attemptedAt),
+    index('facility_contact_outcome_idx').on(table.outcome, table.attemptedAt),
+  ],
+);
+
+export const reverificationAssignments = pgTable(
+  'reverification_assignments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    facilityId: uuid('facility_id').notNull().references(() => facilities.id, { onDelete: 'cascade' }),
+    assignedTo: uuid('assigned_to').references(() => users.id, { onDelete: 'set null' }),
+    assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
+    status: assignmentStatusEnum('status').notNull().default('open'),
+    reasonCodes: jsonb('reason_codes').$type<string[]>().notNull().default([]),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    completedBy: uuid('completed_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('reverification_assignments_one_open').on(table.facilityId).where(sql`${table.status} = 'open'`),
+    index('reverification_assignments_assignee_idx').on(table.assignedTo, table.status, table.createdAt),
+  ],
+);
+
+export const facilityDuplicateCandidates = pgTable(
+  'facility_duplicate_candidates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    leftFacilityId: uuid('left_facility_id').notNull().references(() => facilities.id, { onDelete: 'cascade' }),
+    rightFacilityId: uuid('right_facility_id').notNull().references(() => facilities.id, { onDelete: 'cascade' }),
+    confidence: duplicateConfidenceEnum('confidence').notNull(),
+    score: integer('score').notNull(),
+    reasonCodes: jsonb('reason_codes').$type<string[]>().notNull().default([]),
+    decision: duplicateDecisionEnum('decision').notNull().default('pending'),
+    reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewNote: text('review_note'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('facility_duplicate_pair_unique').on(table.leftFacilityId, table.rightFacilityId),
+    index('facility_duplicate_review_idx').on(table.decision, table.confidence, table.score),
+    check('facility_duplicate_order_check', sql`${table.leftFacilityId} < ${table.rightFacilityId}`),
+    check('facility_duplicate_score_check', sql`${table.score} between 0 and 100`),
+  ],
+);
+
+export const facilityMergeRecords = pgTable(
+  'facility_merge_records',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    survivorFacilityId: uuid('survivor_facility_id').notNull().references(() => facilities.id, { onDelete: 'restrict' }),
+    mergedFacilityId: uuid('merged_facility_id').notNull().references(() => facilities.id, { onDelete: 'restrict' }),
+    candidateId: uuid('candidate_id').references(() => facilityDuplicateCandidates.id, { onDelete: 'set null' }),
+    mergedBy: uuid('merged_by').references(() => users.id, { onDelete: 'set null' }),
+    reason: text('reason').notNull(),
+    restoreSnapshot: jsonb('restore_snapshot').$type<Record<string, unknown>>().notNull(),
+    undoneAt: timestamp('undone_at', { withTimezone: true }),
+    undoneBy: uuid('undone_by').references(() => users.id, { onDelete: 'set null' }),
+    undoReason: text('undo_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('facility_merge_one_active_source').on(table.mergedFacilityId).where(sql`${table.undoneAt} is null`),
+    index('facility_merge_survivor_idx').on(table.survivorFacilityId, table.createdAt),
+    check('facility_merge_distinct_check', sql`${table.survivorFacilityId} <> ${table.mergedFacilityId}`),
+  ],
 );
 
 export const importRowResults = pgTable(

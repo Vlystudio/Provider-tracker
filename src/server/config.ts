@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseFreshnessPolicy, type FreshnessPolicy } from '@/lib/provider-intelligence';
 
 export const appDataModeSchema = z.enum(['database', 'demo']);
 export const appEnvironmentSchema = z.enum(['development', 'test', 'production']);
@@ -72,6 +73,21 @@ export function resolveServerConfig(overrides: Partial<ServerConfig> = {}): Serv
 
 export function getServerConfig(): ServerConfig {
   return resolveServerConfig();
+}
+
+export function getFreshnessPolicy(): FreshnessPolicy {
+  return parseFreshnessPolicy({
+    ACCEPTING_FRESH_DAYS: process.env.VERIFICATION_ACCEPTING_FRESH_DAYS,
+    ACCEPTING_STALE_DAYS: process.env.VERIFICATION_ACCEPTING_STALE_DAYS,
+    SCHEDULING_FRESH_DAYS: process.env.VERIFICATION_SCHEDULING_FRESH_DAYS,
+    SCHEDULING_STALE_DAYS: process.env.VERIFICATION_SCHEDULING_STALE_DAYS,
+    SPECIALTY_FRESH_DAYS: process.env.VERIFICATION_SPECIALTY_FRESH_DAYS,
+    SPECIALTY_STALE_DAYS: process.env.VERIFICATION_SPECIALTY_STALE_DAYS,
+    DIAGNOSIS_FRESH_DAYS: process.env.VERIFICATION_DIAGNOSIS_FRESH_DAYS,
+    DIAGNOSIS_STALE_DAYS: process.env.VERIFICATION_DIAGNOSIS_STALE_DAYS,
+    CONTACT_FRESH_DAYS: process.env.VERIFICATION_CONTACT_FRESH_DAYS,
+    CONTACT_STALE_DAYS: process.env.VERIFICATION_CONTACT_STALE_DAYS,
+  });
 }
 
 export function resolveSecurityConfig(overrides: SecurityConfigOverrides = {}): SecurityConfig {
