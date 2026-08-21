@@ -76,9 +76,10 @@ export function EmptyState({
 }
 
 export function ResultsSummary({ count, noun, activeFilters = 0 }: { count: number; noun: string; activeFilters?: number }) {
+  const pluralNoun = /[^aeiou]y$/i.test(noun) ? `${noun.slice(0, -1)}ies` : `${noun}s`;
   return (
     <p className="text-sm text-slate-600" role="status">
-      {count} {count === 1 ? noun : `${noun}s`}
+      {count} {count === 1 ? noun : pluralNoun}
       {activeFilters ? ` · ${activeFilters} active ${activeFilters === 1 ? 'filter' : 'filters'}` : ''}
     </p>
   );

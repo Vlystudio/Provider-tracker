@@ -42,8 +42,13 @@ export default async function ReviewQueuePage({ searchParams }: { searchParams?:
   } else {
     const state = await getAppDataAdapter().getReviewQueue(principal);
     statusMessage = state.ok ? null : state.message ?? 'The queue could not be loaded.';
-    const demoRows = (state.data ?? []).filter((item) => !params.q || `${item.facility} ${item.caseId} ${item.owner}`.toLowerCase().includes(params.q.toLowerCase()));
-    data = { rows: demoRows.map((item, index) => ({ facilityId: `demo-${index}`, facilityName: item.facility, city: 'Maine', priority: { score: item.priority === 'danger' ? 80 : item.priority === 'warning' ? 50 : 25, reasons: [item.due] }, acceptingFreshness: { state: item.priority === 'danger' ? 'stale' : 'aging', ageDays: null }, assignment: { assignedName: item.owner } })), total: demoRows.length, page: 1, pageSize: 25 };
+    const demoRows = (state.data ?? [])
+      .map((item, index) => ({ facilityId: `demo-${index}`, facilityName: item.facility, city: 'Maine', priority: { score: item.priority === 'danger' ? 80 : item.priority === 'warning' ? 50 : 25, reasons: [item.due] }, acceptingFreshness: { state: item.priority === 'danger' ? 'stale' : 'aging', ageDays: null }, assignment: { assignedName: item.owner } }))
+      .filter((item) => (!params.q || `${item.facilityName} ${item.city} ${item.assignment.assignedName}`.toLowerCase().includes(params.q.toLowerCase()))
+        && (!freshness || item.acceptingFreshness.state === freshness)
+        && (params.assigned !== 'mine' || item.assignment.assignedName === principal.name))
+      .sort((left, right) => right.priority.score - left.priority.score || left.facilityName.localeCompare(right.facilityName));
+    data = { rows: demoRows, total: demoRows.length, page: 1, pageSize: 25 };
   }
   const activeFilters = [params.q, freshness, params.assigned].filter(Boolean).length;
   const totalPages = Math.max(1, Math.ceil(data.total / data.pageSize));

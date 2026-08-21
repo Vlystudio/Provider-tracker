@@ -113,8 +113,8 @@ class DemoDataAdapter implements AppDataAdapter {
     if (!parsed.success) {
       return { ok: false, dataMode: 'demo', databaseAvailable: false, message: parsed.error.issues[0]?.message ?? 'Invalid report range.', data: { ...getDemoReports(), trend: [], coverage: [], drilldown: [] } };
     }
-    const demo = getDemoReports(parsed.data.from, parsed.data.to);
-    return { ok: true, dataMode: 'demo', databaseAvailable: false, data: { ...demo, trend: [], coverage: [], drilldown: [] } };
+    const demo = getDemoReports(parsed.data.from, parsed.data.to, parsed.data.drilldown);
+    return { ok: true, dataMode: 'demo', databaseAvailable: false, data: demo };
   }
 
   async getAdminOverview(principal: Principal): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>> {

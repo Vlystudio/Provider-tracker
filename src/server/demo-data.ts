@@ -90,21 +90,77 @@ export function getDemoReviewQueue() {
   return reviewQueue;
 }
 
-export function getDemoReports(from = '2026-05-01', to = '2026-05-31') {
-  const calls = callLogRows.filter((call) => call.date >= from && call.date <= to);
-  const availabilityMet = calls.filter((call) => call.outcome.startsWith('meets availability')).length;
-  const unableToContact = calls.filter((call) => call.outcome === 'unable to contact').length;
-  const didNotMeet = calls.filter((call) => call.outcome === 'does not meet availability guidelines').length;
+export function getDemoReports(from = '2026-05-01', to = '2026-05-31', drilldown?: string) {
+  const facilities = getDemoFacilities();
+  const activeFacilities = facilities.filter((facility) => facility.recordStatus === 'Active');
+  const freshFacilities = activeFacilities.filter((facility) => facility.freshness === 'fresh');
+  const recentlyVerified = facilities.filter((facility) => facility.freshness === 'fresh' || facility.freshness === 'aging');
+  const acceptingFacilities = recentlyVerified.filter((facility) => facility.acceptingStatus === 'yes');
+  const verificationEvents = [
+    { date: '2026-05-05', facilityName: 'Brunswick Clinic', acceptingStatus: 'yes', previousAcceptingStatus: 'unknown', estimatedWaitDays: 7 },
+    { date: '2026-05-12', facilityName: 'Topsham Specialty', acceptingStatus: 'no', previousAcceptingStatus: 'yes', estimatedWaitDays: 60 },
+    { date: '2026-05-12', facilityName: 'Midcoast Center', acceptingStatus: 'unknown', previousAcceptingStatus: 'unknown', estimatedWaitDays: null },
+    { date: '2026-05-20', facilityName: 'MaineHealth Cancer Care', acceptingStatus: 'yes', previousAcceptingStatus: 'yes', estimatedWaitDays: 18 },
+    { date: '2026-05-27', facilityName: 'Brunswick Clinic', acceptingStatus: 'yes', previousAcceptingStatus: 'yes', estimatedWaitDays: null },
+  ].filter((event) => event.date >= from && event.date <= to);
+  const phoneContacts = [
+    { date: '2026-05-05', verified: true },
+    { date: '2026-05-12', verified: false },
+    { date: '2026-05-20', verified: true },
+    { date: '2026-05-27', verified: false },
+  ].filter((contact) => contact.date >= from && contact.date <= to);
+  const assignments = [
+    { date: '2026-05-05', completed: true },
+    { date: '2026-05-10', completed: true },
+    { date: '2026-05-22', completed: false },
+  ].filter((assignment) => assignment.date >= from && assignment.date <= to);
+  const successfulContacts = phoneContacts.filter((contact) => contact.verified);
+  const completedAssignments = assignments.filter((assignment) => assignment.completed);
+  const newlyAccepting = verificationEvents.filter((event) => event.acceptingStatus === 'yes' && event.previousAcceptingStatus !== 'yes');
+  const becameUnavailable = verificationEvents.filter((event) => event.acceptingStatus === 'no' && event.previousAcceptingStatus === 'yes');
+  const waitDays = verificationEvents.map((event) => event.estimatedWaitDays).filter((value): value is number => value !== null);
+  const percent = (numerator: number, denominator: number) => denominator ? `${Math.round((numerator / denominator) * 100)}%` : '—';
+  const demoDrilldown = facilities.filter((facility) => {
+    if (drilldown === 'fresh') return facility.freshness === 'fresh';
+    if (drilldown === 'accepting') return facility.acceptingStatus === 'yes' && facility.freshness !== 'never_verified';
+    if (drilldown === 'stale') return facility.freshness === 'stale';
+    if (drilldown === 'newly_accepting') return newlyAccepting.some((event) => event.facilityName === facility.facilityName);
+    if (drilldown === 'became_unavailable') return becameUnavailable.some((event) => event.facilityName === facility.facilityName);
+    return false;
+  });
+  const query = new URLSearchParams({ from, to });
+  const metricHref = (kind: string) => `/reports?${query.toString()}&drilldown=${kind}`;
   return {
     metrics: [
-      { label: 'Calls recorded', value: String(calls.length), detail: 'Calls logged in the selected period' },
-      { label: 'Availability met', value: String(availabilityMet), detail: `${availabilityMet} of ${calls.length} calls` },
-      { label: 'Unable to contact', value: String(unableToContact), detail: `${unableToContact} of ${calls.length} calls` },
-      { label: 'Did not meet', value: String(didNotMeet), detail: `${didNotMeet} of ${calls.length} calls` },
+      { label: 'Fresh accepting status', value: percent(freshFacilities.length, activeFacilities.length), detail: `${freshFacilities.length} of ${activeFacilities.length} active facilities were verified in the last 30 days`, href: metricHref('fresh') },
+      { label: 'Currently accepting', value: percent(acceptingFacilities.length, recentlyVerified.length), detail: `${acceptingFacilities.length} of ${recentlyVerified.length} recently verified facilities are accepting`, href: metricHref('accepting') },
+      { label: 'Phone contact success', value: percent(successfulContacts.length, phoneContacts.length), detail: `${successfulContacts.length} successful phone verifications out of ${phoneContacts.length} recorded phone contacts` },
+      { label: 'Reverification completed', value: percent(completedAssignments.length, assignments.length), detail: `${completedAssignments.length} of ${assignments.length} assignments created in the period were completed` },
+      { label: 'Verifications recorded', value: String(verificationEvents.length), detail: 'Verification events in the selected period' },
+      { label: 'Newly accepting', value: String(newlyAccepting.length), detail: 'Changed from unavailable or unknown to accepting', href: metricHref('newly_accepting') },
+      { label: 'Became unavailable', value: String(becameUnavailable.length), detail: 'Changed from accepting to not accepting', href: metricHref('became_unavailable') },
+      { label: 'Average wait', value: waitDays.length ? `${(waitDays.reduce((total, value) => total + value, 0) / waitDays.length).toFixed(1)} days` : '—', detail: `${waitDays.length} verification events included a wait estimate` },
     ],
     generatedAt: new Date().toISOString(),
     period: { from, to },
-    total: calls.length,
+    total: verificationEvents.length,
+    trend: [...new Set([...verificationEvents.map((event) => event.date), ...phoneContacts.map((contact) => contact.date)])].sort().map((date) => {
+      const dayContacts = phoneContacts.filter((contact) => contact.date === date);
+      const daySuccessful = dayContacts.filter((contact) => contact.verified).length;
+      return { date, verifications: verificationEvents.filter((event) => event.date === date).length, successfulContacts: daySuccessful, failedContacts: dayContacts.length - daySuccessful };
+    }),
+    coverage: [
+      { specialty: 'Cardiology', facilities: 1, fresh: 0, accepting: 0 },
+      { specialty: 'Oncology', facilities: 1, fresh: 0, accepting: 0 },
+      { specialty: 'Pulmonology', facilities: 1, fresh: 1, accepting: 1 },
+    ],
+    drilldown: demoDrilldown.map((facility) => ({
+      facilityId: facility.facilityId,
+      facilityName: facility.facilityName,
+      city: facility.city,
+      acceptingStatus: facility.acceptingStatus,
+      lastVerifiedAt: facility.lastVerifiedAt,
+    })),
   };
 }
 

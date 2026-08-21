@@ -95,7 +95,7 @@ export async function getDataQualityDashboard(
   ]);
   const metric = metricResult.rows[0];
   const metrics = [
-    { code: 'all' as const, label: 'Active records', count: Number(metric?.active_records ?? 0), href: '/data-quality' },
+    { code: 'all' as const, label: 'Active records', count: Number(metric?.active_records ?? 0), href: '/facilities?status=active' },
     { code: 'stale' as const, label: 'Stale', count: Number(metric?.stale_records ?? 0), href: '/data-quality?issue=stale' },
     { code: 'never_verified' as const, label: 'Never verified', count: Number(metric?.never_verified ?? 0), href: '/data-quality?issue=never_verified' },
     { code: 'duplicates' as const, label: 'Duplicate candidates', count: Number(metric?.duplicate_candidates ?? 0), href: '/duplicates' },
