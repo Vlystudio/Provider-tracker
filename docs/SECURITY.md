@@ -3,14 +3,14 @@
 ## Application controls
 
 - Better Auth verifies email/password credentials and stores sessions in PostgreSQL.
-- Passwords use Better Auth's scrypt implementation. The staff provisioning and reset paths require at least 14 characters with upper case, lower case, a number, and a symbol.
+- Passwords use Better Auth's scrypt implementation. User-chosen passwords require 15 to 128 characters, allow any composition and paste/password managers, and are checked locally against 3,000 common policy-compatible passwords.
 - Public registration and unused authentication endpoints are not exposed.
-- Sessions last eight hours, use database records, and are revoked on password reset, role change, or account activation change.
+- Sessions have a fixed eight-hour maximum and a 30-minute idle timeout. They use database records and are revoked on password reset/change, role change, account activation change, logout, administrator action, or user action. Users can review and revoke their other sessions.
 - Production cookies are `HttpOnly`, `Secure`, `SameSite=Lax`, host-only, and scoped to `/`.
 - Page checks, route-handler checks, and service-layer checks use the same role and permission policy.
 - User-owned authorization queries include the authenticated user ID. A mismatched ID returns `404`.
 - State-changing application routes require an approved `Origin`, JSON bodies, strict schemas, and a 16 KiB body limit.
-- Sign-in and sensitive application routes use database-backed rate limits.
+- Sign-in and sensitive application routes use database-backed rate limits. Privileged user, automation, merge, and migration actions require a login no more than 15 minutes old.
 - Authentication failures and security-sensitive account or record changes create structured audit events. IP addresses and email lookup values are HMAC-hashed before storage.
 - Facility verification, contact attempts, edits, duplicate decisions, merges, and bulk assignments use server permissions, same-origin checks, strict body schemas, rate limits, and safe audit metadata.
 - Facility and relationship writes use optimistic versions where concurrent edits would otherwise lose data.
@@ -19,13 +19,15 @@
 
 ## Browser and transport controls
 
-Responses include Content Security Policy, clickjacking protection, MIME-sniffing protection, a strict referrer policy, permissions controls, and cross-origin isolation headers. Production adds HSTS and removes the Next.js identification header. Cross-origin browser access is not enabled.
+Responses include a per-request nonce Content Security Policy without production `unsafe-inline`/`unsafe-eval`, clickjacking protection, MIME-sniffing protection, a strict referrer policy, permissions controls, and cross-origin isolation headers. Production adds HSTS and removes the Next.js identification header. Cross-origin browser access is not enabled.
 
-TLS must terminate at the application host or at a trusted reverse proxy. `AUTH_CLIENT_IP_HEADER` stays unset unless that proxy overwrites the selected header and strips values supplied by clients.
+Production accepts only its configured Host and builds redirects from the configured HTTPS origin. Forwarded host/protocol values are ignored. Client-IP and request-ID headers are trusted only in sanitized-ingress mode from an approved proxy CIDR. TLS must terminate at the application host or trusted internal proxy.
+
+Production is designed for VPN-only/private ingress. `NETWORK_ACCESS_MODE=private-vpn` is a fail-closed application setting, not evidence that a VPN or firewall exists. IT must complete `SECURITY_INFRASTRUCTURE_HANDOFF.md` before live traffic.
 
 ## Data and files
 
-Authorization numbers, provider data, diagnosis codes, notes, and reports are sensitive operational data. The web app does not provide file upload or download endpoints. Workbook intake is a local command with bounded ZIP/XML parsing, file-size and row limits, and no macro or formula execution. Source workbooks and exports are excluded from Git.
+Authorization numbers, provider data, diagnosis codes, notes, and reports are sensitive operational data. Protected migration routes and local commands accept workbooks without retaining the workbook bytes. ZIP/XML parsing has signature, entry, expanded-size, compression-ratio, row, column, cell and shared-string limits; traversal, macros, external references, encryption, DTDs and entities are rejected, and formulas are never executed. Source workbooks and exports are excluded from Git.
 
 Database credentials stay in server environment variables. The production database account should have only the permissions needed by the app. Run migrations with a separate release identity when the hosting platform supports it.
 
@@ -39,7 +41,7 @@ The deployable package set passes:
 npm audit --omit=dev --omit=optional --omit=peer
 ```
 
-The broader `npm audit --omit=dev` report currently follows Better Auth's optional `drizzle-kit` peer back to this repository's development tooling and reports four moderate findings under `@esbuild-kit` and `esbuild` (`GHSA-67mh-4wv8-2f99`). The advisory concerns an exposed esbuild development server. The production image removes development, optional, and peer-only packages and does not run an esbuild server. Do not use `npm audit fix --force`; npm currently proposes an incompatible Drizzle Kit downgrade. Upgrade Drizzle Kit when its dependency chain removes the affected package.
+The full development audit currently follows `drizzle-kit` to four moderate findings under `@esbuild-kit` and `esbuild` (`GHSA-67mh-4wv8-2f99`). The advisory concerns an exposed esbuild development server. The standalone production runtime does not contain or run that development server. Keep local development bound to loopback/private systems. Do not use `npm audit fix --force`; npm currently proposes an incompatible Drizzle Kit change. Upgrade Drizzle Kit when its dependency chain removes the affected package.
 
 ## Deployment responsibility
 

@@ -53,6 +53,8 @@ npm run lint
 npm run typecheck
 npm run build
 npm run audit:production
+npm run audit:supply-chain
+npm run audit:static-security
 npm run scan:secrets
 npm run test:performance
 npm run test:automation
@@ -105,9 +107,9 @@ npm run build
 npm start
 ```
 
-The included `Dockerfile` builds an unprivileged runtime image without development, optional, or peer-only packages. Environment values are supplied when the container starts, not during the image build.
+The included `Dockerfile` builds a pinned, unprivileged Next.js standalone runtime image. Environment values are supplied when the container starts, not during the image build. `docker-compose.production.example.yml` publishes no app or database port directly and applies read-only/non-root runtime controls; IT must adapt and validate it on the approved platform.
 
-Start with `docs/IT_HANDOFF.md`. Deployment and rollback are in `docs/DEPLOYMENT.md`; recovery is in `docs/BACKUP_RESTORE.md`; probes, logs, metrics, and alerts are in `docs/MONITORING.md`; incident steps are in `docs/INCIDENT_RUNBOOKS.md`; and the staging gate is in `docs/STAGING_ACCEPTANCE.md`. Account procedures remain in `docs/OPERATIONS.md`. Provider history, freshness, search, and merge rules are in `docs/PROVIDER_INTELLIGENCE.md`. The access model and endpoint map are in `docs/SECURITY_ARCHITECTURE.md`.
+Start with `docs/IT_HANDOFF.md` and `docs/SECURITY_INFRASTRUCTURE_HANDOFF.md`. Deployment and rollback are in `docs/DEPLOYMENT.md`; recovery is in `docs/BACKUP_RESTORE.md`; probes, logs, metrics, and alerts are in `docs/MONITORING.md`; incident steps are in `docs/INCIDENT_RUNBOOKS.md`; and the staging gate is in `docs/STAGING_ACCEPTANCE.md`. Account procedures remain in `docs/OPERATIONS.md`. Provider history, freshness, search, and merge rules are in `docs/PROVIDER_INTELLIGENCE.md`. The full security route map, attack surface, threat model, malicious-code review, OWASP matrix and ASVS matrix are under `docs/SECURITY_*`, `docs/OWASP_*` and `docs/ASVS_*`.
 
 ## Product interface
 

@@ -4,12 +4,16 @@
 
 The browser is untrusted. Cookies, route parameters, request bodies, headers, and visible role labels can all be changed by the caller. Identity comes only from a Better Auth session record read by the server. Permissions come from the role stored on the current user record.
 
-The main request path is:
+The production request path is:
 
 ```text
-browser -> Next.js proxy -> page or route handler -> authorization helper
-        -> authorized service/query -> Drizzle -> PostgreSQL
+company VPN -> private DNS -> internal TLS ingress -> Next.js proxy
+            -> page or route handler -> Better Auth -> authorization helper
+            -> authorized service/query -> Drizzle -> restricted runtime identity
+            -> private PostgreSQL/PostGIS
 ```
+
+The public internet must have no route to the ingress, application origin, or database. VPN access supplies reachability only; it does not create an application session or permission.
 
 The proxy handles early page redirects. Every protected page repeats its permission check. API route handlers return `401` or `403`, and data services assert permissions again before reading or changing sensitive rows.
 
@@ -21,7 +25,7 @@ The proxy handles early page redirects. Every protected page repeats its permiss
 - Reports: `/reports` requires `reports:read`.
 - Administrator: `/admin`, `/data-quality`, `/duplicates`, staff provisioning, role and activation changes, password resets, merges, duplicate decisions, bulk assignment, and authorization deletion.
 - User-owned: authorization reads and updates by `ura_user` include `created_by = authenticated user ID`. Administrators can read across owners.
-- Local-only operation: workbook import runs as a command and is not an HTTP upload endpoint.
+- Protected migration operation: administrators with migration permissions can preview a bounded workbook upload and explicitly apply an approved run. A local command supports controlled IT migration. Workbook bytes are not retained.
 
 ## Roles and permissions
 
@@ -55,18 +59,20 @@ New staff accounts default to `ura_user` inside the identity adapter. A protecte
 | Create staff account | database session | `admin:manage-users` | `401`, `403`, `429`, or validation `400` |
 | Change role/activation | database session | `admin:manage-users`; not self; last admin protected | `401`, `403`, `404`, or `409` |
 | Reset staff password | database session | `admin:manage-users` | `401`, `403`, `404`, or validation `400` |
+| Change own password | database session plus current password | current user; revokes other sessions | `400`, `401`, or `429` |
+| List/revoke own sessions | database session | current user and owned session; recent login for revocation | `401`, `404`, or `429` |
 
 All mutation APIs require a configured same-origin `Origin`, reject cross-site fetches, accept only JSON, reject unknown fields, and enforce a 16 KiB request limit. Better Auth also validates origins for cookie-authenticated identity requests.
 
 ## Sessions
 
-Sessions are opaque random tokens backed by PostgreSQL rows. Cookie contents do not carry trusted roles. Sessions expire after eight hours and refresh at most every 30 minutes. Cookie caching is disabled so revocation, deactivation, and role changes take effect on the next request. Logout deletes the session. Password resets, role changes, and activation changes delete every session for the target user. User deletion cascades to sessions.
+Sessions are opaque random tokens backed by PostgreSQL rows. Cookie contents do not carry trusted roles. Sessions have a fixed eight-hour maximum and a 30-minute idle timeout; bounded activity touches update the idle clock without extending absolute expiry. Cookie caching is disabled so revocation, deactivation, and role changes take effect on the next request. Logout deletes the session. Password changes/resets, role changes, and activation changes delete other or all target sessions as appropriate. Users and administrators can review safe session metadata and revoke sessions. User deletion cascades to sessions.
 
 ## Rate limits and client addresses
 
 Sign-in allows five attempts per minute for a client key. Administrative, authorization, verification, contact, merge, duplicate, and bulk-assignment mutations have separate database-backed limits and return `429` with `Retry-After`.
 
-Forwarded client addresses are ignored by default. `AUTH_CLIENT_IP_HEADER` accepts only one documented header name and should be set only when a trusted proxy overwrites that header. Stored rate-limit keys and audit addresses are HMAC values, not raw addresses.
+Forwarded client addresses are ignored by default. `AUTH_CLIENT_IP_HEADER` is accepted only when `PROXY_TRUST_MODE=sanitized-ingress` and the direct peer is within `AUTH_TRUSTED_PROXY_CIDRS`; the proxy must strip the client's version and replace it. Stored rate-limit keys and audit addresses are HMAC values, not raw addresses.
 
 ## Audit events
 
@@ -76,6 +82,6 @@ Passwords, cookies, tokens, authorization headers, reset values, and raw network
 
 ## Environment and errors
 
-Production startup requires a PostgreSQL URL, HTTPS application URL, at least one matching HTTPS trusted origin, an authentication secret of at least 32 characters, and a separate audit HMAC salt of at least 32 characters. Placeholder secrets and demo data mode are rejected.
+Production startup requires private-VPN mode, a PostgreSQL URL, an exact HTTPS application origin, matching trusted origins, explicit proxy trust settings, an authentication secret of at least 32 characters, and a separate audit HMAC salt of at least 32 characters. Placeholder secrets, demo data mode, malformed proxy CIDRs, unsafe timing values, and non-HTTPS origins are rejected.
 
 API errors use fixed public messages. Database exceptions, stack traces, paths, and environment values are not returned to callers. Server logs retain diagnostic context without credentials or tokens.

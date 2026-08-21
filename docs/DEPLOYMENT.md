@@ -3,9 +3,10 @@
 ## Production path and ownership
 
 ```text
-Browser → IT-managed HTTPS proxy/load balancer → Node.js application → IT-managed PostgreSQL/PostGIS
-                                                    │
-                                                    └→ stdout logs and protected metrics → IT monitoring
+Company VPN -> private DNS -> IT-managed HTTPS ingress -> Node.js application -> private PostgreSQL/PostGIS
+                                                          |
+                                                          +-> stdout logs and protected metrics -> IT monitoring
+Public internet -> no route to application, origin, or database
 ```
 
 This repository contains the application image, schema migrations, probes, smoke tests, and database operations commands. IT owns DNS, certificates, proxy rules, compute, PostgreSQL/PostGIS, secret storage, log collection, monitoring, backup storage, and traffic changes.
@@ -37,11 +38,11 @@ docker build \
   -t provider-tracker:0.1.0-abc1234 .
 ```
 
-Use a clean, reviewed commit and retain the image digest. The release appears in JSON logs, `/api/health`, `/api/ready`, and `X-App-Release`.
+Use a clean, reviewed commit and retain the image digest. The release appears in JSON logs and `X-App-Release`. Health and readiness response bodies stay minimal.
 
 ## Database roles
 
-Use three login roles. The database owner or managed-service administrator creates PostGIS; the application role must not own the schema.
+Use three login roles. The database owner or managed-service administrator creates PostGIS; the application role must not own the schema. Start from `config/postgres/runtime-role.sql` and adapt identifiers to local policy.
 
 ```sql
 CREATE ROLE provider_migration LOGIN;
