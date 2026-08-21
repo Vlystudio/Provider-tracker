@@ -87,6 +87,19 @@ Use TLS for remote database connections, encryption at rest, a least-privilege r
 
 Review audit retention, log monitoring, BAA coverage, and incident response with the organization's security owner before live data is loaded.
 
+## Provider-work automation
+
+Run provider automation from external scheduled infrastructure, not inside the web process:
+
+```bash
+npm run jobs:daily
+npm run jobs:weekly
+```
+
+The commands use database locks, persistent execution keys, bounded retry, and non-zero failure exits. Operators can run one dry check with `npm run jobs:run -- --job reverification_scan --dry-run`. Review the Automation page and structured logs before rerunning a failed job. Do not delete execution rows to bypass idempotency.
+
+Use `AUTOMATION.md` for rules and recovery. Use `NOTIFICATIONS.md` for recipients and deduplication. An external mail service is not required; delivery is in-app only.
+
 Use `BACKUP_RESTORE.md` for executable backup/restore steps and acceptance criteria. Use `DEPLOYMENT.md` for least-privilege roles, migration preflight, release order, and rollback. Run housekeeping from external cron/job infrastructure; its default is a read-only dry run and it never selects audit, provider history, merge, or import history for deletion.
 
 ## Phase 4 staging checks

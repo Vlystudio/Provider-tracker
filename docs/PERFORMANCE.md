@@ -27,3 +27,9 @@ LOAD_BASE_URL=http://127.0.0.1:3000 LOAD_REQUESTS=100 LOAD_CONCURRENCY=10 npm ru
 ```
 
 The script caps traffic at 500 requests and 25 workers, reporting error rate, p50, and p95 for health, readiness, sign-in, session, and provider-page paths. For production capacity planning, IT must repeat representative authenticated tests in staging while watching CPU, memory, database connections, pool waiting, and PostgreSQL query statistics.
+
+## Automation benchmark
+
+Run `npm run test:automation-performance` against a disposable database whose name ends in `_test`. It creates temporary tables, uses at least 10,000 synthetic facilities, measures the main scheduled-query shapes, and rolls back. Set `AUTOMATION_BENCHMARK_SIZE` up to 50,000 for a larger staging run.
+
+The local 10,000-facility run on 2026-08-21 measured 20.2 ms for the stale scan, 2.9 ms for quality, 28.2 ms for duplicate detection, 0.8 ms for coverage evaluation, 1.4 ms for digest generation, and 2.6 ms for 1,000 notification inserts. The local coverage case measures the indexed non-spatial filters. Staging must repeat coverage work with PostGIS distance filtering.

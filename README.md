@@ -55,6 +55,8 @@ npm run build
 npm run audit:production
 npm run scan:secrets
 npm run test:performance
+npm run test:automation
+npm run test:automation-performance
 npm run test:smoke
 ```
 
@@ -69,6 +71,8 @@ That command drops and recreates its acceptance schema in the named test databas
 The performance command also requires a disposable database ending in `_test`, with the full migration set and PostGIS. It inserts at least 10,000 synthetic facilities in one transaction and rolls the transaction back. See `docs/PERFORMANCE.md`.
 
 Operational commands include `db:preflight`, `test:postgis`, `db:backup`, `test:restore`, `db:housekeeping`, `db:audit-integrity`, `test:load`, and `verify:release`. Each command has target guards; read the linked operations documents before using it outside a disposable environment.
+
+Scheduled provider-work commands are `jobs:daily` and `jobs:weekly`. Run one dry check with `npm run jobs:run -- --job reverification_scan --dry-run`. Scheduling, locks, recovery, and alert rules are in `docs/AUTOMATION.md`; in-app notification behavior is in `docs/NOTIFICATIONS.md`.
 
 ## Workbook import
 
@@ -103,4 +107,4 @@ Start with `docs/IT_HANDOFF.md`. Deployment and rollback are in `docs/DEPLOYMENT
 
 ## Product interface
 
-The current interface rules are in `docs/DESIGN_SYSTEM.md`. The screen inventory and Figma link are in `docs/FIGMA_HANDOFF.md`. Acceptance records are in `docs/PHASE3_ACCEPTANCE.md` and `docs/PHASE4_ACCEPTANCE.md`.
+The current interface rules are in `docs/DESIGN_SYSTEM.md`. The screen inventory and Figma link are in `docs/FIGMA_HANDOFF.md`. Acceptance records are in `docs/PHASE3_ACCEPTANCE.md`, `docs/PHASE4_ACCEPTANCE.md`, `docs/PHASE5_ACCEPTANCE.md`, and `docs/PHASE6_ACCEPTANCE.md`.

@@ -10,6 +10,7 @@
 | Compute | Node.js 22 image/process, `SIGTERM`, health/readiness routing, at least two instances if availability requires | controlled restart and drain test | platform team |
 | Backup destination | encrypted, access-controlled, separate failure domain, retention job | backup job, checksum, isolated restore | database/backup team |
 | Monitoring | collect JSON stdout, scrape protected metrics, configure probes and alerts | staging alert and request-ID trace | monitoring team |
+| Scheduled jobs | invoke the daily and weekly commands after the configured local hour; retain command exit status and logs | dry run, duplicate invocation, missed-run recovery | platform team |
 | Staging | production-like PostgreSQL/PostGIS, HTTPS, dedicated fixture accounts/data | `STAGING_ACCEPTANCE.md` | platform/application teams |
 | Production | approved environment, incident contacts, change window, traffic/rollback control | deployment checklist and smoke | change owner |
 
@@ -30,6 +31,19 @@ Recommended starting pool size is 5–10 connections per instance. Confirm `inst
 - [ ] 10,000-facility benchmark passes and plans are retained
 - [ ] backup contains extension/spatial schema
 - [ ] isolated restore preserves spatial columns, indexes, and queries
+
+## Scheduled execution
+
+The app does not run background timers. Configure one approved scheduler such as cron, a Kubernetes CronJob, Windows Task Scheduler, or the hosting platform's job runner. It only needs the same production environment and network access as the web process.
+
+```bash
+npm run jobs:daily
+npm run jobs:weekly
+```
+
+Call the daily wrapper after the hour shown on the Automation page. Call the weekly wrapper after that hour on the configured weekday. It is safe to invoke either wrapper twice: stable execution keys, unique records, and PostgreSQL advisory locks prevent duplicate work.
+
+Capture stdout/stderr and alert on a non-zero exit. Do not place database credentials in the scheduler command. Supply them from the approved secret store. See `AUTOMATION.md` for missed-run limits, manual recovery, and dry-run commands.
 
 ## Approval boundary
 
