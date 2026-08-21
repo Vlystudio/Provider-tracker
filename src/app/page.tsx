@@ -5,6 +5,7 @@ import { formatDateTime, humanizeKey } from '@/lib/format';
 import { requirePagePermission } from '@/server/authorization';
 import { listAuditEvents } from '@/server/audit-log';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
+import { listOperationalChanges, listOperationalWork } from '@/server/operational-service';
 
 function reportRange(dataMode: 'database' | 'demo') {
   if (dataMode === 'demo') return { from: '2026-05-01', to: '2026-05-31' };
@@ -89,16 +90,31 @@ export default async function HomePage() {
   }
 
   const state = await adapter.getDashboard(principal);
+  let activeWork = 0;
+  let importantChanges = 0;
+  if (dataMode === 'database') {
+    try {
+      [activeWork, importantChanges] = await Promise.all([
+        listOperationalWork(principal, { assigned: principal.role === 'admin' ? 'all' : 'mine', limit: 100 }).then((rows) => rows.length),
+        listOperationalChanges(principal, { severity: 'important', limit: 100 }).then((rows) => rows.length),
+      ]);
+    } catch {
+      // The main dashboard still works when the optional automation summary is unavailable.
+    }
+  }
   const statCards = state.data?.cards ?? [];
   const recentAuthorizations = state.data?.recentAuthorizations ?? [];
   const reviewPreview = state.data?.reviewPreview ?? [];
   const actions = principal.role === 'admin'
     ? [
+        { label: 'Open work inbox', href: '/work' },
+        { label: 'Manage automation', href: '/automation' },
         { label: 'Manage staff accounts', href: '/admin' },
         { label: 'Review audit log', href: '/audit' },
         { label: 'Search providers', href: '/provider-search' },
       ]
     : [
+        { label: 'Open work inbox', href: '/work' },
         { label: 'Open authorizations', href: '/authorization-summary' },
         { label: 'Search providers', href: '/provider-search' },
         { label: 'Open review queue', href: '/review-queue' },
@@ -121,6 +137,21 @@ export default async function HomePage() {
               <p className="mt-2 text-3xl font-semibold text-slate-950">{card.value}</p>
             </div>
           ))}
+        </section>
+      ) : null}
+
+      {dataMode === 'database' ? (
+        <section className="grid gap-4 md:grid-cols-2" aria-label="Operational attention">
+          <Link href="/work" className="panel block p-4 hover:border-slate-500">
+            <p className="text-sm font-medium text-slate-700">{principal.role === 'admin' ? 'Active work' : 'My active work'}</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-950">{activeWork}</p>
+            <p className="mt-2 text-sm text-slate-600">Open the work inbox</p>
+          </Link>
+          <Link href="/changes?severity=important" className="panel block p-4 hover:border-slate-500">
+            <p className="text-sm font-medium text-slate-700">Recent important changes</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-950">{importantChanges}</p>
+            <p className="mt-2 text-sm text-slate-600">Open the change feed</p>
+          </Link>
         </section>
       ) : null}
 

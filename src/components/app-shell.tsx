@@ -7,12 +7,17 @@ import { Menu, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { can, type Permission, type UserRole } from '@/lib/access-control';
 import { SignOutButton } from './sign-out-button';
+import { NotificationIndicator } from './notification-indicator';
 
 const navItems = [
   { label: 'Dashboard', href: '/', permission: 'app:access', section: 'Workspace' },
   { label: 'Provider Search', href: '/provider-search', permission: 'operations:read', section: 'Operations' },
   { label: 'Authorizations', href: '/authorization-summary', permission: 'operations:read', section: 'Operations' },
   { label: 'Review Queue', href: '/review-queue', permission: 'operations:read', section: 'Operations' },
+  { label: 'Work Inbox', href: '/work', permission: 'work:read', section: 'Operations' },
+  { label: 'Changes', href: '/changes', permission: 'changes:read', section: 'Oversight' },
+  { label: 'Coverage Watches', href: '/coverage', permission: 'coverage:read', section: 'Oversight' },
+  { label: 'Notifications', href: '/notifications', permission: 'notifications:read', section: 'Workspace' },
   { label: 'Call Log', href: '/call-log', permission: 'operations:read', section: 'Operations' },
   { label: 'Facilities', href: '/facilities', permission: 'operations:read', section: 'Operations' },
   { label: 'Reports', href: '/reports', permission: 'reports:read', section: 'Oversight' },
@@ -20,6 +25,7 @@ const navItems = [
   { label: 'Duplicate Review', href: '/duplicates', permission: 'admin:read', section: 'System' },
   { label: 'Audit', href: '/audit', permission: 'audit:read', section: 'Oversight' },
   { label: 'Administration', href: '/admin', permission: 'admin:read', section: 'System' },
+  { label: 'Automation', href: '/automation', permission: 'automation:read', section: 'System' },
 ] satisfies Array<{ label: string; href: string; permission: Permission; section: string }>;
 
 const roleLabels: Record<UserRole, string> = {
@@ -90,6 +96,7 @@ export function AppShell({
       <header className="app-header border-b border-slate-300 bg-white">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 lg:px-6">
           <div className="flex items-center gap-3">
+            <NotificationIndicator />
             <button
               ref={menuButtonRef}
               type="button"
