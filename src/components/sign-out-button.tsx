@@ -7,26 +7,27 @@ import { authClient } from '@/lib/auth-client';
 export function SignOutButton() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
 
   async function signOut() {
     setPending(true);
+    setError('');
     const result = await authClient.signOut();
     if (result.error) {
       setPending(false);
+      setError('Sign out failed. Try again.');
       return;
     }
-    router.replace('/sign-in');
+    router.replace('/sign-in?status=signed-out');
     router.refresh();
   }
 
   return (
-    <button
-      type="button"
-      onClick={signOut}
-      disabled={pending}
-      className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
-    >
-      {pending ? 'Signing out…' : 'Sign out'}
-    </button>
+    <div className="flex flex-col items-end">
+      <button type="button" onClick={signOut} disabled={pending} className="button button-secondary">
+        {pending ? 'Signing out…' : 'Sign out'}
+      </button>
+      {error ? <span role="alert" className="mt-1 text-xs font-medium text-red-800">{error}</span> : null}
+    </div>
   );
 }

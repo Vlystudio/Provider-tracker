@@ -9,16 +9,23 @@ import { can, type Permission, type UserRole } from '@/lib/access-control';
 import { SignOutButton } from './sign-out-button';
 
 const navItems = [
-  { label: 'Dashboard', href: '/', permission: 'app:access' },
-  { label: 'New Call', href: '/new-call', permission: 'operations:write' },
-  { label: 'Call Log', href: '/call-log', permission: 'operations:read' },
-  { label: 'Provider Search', href: '/provider-search', permission: 'operations:read' },
-  { label: 'Authorization Summary', href: '/authorization-summary', permission: 'operations:read' },
-  { label: 'Review Queue', href: '/review-queue', permission: 'operations:read' },
-  { label: 'Facilities', href: '/facilities', permission: 'operations:read' },
-  { label: 'Reports', href: '/reports', permission: 'reports:read' },
-  { label: 'Admin', href: '/admin', permission: 'admin:read' },
-] satisfies Array<{ label: string; href: string; permission: Permission }>;
+  { label: 'Dashboard', href: '/', permission: 'app:access', section: 'Workspace' },
+  { label: 'Provider Search', href: '/provider-search', permission: 'operations:read', section: 'Operations' },
+  { label: 'Authorizations', href: '/authorization-summary', permission: 'operations:read', section: 'Operations' },
+  { label: 'Review Queue', href: '/review-queue', permission: 'operations:read', section: 'Operations' },
+  { label: 'Call Log', href: '/call-log', permission: 'operations:read', section: 'Operations' },
+  { label: 'Facilities', href: '/facilities', permission: 'operations:read', section: 'Operations' },
+  { label: 'Reports', href: '/reports', permission: 'reports:read', section: 'Oversight' },
+  { label: 'Audit', href: '/audit', permission: 'audit:read', section: 'Oversight' },
+  { label: 'Administration', href: '/admin', permission: 'admin:read', section: 'System' },
+] satisfies Array<{ label: string; href: string; permission: Permission; section: string }>;
+
+const roleLabels: Record<UserRole, string> = {
+  admin: 'Administrator',
+  ura_user: 'URA user',
+  report_viewer: 'Report viewer',
+  auditor: 'Auditor',
+};
 
 export function AppShell({
   children,
@@ -35,6 +42,7 @@ export function AppShell({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -43,6 +51,21 @@ export function AppShell({
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setMenuOpen(false);
+      if (event.key !== 'Tab') return;
+
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
 
     document.body.style.overflow = 'hidden';
@@ -56,9 +79,13 @@ export function AppShell({
     };
   }, [menuOpen]);
 
+  const visibleItems = navItems.filter((item) => can(user.role, item.permission));
+  const sections = [...new Set(visibleItems.map((item) => item.section))];
+
   return (
     <div className="app-shell">
-      <header className="border-b border-slate-300 bg-white">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
+      <header className="app-header border-b border-slate-300 bg-white">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 lg:px-6">
           <div className="flex items-center gap-3">
             <button
@@ -77,7 +104,10 @@ export function AppShell({
             </Link>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-slate-600 sm:inline">{user.name}</span>
+            <span className="hidden text-right text-sm text-slate-600 sm:block">
+              <span className="block font-medium text-slate-800">{user.name}</span>
+              <span className="block text-xs">{roleLabels[user.role]}</span>
+            </span>
             <SignOutButton />
           </div>
         </div>
@@ -92,16 +122,17 @@ export function AppShell({
             className="absolute inset-0 bg-slate-950/35"
           />
           <aside
+            ref={dialogRef}
             id="main-navigation"
             role="dialog"
             aria-modal="true"
             aria-label="Main menu"
-            className="relative h-full w-72 border-r border-slate-300 bg-white p-4 shadow-xl"
+            className="relative h-full w-72 overflow-y-auto border-r border-slate-300 bg-white p-4 shadow-lg"
           >
             <div className="mb-5 flex items-center justify-between border-b border-slate-200 pb-4">
               <div>
                 <p className="text-sm font-semibold text-slate-900">Provider Tracker</p>
-                <p className="text-xs text-slate-500">URA</p>
+                <p className="text-xs text-slate-500">{roleLabels[user.role]}</p>
               </div>
               <button
                 ref={closeButtonRef}
@@ -114,40 +145,47 @@ export function AppShell({
               </button>
             </div>
 
-            <nav className="space-y-1 text-sm" aria-label="Main navigation">
-              {navItems.filter((item) => can(user.role, item.permission)).map((item) => (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  onClick={() => setMenuOpen(false)}
-                  className={clsx(
-                    'block rounded-md px-3 py-2.5',
-                    pathname === item.href
-                      ? 'bg-slate-800 font-semibold text-white'
-                      : 'text-slate-700 hover:bg-slate-100',
-                  )}
-                >
-                  {item.label}
-                </Link>
+            <nav className="space-y-5 text-sm" aria-label="Main navigation">
+              {sections.map((section) => (
+                <div key={section}>
+                  <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-[0.07em] text-slate-500">{section}</p>
+                  <div className="space-y-1">
+                    {visibleItems.filter((item) => item.section === section).map((item) => (
+                      <Link
+                        key={item.label}
+                        href={item.href}
+                        onClick={() => setMenuOpen(false)}
+                        className={clsx(
+                          'block rounded px-3 py-2.5',
+                          pathname === item.href
+                            ? 'bg-slate-800 font-semibold text-white'
+                            : 'text-slate-700 hover:bg-slate-100',
+                        )}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
               ))}
             </nav>
-            <div className="mt-5 border-t border-slate-200 pt-4 text-xs text-slate-500">
-              Signed in as {user.name}
+            <div className="mt-6 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">
+              Signed in as <span className="font-medium text-slate-700">{user.name}</span>
             </div>
           </aside>
         </div>
       ) : null}
 
-      <main className="mx-auto max-w-7xl space-y-5 p-4 lg:p-6">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-7xl space-y-5 p-4 lg:p-6">
           {dataMode === 'demo' ? (
-            <div className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-              <span className="font-semibold">Sample data</span>
-              <span>Local testing only</span>
+            <div className="demo-banner flex items-center justify-between rounded border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-950">
+              <span><strong>Demo data</strong> · local testing</span>
+              <span className="hidden text-xs sm:inline">Not for operational use</span>
             </div>
           ) : null}
           {statusMessage ? (
-            <div role="status" className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              <p className="font-semibold">Database unavailable</p>
+            <div role="status" className="inline-message border-amber-300 bg-amber-50 text-amber-950">
+              <p className="font-semibold">Data could not be loaded</p>
               <p className="mt-1">{statusMessage}</p>
             </div>
           ) : null}

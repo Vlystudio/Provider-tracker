@@ -8,7 +8,9 @@ export async function proxy(request: NextRequest) {
 
   const principal = await getPrincipal(request.headers);
   if (!principal) {
-    return NextResponse.redirect(new URL('/sign-in', request.url));
+    const signInUrl = new URL('/sign-in', request.url);
+    signInUrl.searchParams.set('reason', 'required');
+    return NextResponse.redirect(signInUrl);
   }
   if (!can(principal.role, permission)) {
     return NextResponse.redirect(new URL('/forbidden', request.url));
@@ -20,6 +22,7 @@ export const config = {
   matcher: [
     '/',
     '/admin/:path*',
+    '/audit/:path*',
     '/authorization-summary/:path*',
     '/call-log/:path*',
     '/facilities/:path*',

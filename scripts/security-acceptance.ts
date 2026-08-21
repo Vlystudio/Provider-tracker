@@ -228,7 +228,9 @@ async function main() {
     !response.headers.has('access-control-allow-origin'),
   );
   response = await request('/');
-  record('Anonymous → authenticated page', 'BLOCKED', `HTTP ${response.status} → ${response.headers.get('location')}`, response.status >= 300 && response.status < 400 && response.headers.get('location')?.endsWith('/sign-in') === true);
+  const anonymousRedirect = response.headers.get('location');
+  const anonymousRedirectPath = anonymousRedirect ? new URL(anonymousRedirect, baseUrl).pathname : null;
+  record('Anonymous → authenticated page', 'BLOCKED', `HTTP ${response.status} → ${anonymousRedirect}`, response.status >= 300 && response.status < 400 && anonymousRedirectPath === '/sign-in');
   response = await request('/api/session');
   record('Anonymous → protected API', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
   response = await request('/api/auth/sign-up/email', {

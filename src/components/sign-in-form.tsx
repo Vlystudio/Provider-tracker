@@ -3,12 +3,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authClient } from '@/lib/auth-client';
+import { InlineMessage } from './ui';
 
 export function SignInForm() {
   const router = useRouter();
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [pending, setPending] = useState(false);
-  const errorRef = useRef<HTMLParagraphElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (error) errorRef.current?.focus();
@@ -17,20 +21,29 @@ export function SignInForm() {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
-    setPending(true);
-
+    setFieldErrors({});
     const form = new FormData(event.currentTarget);
     const email = String(form.get('email') ?? '').trim().toLowerCase();
     const password = String(form.get('password') ?? '');
+    const nextFieldErrors: { email?: string; password?: string } = {};
+
+    if (!email) nextFieldErrors.email = 'Enter your email address.';
+    else if (!/^\S+@\S+\.\S+$/.test(email)) nextFieldErrors.email = 'Enter a valid email address.';
+    if (!password) nextFieldErrors.password = 'Enter your password.';
+
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      if (nextFieldErrors.email) emailRef.current?.focus();
+      else passwordRef.current?.focus();
+      return;
+    }
+
+    setPending(true);
     const result = await authClient.signIn.email({ email, password, rememberMe: false });
 
     if (result.error) {
       setPending(false);
-      setError(
-        result.error.status === 429
-          ? 'Too many attempts. Wait a minute and try again.'
-          : 'The email or password was not accepted.',
-      );
+      setError(result.error.status === 429 ? 'Too many attempts. Wait a minute and try again.' : 'The email or password was not accepted.');
       return;
     }
 
@@ -39,46 +52,48 @@ export function SignInForm() {
   }
 
   return (
-    <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
-      <label className="block text-sm font-medium text-slate-700" htmlFor="email">
+    <form method="post" action="/api/auth/sign-in/email" onSubmit={submit} className="mt-6 space-y-4" noValidate>
+      <label className="form-label" htmlFor="email">
         Email
+        <input
+          ref={emailRef}
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="username"
+          required
+          disabled={pending}
+          aria-invalid={Boolean(fieldErrors.email)}
+          aria-describedby={fieldErrors.email ? 'email-error' : undefined}
+          className="form-control"
+        />
+        {fieldErrors.email ? <span id="email-error" className="form-error">{fieldErrors.email}</span> : null}
       </label>
-      <input
-        id="email"
-        name="email"
-        type="email"
-        autoComplete="username"
-        required
-        disabled={pending}
-        aria-describedby={error ? 'sign-in-error' : undefined}
-        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2"
-      />
 
-      <label className="block text-sm font-medium text-slate-700" htmlFor="password">
+      <label className="form-label" htmlFor="password">
         Password
+        <input
+          ref={passwordRef}
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+          disabled={pending}
+          aria-invalid={Boolean(fieldErrors.password)}
+          aria-describedby={fieldErrors.password ? 'password-error' : undefined}
+          className="form-control"
+        />
+        {fieldErrors.password ? <span id="password-error" className="form-error">{fieldErrors.password}</span> : null}
       </label>
-      <input
-        id="password"
-        name="password"
-        type="password"
-        autoComplete="current-password"
-        required
-        disabled={pending}
-        aria-describedby={error ? 'sign-in-error' : undefined}
-        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2"
-      />
 
       {error ? (
-        <p id="sign-in-error" ref={errorRef} role="alert" tabIndex={-1} className="text-sm text-rose-700">
-          {error}
-        </p>
+        <div ref={errorRef} tabIndex={-1}>
+          <InlineMessage tone="error" role="alert">{error}</InlineMessage>
+        </div>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-md bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60"
-      >
+      <button type="submit" disabled={pending} className="button button-primary w-full">
         {pending ? 'Signing in…' : 'Sign in'}
       </button>
     </form>

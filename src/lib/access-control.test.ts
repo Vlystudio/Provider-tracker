@@ -26,6 +26,7 @@ describe('access control policy', () => {
     expect(permissionForPage('/')).toBe('app:access');
     expect(permissionForPage('/admin')).toBe('admin:read');
     expect(permissionForPage('/reports/weekly')).toBe('reports:read');
+    expect(permissionForPage('/audit')).toBe('audit:read');
     expect(permissionForPage('/provider-search')).toBe('operations:read');
     expect(permissionForPage('/sign-in')).toBeNull();
   });
