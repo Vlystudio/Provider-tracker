@@ -19,6 +19,7 @@ import {
   toAvailabilityStatus,
   toBoolean,
   toFiniteNumber,
+  toLegacySemanticStatus,
   toScheduleStatus,
   toTreatmentStatus,
   weekStartForDate,
@@ -46,6 +47,35 @@ const TARGET_SHEETS: Record<WorkbookKind, ReadonlySet<string>> = {
     'Zip Coordinates',
   ]),
   user: new Set(['Facilities', 'Facility-Specialty Map', 'Weekly Call Log', 'Zip Coordinates']),
+};
+
+const ALLOWED_SHEETS: Record<WorkbookKind, ReadonlySet<string>> = {
+  admin: new Set([
+    ...TARGET_SHEETS.admin,
+    'Weekly Report Snapshot',
+    'Monthly Report Snapshot',
+    'Monthly Report Archive',
+    'Scheduling Trend Tracker',
+    '_Config',
+  ]),
+  user: new Set([
+    ...TARGET_SHEETS.user,
+    'Provider search',
+    'tbl30DayLookBack',
+    'Authorization Output',
+    'Lists',
+  ]),
+};
+
+const IMPORT_SCHEMA_VERSION = 'ura-workbook-v1';
+
+const REQUIRED_HEADER_GROUPS: Record<string, string[][]> = {
+  Facilities: [['Facility', 'Facility Name', 'Facility Key']],
+  'Facility-Specialty Map': [['Facility Key', 'Facility Name'], ['Specialty']],
+  'Zip Coordinates': [['Zip Code', 'Zipcode', 'Postal Code'], ['Latitude'], ['Longitude']],
+  tblWeeklyCallLog: [['Facility Name', 'Facility Key'], ['Call Date/Time', 'Call Date']],
+  'Weekly Call Log': [['Facility Name', 'Facility Key'], ['Call Date/Time', 'Call Date']],
+  'Monthly Archive': [['Facility Name', 'Facility Key'], ['Call Date/Time', 'Call Date']],
 };
 
 type RowRecord = {
@@ -128,12 +158,16 @@ function facilityFromRow(record: RowRecord, source: SourceRef, issues: ImportIss
   }
 
   const phoneRaw = nullableText(pick(record, 'Phone Number', 'Phone'));
+  const legacyStatus = nullableText(pick(record, 'Record Status', 'Status', 'Active'));
+  const normalizedLegacyStatus = cleanText(legacyStatus).toLowerCase();
   const candidate: FacilityCandidate = {
     source,
     fingerprint: stableHash('facility', identity.normalizedKey),
     ...identity,
     facilityType: scalarToText(pick(record, 'Facility Type')) || 'Hospital',
     autoFillSpecialty: toBoolean(pick(record, 'Auto Fill Specialty?', 'Auto Fill Specialty')),
+    active: !['inactive', 'archived', 'no', 'false', '0'].includes(normalizedLegacyStatus),
+    legacyStatus,
     phoneRaw,
     phoneNormalized: normalizePhone(phoneRaw),
     postalCode: normalizePostalCode(pick(record, 'Zipcode', 'ZIP Code', 'Postal Code')),
@@ -358,6 +392,12 @@ function callFromRow(
     duplicateGroupKey: stableHash('weekly_duplicate', facilityIdentity.normalizedKey, normalizedDiagnosis, weekStart),
     ...result,
     importedResultPhrase,
+    legacyAnswers: {
+      accepting: toLegacySemanticStatus(pick(record, 'Accepting New Patients')),
+      diagnosis: toLegacySemanticStatus(pick(record, 'Can Treat Diagnosis')),
+      scheduling: toLegacySemanticStatus(pick(record, 'Can Schedule Within 4 Weeks', 'Can Schedule W/in 4 Weeks')),
+      specialty: toLegacySemanticStatus(pick(record, 'Specialty Confirmed')),
+    },
     issues: localIssues,
   };
   return { scaffold: false as const, rejected: false as const, candidate, localIssues };
@@ -409,6 +449,10 @@ export async function parseWorkbook(
       counts.rowsVisited += 1;
       const source = makeSource(workbookKind, sourceFileName, sourceHash, sheetName, row.rowNumber);
       const record = rowRecord(headers.get(sheetName) ?? [], row.cells);
+
+      if (row.hidden) {
+        pushIssue(issues, [], 'hidden_source_row', 'warning', source, 'Hidden source row was included and requires migration review.');
+      }
 
       if (sheetName === 'Facilities') {
         const candidate = facilityFromRow(record, source, issues);
@@ -522,6 +566,19 @@ export async function parseWorkbook(
   if (missingSheets.length) {
     throw new Error(`${workbookKind} workbook is missing required sheets: ${missingSheets.join(', ')}`);
   }
+  const unexpectedSheets = streamResult.sheetsSeen.filter((sheet) => !ALLOWED_SHEETS[workbookKind].has(sheet));
+  if (unexpectedSheets.length) {
+    throw new Error(`${workbookKind} workbook contains unexpected sheets: ${unexpectedSheets.join(', ')}`);
+  }
+  for (const sheetName of TARGET_SHEETS[workbookKind]) {
+    const normalizedHeaders = new Set((headers.get(sheetName) ?? []).map(normalizeHeader));
+    const missingGroups = (REQUIRED_HEADER_GROUPS[sheetName] ?? []).filter(
+      (aliases) => !aliases.some((alias) => normalizedHeaders.has(normalizeHeader(alias))),
+    );
+    if (missingGroups.length) {
+      throw new Error(`${sheetName} is missing required columns: ${missingGroups.map((aliases) => aliases.join(' / ')).join(', ')}`);
+    }
+  }
 
   return {
     source: {
@@ -533,6 +590,10 @@ export async function parseWorkbook(
       importerVersion,
       sheetsSeen: streamResult.sheetsSeen,
       dateSystem: streamResult.dateSystem,
+      schemaVersion: IMPORT_SCHEMA_VERSION,
+      sheetDetails: streamResult.sheetDetails,
+      formulaCells: streamResult.formulaCells,
+      hiddenRows: streamResult.hiddenRows,
     },
     counts,
     facilities,

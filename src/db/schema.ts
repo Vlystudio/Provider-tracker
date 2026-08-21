@@ -156,6 +156,33 @@ export const importEntityTypeEnum = pgEnum('import_entity_type', [
   'line_of_business',
   'postal_code',
 ]);
+export const migrationRunStatusEnum = pgEnum('migration_run_status', [
+  'previewed',
+  'approved',
+  'running',
+  'failed',
+  'applied',
+  'reconciled',
+  'cancelled',
+  'reversed',
+]);
+export const migrationDiagnosticStatusEnum = pgEnum('migration_diagnostic_status', [
+  'open',
+  'resolved',
+  'deferred',
+  'skipped',
+]);
+export const migrationReadinessEnum = pgEnum('migration_readiness', [
+  'go',
+  'go_with_warnings',
+  'no_go',
+]);
+export const legacyActorStatusEnum = pgEnum('legacy_actor_status', [
+  'unmapped',
+  'mapped',
+  'legacy_only',
+  'ambiguous',
+]);
 export const reportSnapshotTypeEnum = pgEnum('report_snapshot_type', [
   'weekly',
   'monthly',
@@ -418,6 +445,7 @@ export const facilities = pgTable(
     active: boolean('active').notNull().default(true),
     dataQualityStatus: dataQualityStatusEnum('data_quality_status').notNull().default('clean'),
     sourceMetadata: jsonb('source_metadata').$type<Record<string, unknown>>().notNull().default({}),
+    migrationBaselineAt: timestamp('migration_baseline_at', { withTimezone: true }),
     optimisticLockVersion: integer('optimistic_lock_version').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -475,6 +503,7 @@ export const importBatches = pgTable(
     sourceSizeBytes: integer('source_size_bytes').notNull(),
     workbookKind: workbookKindEnum('workbook_kind').notNull(),
     importerVersion: text('importer_version').notNull(),
+    migrationRunId: uuid('migration_run_id').references(() => migrationRuns.id, { onDelete: 'set null' }),
     status: importBatchStatusEnum('status').notNull().default('pending'),
     counts: jsonb('counts').$type<Record<string, number>>().notNull().default({}),
     summary: jsonb('summary').$type<Record<string, unknown>>().notNull().default({}),
@@ -490,6 +519,171 @@ export const importBatches = pgTable(
   ],
 );
 
+export const migrationRuns = pgTable(
+  'migration_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    importerVersion: text('importer_version').notNull(),
+    status: migrationRunStatusEnum('status').notNull().default('previewed'),
+    releaseVersion: text('release_version').notNull(),
+    sourceManifest: jsonb('source_manifest').$type<Record<string, unknown>>().notNull().default({}),
+    previewCounts: jsonb('preview_counts').$type<Record<string, number>>().notNull().default({}),
+    applyCounts: jsonb('apply_counts').$type<Record<string, unknown>>().notNull().default({}),
+    reconciliation: jsonb('reconciliation').$type<Record<string, unknown>>().notNull().default({}),
+    readiness: migrationReadinessEnum('readiness').notNull().default('no_go'),
+    notificationBaselineAt: timestamp('notification_baseline_at', { withTimezone: true }),
+    previewedBy: uuid('previewed_by').references(() => users.id, { onDelete: 'set null' }),
+    approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+    executedBy: uuid('executed_by').references(() => users.id, { onDelete: 'set null' }),
+    reversedBy: uuid('reversed_by').references(() => users.id, { onDelete: 'set null' }),
+    failureCategory: text('failure_category'),
+    failureMessage: text('failure_message'),
+    approvalReason: text('approval_reason'),
+    reversalReason: text('reversal_reason'),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    reversedAt: timestamp('reversed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('migration_runs_status_created_idx').on(table.status, table.createdAt),
+    index('migration_runs_readiness_created_idx').on(table.readiness, table.createdAt),
+  ],
+);
+
+export const migrationSources = pgTable(
+  'migration_sources',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    migrationRunId: uuid('migration_run_id').notNull().references(() => migrationRuns.id, { onDelete: 'cascade' }),
+    workbookKind: workbookKindEnum('workbook_kind').notNull(),
+    sourceFileName: text('source_file_name').notNull(),
+    sourceHash: text('source_hash').notNull(),
+    sourceSizeBytes: integer('source_size_bytes').notNull(),
+    schemaVersion: text('schema_version').notNull(),
+    sheets: jsonb('sheets').$type<Array<Record<string, unknown>>>().notNull().default([]),
+    rowsScanned: integer('rows_scanned').notNull().default(0),
+    formulaCells: integer('formula_cells').notNull().default(0),
+    hiddenRows: integer('hidden_rows').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('migration_sources_run_hash_unique').on(table.migrationRunId, table.sourceHash),
+    index('migration_sources_hash_idx').on(table.sourceHash),
+    check('migration_sources_size_check', sql`${table.sourceSizeBytes} >= 0 and ${table.rowsScanned} >= 0 and ${table.formulaCells} >= 0 and ${table.hiddenRows} >= 0`),
+  ],
+);
+
+export const migrationDiagnostics = pgTable(
+  'migration_diagnostics',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    migrationRunId: uuid('migration_run_id').notNull().references(() => migrationRuns.id, { onDelete: 'cascade' }),
+    sourceHash: text('source_hash').notNull(),
+    workbookKind: workbookKindEnum('workbook_kind').notNull(),
+    entityType: text('entity_type').notNull(),
+    sheetName: text('sheet_name').notNull(),
+    sourceRow: integer('source_row').notNull(),
+    rowKey: text('row_key'),
+    issueCode: text('issue_code').notNull(),
+    severity: text('severity').notNull(),
+    message: text('message').notNull(),
+    suggestedAction: text('suggested_action'),
+    status: migrationDiagnosticStatusEnum('status').notNull().default('open'),
+    resolutionAction: text('resolution_action'),
+    targetEntityId: uuid('target_entity_id'),
+    resolutionNote: text('resolution_note'),
+    resolvedBy: uuid('resolved_by').references(() => users.id, { onDelete: 'set null' }),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    optimisticLockVersion: integer('optimistic_lock_version').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('migration_diagnostics_source_issue_unique').on(
+      table.migrationRunId,
+      table.sourceHash,
+      table.entityType,
+      table.sheetName,
+      table.sourceRow,
+      table.issueCode,
+    ),
+    index('migration_diagnostics_run_status_idx').on(table.migrationRunId, table.status, table.severity),
+    check('migration_diagnostics_source_row_check', sql`${table.sourceRow} >= 0`),
+    check('migration_diagnostics_severity_check', sql`${table.severity} in ('warning','error')`),
+    check('migration_diagnostics_resolution_check', sql`${table.resolutionAction} is null or ${table.resolutionAction} in ('use_existing','create_new','skip','defer')`),
+  ],
+);
+
+export const legacyActors = pgTable(
+  'legacy_actors',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    normalizedKey: text('normalized_key').notNull(),
+    initials: text('initials'),
+    displayName: text('display_name'),
+    status: legacyActorStatusEnum('status').notNull().default('unmapped'),
+    mappedUserId: uuid('mapped_user_id').references(() => users.id, { onDelete: 'set null' }),
+    sourceMetadata: jsonb('source_metadata').$type<Record<string, unknown>>().notNull().default({}),
+    mappedBy: uuid('mapped_by').references(() => users.id, { onDelete: 'set null' }),
+    mappedAt: timestamp('mapped_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('legacy_actors_normalized_key_unique').on(table.normalizedKey)],
+);
+
+export const legacyValueMappings = pgTable(
+  'legacy_value_mappings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    mappingType: text('mapping_type').notNull(),
+    sourceValue: text('source_value').notNull(),
+    normalizedValue: text('normalized_value').notNull(),
+    targetEntityId: uuid('target_entity_id'),
+    decision: text('decision').notNull().default('mapped'),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('legacy_value_mappings_type_value_unique').on(table.mappingType, table.normalizedValue),
+    check('legacy_value_mappings_type_check', sql`${table.mappingType} in ('specialty','diagnosis','actor')`),
+    check('legacy_value_mappings_decision_check', sql`${table.decision} in ('mapped','skip')`),
+  ],
+);
+
+export const migrationReconciliations = pgTable(
+  'migration_reconciliations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    migrationRunId: uuid('migration_run_id').notNull().references(() => migrationRuns.id, { onDelete: 'cascade' }),
+    sourceRows: integer('source_rows').notNull(),
+    reconciledRows: integer('reconciled_rows').notNull(),
+    importedRows: integer('imported_rows').notNull().default(0),
+    updatedRows: integer('updated_rows').notNull().default(0),
+    unchangedRows: integer('unchanged_rows').notNull().default(0),
+    skippedRows: integer('skipped_rows').notNull().default(0),
+    conflictRows: integer('conflict_rows').notNull().default(0),
+    invalidRows: integer('invalid_rows').notNull().default(0),
+    reconciliationPercent: doublePrecision('reconciliation_percent').notNull(),
+    relationshipCounts: jsonb('relationship_counts').$type<Record<string, number>>().notNull().default({}),
+    stateDistribution: jsonb('state_distribution').$type<Record<string, number>>().notNull().default({}),
+    reportComparison: jsonb('report_comparison').$type<Record<string, unknown>>().notNull().default({}),
+    discrepancies: jsonb('discrepancies').$type<Array<Record<string, unknown>>>().notNull().default([]),
+    readiness: migrationReadinessEnum('readiness').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('migration_reconciliations_run_unique').on(table.migrationRunId),
+    check('migration_reconciliations_percent_check', sql`${table.reconciliationPercent} between 0 and 100`),
+    check('migration_reconciliations_rows_check', sql`${table.reconciledRows} <= ${table.sourceRows}`),
+    check('migration_reconciliations_accounting_check', sql`${table.reconciledRows} = ${table.importedRows} + ${table.updatedRows} + ${table.unchangedRows} + ${table.skippedRows} + ${table.conflictRows} + ${table.invalidRows}`),
+  ],
+);
+
 export const calls = pgTable(
   'calls',
   {
@@ -497,6 +691,7 @@ export const calls = pgTable(
     authorizationId: uuid('authorization_id').references(() => authorizations.id, { onDelete: 'set null' }),
     facilityId: uuid('facility_id').references(() => facilities.id, { onDelete: 'set null' }),
     callerUserId: uuid('caller_user_id').references(() => users.id, { onDelete: 'set null' }),
+    legacyActorId: uuid('legacy_actor_id').references(() => legacyActors.id, { onDelete: 'set null' }),
     importBatchId: uuid('import_batch_id').references(() => importBatches.id, { onDelete: 'set null' }),
     callAt: timestamp('call_at', { withTimezone: true }).notNull(),
     callerInitialsSnapshot: text('caller_initials_snapshot'),
@@ -606,6 +801,7 @@ export const facilityVerificationEvents = pgTable(
     facilityId: uuid('facility_id').notNull().references(() => facilities.id, { onDelete: 'restrict' }),
     verifiedAt: timestamp('verified_at', { withTimezone: true }).notNull(),
     verifiedBy: uuid('verified_by').references(() => users.id, { onDelete: 'set null' }),
+    legacyActorId: uuid('legacy_actor_id').references(() => legacyActors.id, { onDelete: 'set null' }),
     method: verificationMethodEnum('method').notNull(),
     confidence: sourceConfidenceEnum('confidence').notNull().default('direct'),
     contactPerson: text('contact_person'),
@@ -648,6 +844,7 @@ export const facilityContactAttempts = pgTable(
     facilityId: uuid('facility_id').notNull().references(() => facilities.id, { onDelete: 'restrict' }),
     attemptedAt: timestamp('attempted_at', { withTimezone: true }).notNull(),
     attemptedBy: uuid('attempted_by').references(() => users.id, { onDelete: 'set null' }),
+    legacyActorId: uuid('legacy_actor_id').references(() => legacyActors.id, { onDelete: 'set null' }),
     method: verificationMethodEnum('method').notNull(),
     outcome: contactOutcomeEnum('outcome').notNull(),
     contactPerson: text('contact_person'),

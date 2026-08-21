@@ -14,6 +14,12 @@ export const permissions = [
   'coverage:manage',
   'automation:read',
   'automation:manage',
+  'migration:read',
+  'migration:preview',
+  'migration:apply',
+  'migration:review',
+  'migration:export',
+  'migration:reverse',
   'admin:read',
   'admin:manage-users',
   'admin:manage-data',
@@ -40,6 +46,7 @@ export function permissionForPage(pathname: string): Permission | null {
   if (pathname === '/') return 'app:access';
   if (pathname.startsWith('/admin')) return 'admin:read';
   if (pathname.startsWith('/automation')) return 'automation:read';
+  if (pathname.startsWith('/migration')) return 'migration:read';
   if (pathname.startsWith('/notifications')) return 'notifications:read';
   if (pathname.startsWith('/work')) return 'work:read';
   if (pathname.startsWith('/changes')) return 'changes:read';

@@ -26,6 +26,7 @@ const navItems = [
   { label: 'Audit', href: '/audit', permission: 'audit:read', section: 'Oversight' },
   { label: 'Administration', href: '/admin', permission: 'admin:read', section: 'System' },
   { label: 'Automation', href: '/automation', permission: 'automation:read', section: 'System' },
+  { label: 'Data Migration', href: '/migration', permission: 'migration:read', section: 'System' },
 ] satisfies Array<{ label: string; href: string; permission: Permission; section: string }>;
 
 const roleLabels: Record<UserRole, string> = {

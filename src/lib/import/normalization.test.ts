@@ -6,6 +6,7 @@ import {
   makeFacilityIdentity,
   normalizePhone,
   normalizePostalCode,
+  parseWorkbookDate,
   toAvailabilityStatus,
   toScheduleStatus,
   toTreatmentStatus,
@@ -47,6 +48,10 @@ describe('workbook date conversion', () => {
 
   it('uses Monday as the duplicate-detection week start', () => {
     expect(weekStartForDate(new Date('2026-05-07T14:00:00.000Z'))).toBe('2026-05-04');
+  });
+
+  it('rejects dates with an ambiguous two-digit year', () => {
+    expect(parseWorkbookDate('03/04/05', '1900')).toBeNull();
   });
 });
 

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { getResultCode, getResultPhrase } from '../domain';
 import type {
   AvailabilityStatus,
+  LegacySemanticStatus,
   ScalarCell,
   ScheduleStatus,
   TreatmentStatus,
@@ -110,6 +111,18 @@ function normalizedStatus(value: unknown): string {
     .replace(/unkown/g, 'unknown')
     .replace(/w\s*\/\s*in/g, 'within')
     .replace(/w\s*\/\s*out/g, 'without');
+}
+
+export function toLegacySemanticStatus(value: unknown): LegacySemanticStatus {
+  const status = normalizedStatus(value);
+  if (!status) return 'blank';
+  if (status === 'yes' || status === 'y' || status === 'true' || status === '1' || status.startsWith('yes ')) return 'yes';
+  if (status === 'no' || status === 'n' || status === 'false' || status === '0' || status.startsWith('no ')) return 'no';
+  if (status === 'unknown' || status === 'unk') return 'unknown';
+  if (status === 'n/a' || status === 'na' || status === 'not applicable') return 'not_applicable';
+  if (status === 'not asked' || status === 'notasked') return 'not_asked';
+  if (status.includes('unable to verify') || status.includes('unable to contact')) return 'unable_to_verify';
+  return 'unknown';
 }
 
 export function toAvailabilityStatus(value: unknown): AvailabilityStatus {
@@ -247,22 +260,26 @@ export function parseWorkbookDate(
   const match = text.match(
     /^(\d{1,4})[-\/]([0-9]{1,2})[-\/]([0-9]{1,4})(?:[ T]+(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?\s*(AM|PM)?)?$/i,
   );
-  if (!match) {
-    const parsed = new Date(text);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
+  if (!match) return null;
 
   const first = Number(match[1]);
   const second = Number(match[2]);
   const third = Number(match[3]);
-  const year = match[1].length === 4 ? first : third < 100 ? 2000 + third : third;
+  if (match[1].length !== 4 && match[3].length !== 4) return null;
+  const year = match[1].length === 4 ? first : third;
   const month = match[1].length === 4 ? second : first;
   const day = match[1].length === 4 ? third : second;
   let hour = Number(match[4] ?? 12);
   const meridiem = match[7]?.toUpperCase();
   if (meridiem === 'PM' && hour < 12) hour += 12;
   if (meridiem === 'AM' && hour === 12) hour = 0;
-  return wallTimeToDate(year, month, day, hour, Number(match[5] ?? 0), Number(match[6] ?? 0), 0, timeZone);
+  const minute = Number(match[5] ?? 0);
+  const secondValue = Number(match[6] ?? 0);
+  const validCalendarDate = year >= 1900 && year <= 2200 && month >= 1 && month <= 12 && day >= 1 && day <= 31
+    && new Date(Date.UTC(year, month - 1, day)).getUTCMonth() === month - 1
+    && new Date(Date.UTC(year, month - 1, day)).getUTCDate() === day;
+  if (!validCalendarDate || hour < 0 || hour > 23 || minute < 0 || minute > 59 || secondValue < 0 || secondValue > 59) return null;
+  return wallTimeToDate(year, month, day, hour, minute, secondValue, 0, timeZone);
 }
 
 export function weekStartForDate(date: Date, timeZone = EASTERN_TIME_ZONE): string {

@@ -12,6 +12,7 @@ import {
   facilityVerificationEvents,
   importBatches,
   importRowResults,
+  legacyActors,
   linesOfBusiness,
   postalCodeCentroids,
   referralReasons,
@@ -55,7 +56,18 @@ export type ApplyImportSummary = {
   uniquePostalCodes: number;
 };
 
-export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSummary> {
+export type ApplyImportOptions = {
+  actorId?: string | null;
+  migrationRunId?: string | null;
+  notificationBaselineAt?: Date | null;
+  simulateFailureAfterStaging?: boolean;
+  legacyActorUserIds?: Record<string, string>;
+};
+
+export async function applyImportPlan(
+  plan: ImportPlan,
+  options: ApplyImportOptions = {},
+): Promise<ApplyImportSummary> {
   const database = createDatabase();
   try {
     return await database.db.transaction(async (tx) => {
@@ -96,7 +108,7 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
         .from(users)
         .where(eq(users.email, 'system-import@local.invalid'))
         .limit(1);
-      const actorId = importIdentity[0]?.id ?? null;
+      const actorId = options.actorId ?? importIdentity[0]?.id ?? null;
       const batchIdByHash = new Map<string, string>();
 
       for (const source of plan.sources) {
@@ -112,6 +124,8 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
                 sourceSizeBytes: source.sizeBytes,
                 counts: {},
                 summary: {},
+                migrationRunId: options.migrationRunId ?? null,
+                actorId,
                 completedAt: null,
                 updatedAt: sql`now()`,
               })
@@ -128,6 +142,7 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
             sourceSizeBytes: source.sizeBytes,
             workbookKind: source.workbookKind,
             importerVersion: plan.importerVersion,
+            migrationRunId: options.migrationRunId ?? null,
             status: 'pending',
             actorId,
           })
@@ -154,7 +169,13 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
                 sheetName: row.source.sheetName,
                 sourceRow: row.source.rowNumber,
                 fingerprint: row.fingerprint,
-                status: rejected ? ('rejected' as const) : duplicate ? ('duplicate' as const) : ('imported' as const),
+                status: rejected
+                  ? ('rejected' as const)
+                  : row.status === 'skipped'
+                    ? ('skipped' as const)
+                    : duplicate
+                      ? ('duplicate' as const)
+                      : ('imported' as const),
                 rawData: row.rawData,
                 normalizedData: row.normalizedData,
                 issues: row.issues,
@@ -178,6 +199,9 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
             },
           });
       }
+      if (options.simulateFailureAfterStaging) {
+        throw new Error('Simulated migration failure after staging.');
+      }
 
       for (const batch of chunks(plan.postalCodes)) {
         await tx
@@ -191,16 +215,7 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
               source: `${postalCode.source.workbookKind}:${postalCode.source.sourceFileName}`,
             })),
           )
-          .onConflictDoUpdate({
-            target: postalCodeCentroids.zipCode,
-            set: {
-              latitude: sql`excluded.latitude`,
-              longitude: sql`excluded.longitude`,
-              geogPoint: sql`excluded.geog_point`,
-              source: sql`excluded.source`,
-              updatedAt: sql`now()`,
-            },
-          });
+          .onConflictDoNothing({ target: postalCodeCentroids.zipCode });
       }
 
       const postalCodeMap = new Map(
@@ -224,6 +239,7 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
                 displayKey: facility.displayKey,
                 facilityType: facility.facilityType,
                 autoFillSpecialty: facility.autoFillSpecialty,
+                active: facility.active,
                 phoneRaw: facility.phoneRaw,
                 phoneNormalized: facility.phoneNormalized,
                 postalCode: facility.postalCode,
@@ -249,16 +265,15 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
                   sourceHash: facility.source.sourceHash,
                   sheetName: facility.source.sheetName,
                   rowNumber: facility.source.rowNumber,
+                  legacyStatus: facility.legacyStatus,
                 },
+                migrationBaselineAt: options.notificationBaselineAt ?? null,
               };
             }),
           )
           .onConflictDoUpdate({
             target: [facilities.normalizedName, facilities.normalizedCity],
             set: {
-              displayKey: sql`excluded.display_key`,
-              facilityType: sql`excluded.facility_type`,
-              autoFillSpecialty: sql`excluded.auto_fill_specialty`,
               phoneRaw: sql`case when ${facilities.phoneVerifiedAt} is null then excluded.phone_raw else ${facilities.phoneRaw} end`,
               phoneNormalized: sql`case when ${facilities.phoneVerifiedAt} is null then excluded.phone_normalized else ${facilities.phoneNormalized} end`,
               postalCode: sql`case when ${facilities.addressVerifiedAt} is null then excluded.postal_code else ${facilities.postalCode} end`,
@@ -278,20 +293,47 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
       const initials = [
         ...new Set(plan.calls.map((call) => call.callerInitials).filter((value): value is string => Boolean(value))),
       ];
+      const currentUsers = initials.length
+        ? await tx
+            .select({ id: users.id, initials: users.initials, isActive: users.isActive })
+            .from(users)
+            .where(inArray(users.initials, initials))
+        : [];
+      const usersByInitials = new Map<string, string[]>();
+      for (const user of currentUsers) {
+        if (!user.isActive) continue;
+        const normalized = normalizeKeyPart(user.initials);
+        usersByInitials.set(normalized, [...(usersByInitials.get(normalized) ?? []), user.id]);
+      }
       for (const batch of chunks(initials)) {
         await tx
-          .insert(users)
-          .values(
-            batch.map((initialsValue) => ({
-              email: `workbook-${initialsValue.toLowerCase()}@local.invalid`,
-              name: `Workbook user ${initialsValue}`,
-              displayName: `Workbook user ${initialsValue}`,
+          .insert(legacyActors)
+          .values(batch.map((initialsValue) => {
+            const normalizedKey = normalizeKeyPart(initialsValue);
+            const reviewedUserId = options.legacyActorUserIds?.[normalizedKey];
+            const matches = reviewedUserId ? [reviewedUserId] : usersByInitials.get(normalizedKey) ?? [];
+            return {
+              normalizedKey,
               initials: initialsValue,
-              role: 'ura_user' as const,
-              isActive: false,
-            })),
-          )
-          .onConflictDoNothing({ target: users.initials });
+              displayName: `Legacy ${initialsValue}`,
+              status: matches.length === 1 ? ('mapped' as const) : matches.length > 1 ? ('ambiguous' as const) : ('legacy_only' as const),
+              mappedUserId: matches.length === 1 ? matches[0] : null,
+              sourceMetadata: { source: 'legacy_workbook' },
+              mappedBy: matches.length === 1 ? actorId : null,
+              mappedAt: matches.length === 1 ? sql`now()` : null,
+            };
+          }))
+          .onConflictDoUpdate({
+            target: legacyActors.normalizedKey,
+            set: {
+              initials: sql`excluded.initials`,
+              mappedUserId: sql`coalesce(excluded.mapped_user_id, ${legacyActors.mappedUserId})`,
+              status: sql`case when excluded.mapped_user_id is not null then 'mapped'::legacy_actor_status else ${legacyActors.status} end`,
+              mappedBy: sql`coalesce(excluded.mapped_by, ${legacyActors.mappedBy})`,
+              mappedAt: sql`coalesce(excluded.mapped_at, ${legacyActors.mappedAt})`,
+              updatedAt: sql`now()`,
+            },
+          });
       }
 
       const lobs = [...new Set(plan.calls.map((call) => call.lob).filter((value): value is string => Boolean(value)))];
@@ -346,13 +388,13 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
           .onConflictDoNothing({ target: referralReasons.normalizedLabel });
       }
 
-      const [facilityRows, specialtyRows, diagnosisRows, lobRows, reasonRows, userRows] = await Promise.all([
+      const [facilityRows, specialtyRows, diagnosisRows, lobRows, reasonRows, legacyActorRows] = await Promise.all([
         tx.select({ id: facilities.id, normalizedName: facilities.normalizedName, normalizedCity: facilities.normalizedCity }).from(facilities),
         tx.select({ id: specialties.id, normalizedName: specialties.normalizedName }).from(specialties),
         tx.select({ id: diagnoses.id, code: diagnoses.code }).from(diagnoses),
         tx.select({ id: linesOfBusiness.id, code: linesOfBusiness.code }).from(linesOfBusiness),
         tx.select({ id: referralReasons.id, normalizedLabel: referralReasons.normalizedLabel }).from(referralReasons),
-        tx.select({ id: users.id, initials: users.initials }).from(users),
+        tx.select({ id: legacyActors.id, normalizedKey: legacyActors.normalizedKey, mappedUserId: legacyActors.mappedUserId }).from(legacyActors),
       ]);
       const facilityIdByKey = new Map(
         facilityRows.map((facility) => [`${facility.normalizedName}|${facility.normalizedCity}`, facility.id]),
@@ -361,7 +403,7 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
       const diagnosisIdByCode = new Map(diagnosisRows.map((diagnosis) => [diagnosis.code, diagnosis.id]));
       const lobIdByCode = new Map(lobRows.map((lob) => [lob.code, lob.id]));
       const reasonIdByLabel = new Map(reasonRows.map((reason) => [reason.normalizedLabel, reason.id]));
-      const userIdByInitials = new Map(userRows.map((user) => [user.initials, user.id]));
+      const legacyActorByInitials = new Map(legacyActorRows.map((legacyActor) => [legacyActor.normalizedKey, legacyActor]));
 
       for (const batch of chunks(plan.facilitySpecialties)) {
         const values = batch.flatMap((mapping) => {
@@ -442,7 +484,8 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
                 ? authorizationIdByNumber.get(call.authorizationNumber) ?? null
                 : null,
               facilityId: facilityIdByKey.get(call.normalizedFacilityKey) ?? null,
-              callerUserId: call.callerInitials ? userIdByInitials.get(call.callerInitials) ?? null : null,
+              callerUserId: call.callerInitials ? legacyActorByInitials.get(normalizeKeyPart(call.callerInitials))?.mappedUserId ?? null : null,
+              legacyActorId: call.callerInitials ? legacyActorByInitials.get(normalizeKeyPart(call.callerInitials))?.id ?? null : null,
               importBatchId: batchIdByHash.get(call.source.sourceHash) ?? null,
               callAt: new Date(call.callAt),
               callerInitialsSnapshot: call.callerInitials,
@@ -479,6 +522,7 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
                 workbookKind: call.source.workbookKind,
                 logicalFingerprint: call.logicalFingerprint,
                 importedResultPhrase: call.importedResultPhrase,
+                legacyAnswers: call.legacyAnswers,
                 issues: call.issues,
               },
             })),
@@ -492,12 +536,16 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
           const facilityId = facilityIdByKey.get(call.normalizedFacilityKey);
           if (!facilityId) continue;
           const callAt = new Date(call.callAt);
-          const callerUserId = call.callerInitials ? userIdByInitials.get(call.callerInitials) ?? null : null;
+          const legacyActor = call.callerInitials
+            ? legacyActorByInitials.get(normalizeKeyPart(call.callerInitials))
+            : undefined;
+          const callerUserId = legacyActor?.mappedUserId ?? null;
           if (call.resultCode === 'unable_to_contact') {
             await tx.insert(facilityContactAttempts).values({
               facilityId,
               attemptedAt: callAt,
               attemptedBy: callerUserId,
+              legacyActorId: legacyActor?.id ?? null,
               method: 'phone',
               outcome: call.didNotLeaveVm ? 'voicemail_not_left' : 'no_answer',
               relatedCallId: record.id,
@@ -514,6 +562,7 @@ export async function applyImportPlan(plan: ImportPlan): Promise<ApplyImportSumm
             facilityId,
             verifiedAt: callAt,
             verifiedBy: callerUserId,
+            legacyActorId: legacyActor?.id ?? null,
             method: 'internal_source',
             confidence: 'secondary',
             acceptingStatus,

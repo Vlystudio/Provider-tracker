@@ -5,8 +5,16 @@ import { Unzip, UnzipInflate } from 'fflate';
 import { SaxesParser } from 'saxes';
 import type { ScalarCell } from './types';
 
-type WorkbookSheet = { name: string; relationshipId: string; entryName: string };
-type WorksheetRow = { rowNumber: number; cells: ScalarCell[] };
+type WorkbookSheet = { name: string; relationshipId: string; entryName: string; hidden: boolean };
+type WorksheetRow = { rowNumber: number; cells: ScalarCell[]; hidden: boolean; formulaCellIndexes: number[] };
+
+export type WorkbookSheetDetail = {
+  name: string;
+  hidden: boolean;
+  rowsVisited: number;
+  hiddenRows: number;
+  formulaCells: number;
+};
 
 export type WorkbookStreamOptions = {
   wantedSheets: ReadonlySet<string>;
@@ -20,6 +28,9 @@ export type WorkbookStreamResult = {
   sizeBytes: number;
   sheetsSeen: string[];
   dateSystem: '1900' | '1904';
+  sheetDetails: WorkbookSheetDetail[];
+  formulaCells: number;
+  hiddenRows: number;
 };
 
 const DEFAULT_MAX_FILE_BYTES = 100 * 1024 * 1024;
@@ -40,6 +51,7 @@ async function collectZipEntries(filePath: string, maxUncompressedBytes: number)
   let declaredBytes = 0;
   let expandedBytes = 0;
   let failure: Error | null = null;
+  const forbiddenEntries: string[] = [];
 
   const unzip = new Unzip((file) => {
     const normalizedName = file.name.replace(/\\/g, '/');
@@ -49,6 +61,10 @@ async function collectZipEntries(filePath: string, maxUncompressedBytes: number)
     if (file.compression !== 0 && file.compression !== 8) {
       failure = new Error(`Unsupported or encrypted ZIP entry: ${file.name}`);
     }
+    if (
+      /(^|\/)(vbaProject\.bin|externalLinks|embeddings|activeX|customUI)(\/|$)/i.test(normalizedName)
+      || /\.(exe|dll|com|bat|cmd|js|vbs|ps1)$/i.test(normalizedName)
+    ) forbiddenEntries.push(normalizedName);
     declaredBytes += file.originalSize ?? 0;
     if (declaredBytes > maxUncompressedBytes) {
       failure = new Error(`Workbook expands beyond the ${maxUncompressedBytes}-byte safety limit.`);
@@ -95,6 +111,9 @@ async function collectZipEntries(filePath: string, maxUncompressedBytes: number)
       `Invalid, encrypted, or unsupported XLSX ZIP container: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+  if (forbiddenEntries.length) {
+    throw new Error(`Workbook contains unsupported active or external content: ${forbiddenEntries.slice(0, 3).join(', ')}.`);
+  }
   return collected;
 }
 
@@ -102,10 +121,16 @@ function readEntryText(entry: Uint8Array, entryName: string, maxBytes = 8 * 1024
   if (entry.byteLength > maxBytes) {
     throw new Error(`Workbook metadata entry ${entryName} exceeds the ${maxBytes}-byte safety limit.`);
   }
-  return Buffer.from(entry).toString('utf8');
+  const text = Buffer.from(entry).toString('utf8');
+  if (text.slice(0, 8192).toUpperCase().includes('<!DOCTYPE')) {
+    throw new Error('Workbook XML document types are not accepted.');
+  }
+  return text;
 }
 
 function feedXml(parser: SaxesParser<{ xmlns: false; fileName: string }>, bytes: Uint8Array) {
+  const prefix = Buffer.from(bytes.subarray(0, Math.min(bytes.byteLength, 8192))).toString('utf8').toUpperCase();
+  if (prefix.includes('<!DOCTYPE')) throw new Error('Workbook XML document types are not accepted.');
   const decoder = new TextDecoder('utf-8', { fatal: true });
   const chunkSize = 64 * 1024;
   for (let index = 0; index < bytes.byteLength; index += chunkSize) {
@@ -131,6 +156,7 @@ function parseWorkbookMetadata(xml: string) {
       sheets.push({
         name: attribute(tag, 'name'),
         relationshipId: attribute(tag, 'r:id'),
+        hidden: ['hidden', 'veryHidden'].includes(attribute(tag, 'state')),
       });
     }
   });
@@ -145,10 +171,17 @@ function parseWorkbookRelationships(xml: string) {
     if (tag.name !== 'Relationship') return;
     const id = attribute(tag, 'Id');
     const target = attribute(tag, 'Target');
+    const targetMode = attribute(tag, 'TargetMode');
     if (!id || !target) return;
+    if (targetMode.toLowerCase() === 'external' || /^[a-z][a-z0-9+.-]*:/i.test(target)) {
+      throw new Error('Workbook contains an external relationship.');
+    }
     const entryName = target.startsWith('/')
       ? target.slice(1)
       : path.posix.normalize(path.posix.join('xl', target));
+    if (!entryName.startsWith('xl/') || entryName.split('/').includes('..')) {
+      throw new Error('Workbook relationship points outside the XLSX package.');
+    }
     relationships.set(id, entryName);
   });
   parser.write(xml).close();
@@ -213,7 +246,7 @@ function parseWorksheet(
   sheetName: string,
   maxRows: number,
   onRow: (row: WorksheetRow) => void,
-) {
+): Omit<WorkbookSheetDetail, 'name' | 'hidden'> {
   const parser = new SaxesParser({ xmlns: false, fileName: sheetName });
   let rowNumber = 0;
   let rowCount = 0;
@@ -222,16 +255,26 @@ function parseWorksheet(
   let currentCellType = '';
   let currentValue = '';
   let captureValue = false;
+  let rowHidden = false;
+  let currentCellHasFormula = false;
+  let formulaCellIndexes: number[] = [];
+  let hiddenRows = 0;
+  let formulaCells = 0;
 
   parser.on('opentag', (tag) => {
     if (tag.name === 'row') {
       rowNumber = Number(attribute(tag, 'r')) || rowCount + 1;
       cells = [];
+      rowHidden = attribute(tag, 'hidden') === '1' || attribute(tag, 'hidden').toLowerCase() === 'true';
+      formulaCellIndexes = [];
     } else if (tag.name === 'c' && cells) {
       const reference = attribute(tag, 'r');
       currentCellIndex = reference ? columnIndexFromReference(reference) : cells.length;
       currentCellType = attribute(tag, 't');
       currentValue = '';
+      currentCellHasFormula = false;
+    } else if (tag.name === 'f' && cells) {
+      currentCellHasFormula = true;
     } else if (cells && (tag.name === 'v' || tag.name === 't')) {
       captureValue = true;
     }
@@ -246,17 +289,23 @@ function parseWorksheet(
     if (tag.name === 'v' || tag.name === 't') captureValue = false;
     if (tag.name === 'c' && cells) {
       cells[currentCellIndex] = convertCellValue(currentCellType, currentValue, sharedStrings);
+      if (currentCellHasFormula) {
+        formulaCells += 1;
+        formulaCellIndexes.push(currentCellIndex);
+      }
       currentValue = '';
     }
     if (tag.name === 'row' && cells) {
       rowCount += 1;
+      if (rowHidden) hiddenRows += 1;
       if (rowCount > maxRows) throw new Error(`${sheetName} exceeds the ${maxRows}-row safety limit.`);
-      onRow({ rowNumber, cells });
+      onRow({ rowNumber, cells, hidden: rowHidden, formulaCellIndexes });
       cells = null;
     }
   });
 
   feedXml(parser, entry);
+  return { rowsVisited: rowCount, hiddenRows, formulaCells };
 }
 
 export async function streamWorkbook(
@@ -264,8 +313,13 @@ export async function streamWorkbook(
   options: WorkbookStreamOptions,
 ): Promise<WorkbookStreamResult> {
   const extension = path.extname(filePath).toLowerCase();
-  if (extension !== '.xlsx' && extension !== '.xlsm') {
-    throw new Error(`Unsupported workbook type: ${extension || '[none]'}. Only .xlsx and .xlsm are accepted.`);
+  if (extension !== '.xlsx') {
+    throw new Error(`Unsupported workbook type: ${extension || '[none]'}. Only macro-free .xlsx files are accepted.`);
+  }
+
+  const safeName = path.basename(filePath);
+  if (!safeName || safeName.length > 180 || /[\u0000-\u001f<>:"|?*]/.test(safeName)) {
+    throw new Error('Workbook filename is invalid.');
   }
 
   const file = await stat(filePath);
@@ -292,22 +346,34 @@ export async function streamWorkbook(
     }));
 
     const sharedStrings = parseSharedStrings(entries.get('xl/sharedStrings.xml'));
+    const sheetDetails: WorkbookSheetDetail[] = sheets.map((sheet) => ({
+      name: sheet.name,
+      hidden: sheet.hidden,
+      rowsVisited: 0,
+      hiddenRows: 0,
+      formulaCells: 0,
+    }));
     for (const sheet of sheets) {
       if (!options.wantedSheets.has(sheet.name)) continue;
       const entry = entries.get(sheet.entryName);
       if (!entry) throw new Error(`Invalid XLSX: worksheet XML is missing for ${sheet.name}.`);
-      parseWorksheet(
+      const detail = parseWorksheet(
         entry,
         sharedStrings,
         sheet.name,
         options.maxRowsPerSheet ?? DEFAULT_MAX_ROWS_PER_SHEET,
         (row) => options.onRow(sheet.name, row, { dateSystem: metadata.dateSystem }),
       );
+      const stored = sheetDetails.find((candidate) => candidate.name === sheet.name)!;
+      Object.assign(stored, detail);
     }
 
     return {
       sizeBytes: file.size,
       sheetsSeen: sheets.map((sheet) => sheet.name),
       dateSystem: metadata.dateSystem,
+      sheetDetails,
+      formulaCells: sheetDetails.reduce((sum, sheet) => sum + sheet.formulaCells, 0),
+      hiddenRows: sheetDetails.reduce((sum, sheet) => sum + sheet.hiddenRows, 0),
     };
 }

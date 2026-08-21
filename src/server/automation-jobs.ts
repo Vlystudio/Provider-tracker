@@ -191,8 +191,8 @@ async function notifyWork(client: PoolClient, work: { id: string; cycle: number 
   title: string;
   message: string;
   source: string;
-}, dryRun: boolean): Promise<number> {
-  if (!recipient || dryRun) return 0;
+}, dryRun: boolean, suppress = false): Promise<number> {
+  if (!recipient || dryRun || suppress) return 0;
   return Number(await createNotification(client, {
     recipient,
     type: `${input.workType}_ready`,
@@ -222,8 +222,11 @@ async function runReverificationScan(context: JobContext): Promise<HandlerResult
       contact_id: string | null;
       attempted_at: Date | null;
       outcome: Parameters<typeof decideFailedContactWork>[0]['outcome'] | null;
+      migration_baseline_at: Date | null;
+      updated_at: Date;
     }>(`
       SELECT f.id, f.last_verified_at, f.current_accepting_status, f.data_quality_status,
+        f.migration_baseline_at, f.updated_at,
         assignment.assigned_to, contact.id AS contact_id, contact.attempted_at, contact.outcome
       FROM facilities f
       LEFT JOIN LATERAL (
@@ -282,7 +285,8 @@ async function runReverificationScan(context: JobContext): Promise<HandlerResult
             title: 'Facility needs reverification',
             message: 'A provider record is due for review.',
             source: 'reverification_scan',
-          }, false);
+          }, false, Boolean(work.inserted && facility.migration_baseline_at
+            && facility.updated_at <= new Date(facility.migration_baseline_at.getTime() + 5 * 60_000)));
         }
       }
 
@@ -306,7 +310,8 @@ async function runReverificationScan(context: JobContext): Promise<HandlerResult
               title: followUp.workType === 'data_quality' ? 'Phone information needs review' : 'Contact follow-up is due',
               message: followUp.workType === 'data_quality' ? 'A failed contact points to a phone data issue.' : 'A provider contact attempt needs follow-up.',
               source: 'failed_contact_scan',
-            }, false);
+            }, false, Boolean(work.inserted && facility.migration_baseline_at
+              && facility.updated_at <= new Date(facility.migration_baseline_at.getTime() + 5 * 60_000)));
           }
         }
       }
@@ -347,8 +352,8 @@ async function runDataQualityScan(context: JobContext): Promise<HandlerResult> {
   const admin = (await systemRecipients(context.client, ['admin']))[0];
   let offset = 0;
   while (true) {
-    const result = await context.client.query<{ id: string; phone_normalized: string | null; latitude: number | null; longitude: number | null; data_quality_status: string }>(`
-      SELECT id, phone_normalized, latitude, longitude, data_quality_status
+    const result = await context.client.query<{ id: string; phone_normalized: string | null; latitude: number | null; longitude: number | null; data_quality_status: string; migration_baseline_at: Date | null; updated_at: Date }>(`
+      SELECT id, phone_normalized, latitude, longitude, data_quality_status, migration_baseline_at, updated_at
       FROM facilities WHERE active = true AND merged_into_facility_id IS NULL ORDER BY id LIMIT $1 OFFSET $2`, [settings.batchSize, offset]);
     if (!result.rows.length) break;
     for (const facility of result.rows) {
@@ -378,7 +383,8 @@ async function runDataQualityScan(context: JobContext): Promise<HandlerResult> {
           title: 'Provider data needs review',
           message: 'A provider record has missing or flagged information.',
           source: 'data_quality_scan',
-        }, false);
+        }, false, Boolean(work.inserted && facility.migration_baseline_at
+          && facility.updated_at <= new Date(facility.migration_baseline_at.getTime() + 5 * 60_000)));
       }
     }
     offset += result.rows.length;
@@ -387,7 +393,7 @@ async function runDataQualityScan(context: JobContext): Promise<HandlerResult> {
   if (!context.dryRun) {
     const resolved = await context.client.query<{ target_id: string; id: string; cycle: number }>(`
       UPDATE operational_work_items w SET status='completed', completed_at=now(), completed_by=NULL,
-        optimistic_lock_version=optimistic_lock_version+1, updated_at=now()
+        optimistic_lock_version=w.optimistic_lock_version+1, updated_at=now()
       FROM facilities f WHERE w.target_type='facility' AND w.target_id=f.id AND w.source='data_quality_scan'
         AND w.status IN ('open','assigned','in_progress','blocked') AND f.phone_normalized IS NOT NULL
         AND f.latitude IS NOT NULL AND f.longitude IS NOT NULL AND f.data_quality_status <> 'needs_review'
@@ -413,10 +419,12 @@ async function runDuplicateScan(context: JobContext): Promise<HandlerResult> {
   const settings = await loadSettings(context.client);
   const counts = emptyJobCounts();
   const admin = (await systemRecipients(context.client, ['admin']))[0];
-  const pairs = await context.client.query<{ left_id: string; right_id: string; same_phone: boolean; same_name_city: boolean }>(`
+  const pairs = await context.client.query<{ left_id: string; right_id: string; same_phone: boolean; same_name_city: boolean; left_baseline: Date | null; right_baseline: Date | null; left_updated: Date; right_updated: Date }>(`
     SELECT l.id AS left_id, r.id AS right_id,
       (l.phone_normalized IS NOT NULL AND l.phone_normalized = r.phone_normalized) AS same_phone,
-      (l.normalized_name = r.normalized_name AND l.normalized_city = r.normalized_city) AS same_name_city
+      (l.normalized_name = r.normalized_name AND l.normalized_city = r.normalized_city) AS same_name_city,
+      l.migration_baseline_at AS left_baseline, r.migration_baseline_at AS right_baseline,
+      l.updated_at AS left_updated, r.updated_at AS right_updated
     FROM facilities l JOIN facilities r ON l.id < r.id AND (
       (l.phone_normalized IS NOT NULL AND l.phone_normalized = r.phone_normalized)
       OR (l.normalized_name = r.normalized_name AND l.normalized_city = r.normalized_city)
@@ -457,7 +465,9 @@ async function runDuplicateScan(context: JobContext): Promise<HandlerResult> {
     counts.created += await notifyWork(context.client, work, admin, {
       workType: 'duplicate_review', priority: confidence === 'exact' ? 'important' : 'attention',
       title: 'Possible duplicate provider records', message: 'A provider record pair is ready for review.', source: 'duplicate_scan',
-    }, false);
+    }, false, Boolean(work.inserted && pair.left_baseline && pair.right_baseline
+      && pair.left_updated <= new Date(pair.left_baseline.getTime() + 5 * 60_000)
+      && pair.right_updated <= new Date(pair.right_baseline.getTime() + 5 * 60_000)));
   }
   return { counts, metadata: { batchSize: settings.batchSize, dryRun: context.dryRun } };
 }

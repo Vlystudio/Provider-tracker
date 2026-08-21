@@ -12,6 +12,14 @@ export type ImportEntityType =
 export type AvailabilityStatus = 'yes' | 'no' | 'unknown' | 'not_applicable';
 export type TreatmentStatus = AvailabilityStatus | 'unable_to_tell_without_triage';
 export type ScheduleStatus = TreatmentStatus | 'urgent_referral_required';
+export type LegacySemanticStatus =
+  | 'yes'
+  | 'no'
+  | 'unknown'
+  | 'blank'
+  | 'not_asked'
+  | 'unable_to_verify'
+  | 'not_applicable';
 export type ImportRowStatus = 'staged' | 'imported' | 'skipped' | 'rejected' | 'duplicate';
 export type ScalarCell = string | number | boolean | null;
 
@@ -51,6 +59,8 @@ export type FacilityCandidate = {
   displayKey: string;
   facilityType: string;
   autoFillSpecialty: boolean;
+  active: boolean;
+  legacyStatus: string | null;
   phoneRaw: string | null;
   phoneNormalized: string | null;
   postalCode: string | null;
@@ -115,6 +125,12 @@ export type CallCandidate = {
     | 'meets_availability_guidelines_urgent';
   resultPhrase: string;
   importedResultPhrase: string | null;
+  legacyAnswers: {
+    accepting: LegacySemanticStatus;
+    diagnosis: LegacySemanticStatus;
+    scheduling: LegacySemanticStatus;
+    specialty: LegacySemanticStatus;
+  };
   issues: string[];
 };
 
@@ -127,6 +143,16 @@ export type WorkbookSource = {
   importerVersion: string;
   sheetsSeen: string[];
   dateSystem: '1900' | '1904';
+  schemaVersion: string;
+  sheetDetails: Array<{
+    name: string;
+    hidden: boolean;
+    rowsVisited: number;
+    hiddenRows: number;
+    formulaCells: number;
+  }>;
+  formulaCells: number;
+  hiddenRows: number;
 };
 
 export type WorkbookParseCounts = {
