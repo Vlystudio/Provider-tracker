@@ -116,9 +116,9 @@ export function UserManagement({ initialUsers, currentUserId }: { initialUsers: 
             <input className="form-control" name="email" type="email" required autoComplete="off" />
           </label>
           <label className="form-label">
-            Temporary password
-            <input className="form-control" name="password" type="password" required minLength={14} autoComplete="new-password" aria-describedby="new-account-password-help" />
-            <span id="new-account-password-help" className="form-help">At least 14 characters with upper/lowercase, a number, and a symbol.</span>
+            Starting password
+            <input className="form-control" name="password" type="password" required minLength={15} maxLength={128} autoComplete="new-password" aria-describedby="new-account-password-help" />
+            <span id="new-account-password-help" className="form-help">Use at least 15 characters. Password managers and pasted passwords are supported.</span>
           </label>
           <label className="form-label">
             Role

@@ -8,7 +8,7 @@ import {
 } from '@/lib/automation-config';
 import { automationSettings } from '@/db/schema';
 import { recordAuditEvent } from './audit';
-import { assertPermission, type Principal } from './authorization';
+import { assertPermission, assertRecentAuthentication, type Principal } from './authorization';
 import { requireDatabaseClient } from './database';
 
 export { automationSettingsSchema, defaultAutomationSettings };
@@ -22,6 +22,7 @@ export async function getAutomationSettings(): Promise<AutomationSettings> {
 
 export async function saveAutomationSettings(principal: Principal, value: unknown, request?: Request): Promise<AutomationSettings> {
   assertPermission(principal, 'automation:manage');
+  assertRecentAuthentication(principal);
   const parsed = automationSettingsSchema.parse(value);
   const db = requireDatabaseClient();
   const [before] = await db.select().from(automationSettings).where(eq(automationSettings.scope, 'global')).limit(1);

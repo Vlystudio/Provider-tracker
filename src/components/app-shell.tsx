@@ -18,6 +18,7 @@ const navItems = [
   { label: 'Changes', href: '/changes', permission: 'changes:read', section: 'Oversight' },
   { label: 'Coverage Watches', href: '/coverage', permission: 'coverage:read', section: 'Oversight' },
   { label: 'Notifications', href: '/notifications', permission: 'notifications:read', section: 'Workspace' },
+  { label: 'Account security', href: '/account', permission: 'app:access', section: 'Workspace' },
   { label: 'Call Log', href: '/call-log', permission: 'operations:read', section: 'Operations' },
   { label: 'Facilities', href: '/facilities', permission: 'operations:read', section: 'Operations' },
   { label: 'Reports', href: '/reports', permission: 'reports:read', section: 'Oversight' },

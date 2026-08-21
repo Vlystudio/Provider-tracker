@@ -24,7 +24,7 @@ import {
   verificationAnswers,
   type VerificationAnswer,
 } from '@/lib/provider-intelligence';
-import { assertPermission, type Principal } from './authorization';
+import { assertPermission, assertRecentAuthentication, type Principal } from './authorization';
 import { buildAuditEvent } from './audit';
 import { getFreshnessPolicy } from './config';
 import { measureOperation } from './metrics';
@@ -568,6 +568,7 @@ export async function mergeFacilities(
   request?: Request,
 ) {
   assertPermission(principal, 'admin:manage-data');
+  assertRecentAuthentication(principal);
   const value = facilityMergeInputSchema.parse(input);
   const db = requireDatabaseClient();
   return db.transaction(async (tx) => {

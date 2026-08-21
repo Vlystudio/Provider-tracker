@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 30
     services:
       postgres:
-        image: postgis/postgis:16-3.4
+        image: postgis/postgis:16-3.4@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
         env:
           POSTGRES_DB: provider_tracker_ci_test
           POSTGRES_USER: postgres
@@ -30,6 +30,7 @@ jobs:
       APP_ENV: test
       APP_DATA_MODE: database
       DATABASE_URL: postgresql://postgres:ci-only-password@127.0.0.1:5432/provider_tracker_ci_test
+      SECURITY_TEST_DATABASE_URL: postgresql://postgres:ci-only-password@127.0.0.1:5432/provider_tracker_ci_test
       BETTER_AUTH_URL: http://127.0.0.1:3100
       BETTER_AUTH_SECRET: ci-only-auth-secret-with-at-least-32-characters
       AUTH_TRUSTED_ORIGINS: http://127.0.0.1:3100
@@ -37,14 +38,18 @@ jobs:
       TARGET_ENVIRONMENT: test
       BENCHMARK_SAMPLES: 3
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
+      - run: npm run audit:supply-chain
       - run: npm ci
       - run: npm run verify:ci
       - run: npm run db:migrate
+      - run: npm run test:database-security
       - run: npm run test:migration
       - run: npm run test:migration-performance
       - run: npm run db:preflight
@@ -54,3 +59,28 @@ jobs:
       - run: npm run test:automation
       - run: npm run db:audit-integrity
       - run: npm run test:restore
+      - run: npm sbom --omit=dev --sbom-format cyclonedx > provider-tracker-sbom.cdx.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: provider-tracker-sbom
+          path: provider-tracker-sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+  container-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          persist-credentials: false
+      - run: docker build --tag provider-tracker:${{ github.sha }} .
+      - uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: provider-tracker:${{ github.sha }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: false
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          scanners: vuln,secret,misconfig

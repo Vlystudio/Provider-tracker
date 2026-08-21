@@ -50,6 +50,12 @@ describe('XLSX package safety', () => {
     const filePath = await workbookFile(entries);
     await expect(streamWorkbook(filePath, { wantedSheets: new Set(), onRow: () => undefined }))
       .rejects.toThrow('document types are not accepted');
+
+    const delayed = baseEntries();
+    delayed['xl/worksheets/sheet1.xml'] = `<?xml version="1.0"?><!--${'x'.repeat(9_000)}--><!DOCTYPE worksheet [<!ENTITY x "unsafe">]><worksheet><sheetData/></worksheet>`;
+    const delayedPath = await workbookFile(delayed);
+    await expect(streamWorkbook(delayedPath, { wantedSheets: new Set(['Facilities']), onRow: () => undefined }))
+      .rejects.toThrow('document types are not accepted');
   });
 
   it('reports hidden rows and formula cells without executing formulas', async () => {
@@ -69,5 +75,60 @@ describe('XLSX package safety', () => {
       .rejects.toThrow('limit is 10');
     await expect(streamWorkbook(filePath, { wantedSheets: new Set(), onRow: () => undefined, maxUncompressedBytes: 20 }))
       .rejects.toThrow('safety limit');
+  });
+
+  it('rejects a renamed non-ZIP file and invalid numeric limits', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'xlsx-safety-'));
+    temporaryDirectories.push(directory);
+    const invalidPath = path.join(directory, 'renamed.xlsx');
+    await writeFile(invalidPath, 'not an xlsx package');
+    await expect(streamWorkbook(invalidPath, { wantedSheets: new Set(), onRow: () => undefined }))
+      .rejects.toThrow('ZIP file signature is missing');
+
+    const validPath = await workbookFile(baseEntries());
+    await expect(streamWorkbook(validPath, {
+      wantedSheets: new Set(),
+      onRow: () => undefined,
+      maxRowsPerSheet: Number.NaN,
+    })).rejects.toThrow('maxRowsPerSheet must be an integer');
+  });
+
+  it('limits ZIP entry count and expansion ratio', async () => {
+    const filePath = await workbookFile({ ...baseEntries(), 'docProps/core.xml': 'metadata' });
+    await expect(streamWorkbook(filePath, {
+      wantedSheets: new Set(),
+      onRow: () => undefined,
+      maxZipEntries: 2,
+    })).rejects.toThrow('more than 2 ZIP entries');
+
+    const compressedPath = await workbookFile({
+      ...baseEntries(),
+      'xl/sharedStrings.xml': `<sst><si><t>${'A'.repeat(20_000)}</t></si></sst>`,
+    });
+    await expect(streamWorkbook(compressedPath, {
+      wantedSheets: new Set(),
+      onRow: () => undefined,
+      maxCompressionRatio: 2,
+    })).rejects.toThrow('compression ratio limit');
+  });
+
+  it('limits worksheet width and cell length', async () => {
+    const wide = baseEntries();
+    wide['xl/worksheets/sheet1.xml'] = '<worksheet><sheetData><row r="1"><c r="C1" t="str"><v>x</v></c></row></sheetData></worksheet>';
+    const widePath = await workbookFile(wide);
+    await expect(streamWorkbook(widePath, {
+      wantedSheets: new Set(['Facilities']),
+      onRow: () => undefined,
+      maxColumnsPerRow: 2,
+    })).rejects.toThrow('column safety limit');
+
+    const long = baseEntries();
+    long['xl/worksheets/sheet1.xml'] = '<worksheet><sheetData><row r="1"><c r="A1" t="str"><v>too-long</v></c></row></sheetData></worksheet>';
+    const longPath = await workbookFile(long);
+    await expect(streamWorkbook(longPath, {
+      wantedSheets: new Set(['Facilities']),
+      onRow: () => undefined,
+      maxCellCharacters: 4,
+    })).rejects.toThrow('cell length limit');
   });
 });

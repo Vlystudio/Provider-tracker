@@ -36,7 +36,7 @@ import type { ImportIssue, ImportPlan, WorkbookKind } from '@/lib/import/types';
 import { parseWorkbook } from '@/lib/import/workbook-parser';
 import { getReleaseIdentifier } from './release';
 import { getDatabasePool, requireDatabaseClient } from './database';
-import type { Principal } from './authorization';
+import { assertRecentAuthentication, type Principal } from './authorization';
 import { buildAuditEvent } from './audit';
 
 const MAX_REQUEST_BYTES = 48 * 1024 * 1024;
@@ -453,6 +453,7 @@ async function finalReconciliation(
 }
 
 export async function applyMigration(principal: Principal, runId: string, workbooks: UploadedWorkbook[], input: z.infer<typeof applyMigrationSchema>, request?: Request) {
+  assertRecentAuthentication(principal);
   validatedMigrationId(runId);
   const db = requireDatabaseClient();
   const current = await db.select().from(migrationRuns).where(eq(migrationRuns.id, runId)).limit(1);
@@ -556,6 +557,7 @@ export async function exportMigrationDiagnostics(runId: string) {
 }
 
 export async function assessOrReverseMigration(principal: Principal, runId: string, input: z.infer<typeof reversalSchema>, request?: Request) {
+  assertRecentAuthentication(principal);
   validatedMigrationId(runId);
   if (input.confirmRunId !== runId) throw new MigrationServiceError('Run confirmation does not match.', 409);
   const pool = getDatabasePool();

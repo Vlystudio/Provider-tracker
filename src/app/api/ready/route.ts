@@ -1,7 +1,6 @@
 import { getServerConfig } from '@/server/config';
 import { getDatabaseReadiness } from '@/server/database';
 import { logEvent } from '@/server/logger';
-import { getReleaseIdentifier } from '@/server/release';
 import { requestIdFromHeaders } from '@/server/request-context';
 import { getRuntimeState } from '@/server/runtime-state';
 
@@ -24,13 +23,13 @@ export async function GET(request: Request) {
     const ready = Object.values(checks).every(Boolean);
     if (!ready) logEvent('warn', 'runtime.not-ready', { requestId, checks });
     return Response.json(
-      { status: ready ? 'ready' : 'not_ready', release: getReleaseIdentifier(), checks },
+      { status: ready ? 'ready' : 'not_ready' },
       { status: ready ? 200 : 503, headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {
     logEvent('error', 'runtime.readiness-error', { requestId, error });
     return Response.json(
-      { status: 'not_ready', release: getReleaseIdentifier(), checks: { configuration: false } },
+      { status: 'not_ready' },
       { status: 503, headers: { 'Cache-Control': 'no-store' } },
     );
   }

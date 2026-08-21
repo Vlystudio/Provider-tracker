@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z, ZodError } from 'zod';
 import { automationJobTypes } from '@/lib/automation';
 import { recordAuditEventBestEffort } from '@/server/audit';
-import { authorizationErrorResponse, requireRequestPermission } from '@/server/authorization';
+import { assertRecentAuthentication, authorizationErrorResponse, requireRequestPermission } from '@/server/authorization';
 import { runAutomationJob } from '@/server/automation-runner';
 import { enforceDatabaseRateLimit, rateLimitErrorResponse } from '@/server/rate-limit';
 import { enforceSameOrigin, readJsonBody, requestSecurityErrorResponse } from '@/server/request-security';
@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   try {
     enforceSameOrigin(request);
     principal = await requireRequestPermission(request.headers, 'automation:manage');
+    assertRecentAuthentication(principal);
     await enforceDatabaseRateLimit(principal.id, 'automation-manual-run', { max: 10, windowSeconds: 60 });
     const input = inputSchema.parse(await readJsonBody(request));
     const result = await runAutomationJob(input.jobType, {

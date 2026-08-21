@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { hashPassword } from 'better-auth/crypto';
 import { strToU8, zipSync } from 'fflate';
@@ -7,7 +8,7 @@ import { Pool } from 'pg';
 
 const databaseUrl = process.env.SECURITY_TEST_DATABASE_URL?.trim();
 const baseUrl = process.env.SECURITY_TEST_BASE_URL?.trim() || 'http://127.0.0.1:3100';
-const publicOrigin = process.env.SECURITY_TEST_PUBLIC_ORIGIN?.trim() || 'https://provider-tracker.test';
+const publicOrigin = process.env.SECURITY_TEST_PUBLIC_ORIGIN?.trim() || `https://${new URL(baseUrl).host}`;
 if (!databaseUrl) throw new Error('SECURITY_TEST_DATABASE_URL is required.');
 if (!publicOrigin.startsWith('https://')) throw new Error('SECURITY_TEST_PUBLIC_ORIGIN must use HTTPS.');
 
@@ -27,12 +28,17 @@ const runtimeEnvironment: NodeJS.ProcessEnv = {
   AUTH_TRUSTED_ORIGINS: publicOrigin,
   AUDIT_LOG_IP_SALT: randomBytes(48).toString('base64url'),
   AUTH_CLIENT_IP_HEADER: 'x-real-ip',
+  AUTH_TRUSTED_PROXY_CIDRS: '127.0.0.1/32',
+  NETWORK_ACCESS_MODE: 'private-vpn',
+  PROXY_TRUST_MODE: 'sanitized-ingress',
+  HOSTNAME: new URL(baseUrl).hostname,
+  PORT: new URL(baseUrl).port,
 };
 Object.assign(process.env, runtimeEnvironment);
 
 const pool = new Pool({ connectionString: databaseUrl });
 const results: Array<{ scenario: string; expected: string; actual: string; pass: boolean }> = [];
-const runtime = { server: null as ChildProcess | null };
+const runtime = { server: null as ChildProcess | null, stderr: '' };
 
 function record(scenario: string, expected: string, actual: string, pass: boolean) {
   results.push({ scenario, expected, actual, pass });
@@ -74,9 +80,27 @@ async function request(
   options: RequestInit & { cookie?: string; clientIp?: string } = {},
 ) {
   const headers = new Headers(options.headers);
+  if (!headers.has('host')) headers.set('host', new URL(publicOrigin).host);
   if (options.cookie) headers.set('cookie', options.cookie);
   if (options.clientIp) headers.set('x-real-ip', options.clientIp);
   return fetch(`${baseUrl}${path}`, { ...options, headers, redirect: 'manual' });
+}
+
+async function requestWithRawHost(path: string, host: string, headers: Record<string, string> = {}) {
+  return new Promise<{ status: number; location: string | null }>((resolve, reject) => {
+    const outgoing = httpRequest(new URL(path, baseUrl), {
+      method: 'GET',
+      headers: { ...headers, host },
+    }, (incoming) => {
+      incoming.resume();
+      incoming.on('end', () => resolve({
+        status: incoming.statusCode ?? 0,
+        location: typeof incoming.headers.location === 'string' ? incoming.headers.location : null,
+      }));
+    });
+    outgoing.on('error', reject);
+    outgoing.end();
+  });
 }
 
 async function mutation(path: string, cookie: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown) {
@@ -93,10 +117,11 @@ async function mutation(path: string, cookie: string, method: 'POST' | 'PATCH' |
   });
 }
 
-async function signIn(email: string, accountPassword: string, clientIp: string) {
+async function signIn(email: string, accountPassword: string, clientIp: string, cookie?: string) {
   const response = await request('/api/auth/sign-in/email', {
     method: 'POST',
     clientIp,
+    cookie,
     headers: {
       origin: publicOrigin,
       'sec-fetch-site': 'same-origin',
@@ -109,16 +134,24 @@ async function signIn(email: string, accountPassword: string, clientIp: string) 
 
 async function waitForServer() {
   const deadline = Date.now() + 60_000;
+  let lastStatus: number | null = null;
   while (Date.now() < deadline) {
+    if (runtime.server?.exitCode !== null) {
+      throw new Error(`The production server exited before readiness. ${runtime.stderr.slice(0, 1_000)}`);
+    }
     try {
-      const response = await fetch(`${baseUrl}/sign-in`);
+      const response = await request('/sign-in');
+      lastStatus = response.status;
       if (response.status === 200) return;
+      if (response.status >= 400) {
+        throw new Error(`The production server returned HTTP ${response.status} during readiness. ${(await response.text()).slice(0, 500)} ${runtime.stderr.slice(0, 1_000)}`);
+      }
     } catch {
       // The server is still starting.
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error('The production server did not become ready within 60 seconds.');
+  throw new Error(`The production server did not become ready within 60 seconds. Last HTTP status: ${lastStatus ?? 'none'}. ${runtime.stderr.slice(0, 1_000)}`);
 }
 
 async function createTestSchema() {
@@ -483,15 +516,14 @@ async function main() {
   const workA = workFixtures.rows.find((row) => row.assigned_to === userA.id)!;
   const workB = workFixtures.rows.find((row) => row.assigned_to === userB.id)!;
 
-  const nextExecutable = fileURLToPath(new URL('../node_modules/next/dist/bin/next', import.meta.url));
-  runtime.server = spawn(process.execPath, [nextExecutable, 'start', '-H', '127.0.0.1', '-p', new URL(baseUrl).port], {
+  const standaloneServer = fileURLToPath(new URL('../.next/standalone/server.js', import.meta.url));
+  runtime.server = spawn(process.execPath, [standaloneServer], {
     cwd: process.cwd(),
     env: runtimeEnvironment,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
-  let serverError = '';
-  runtime.server.stderr?.on('data', (chunk) => { serverError += String(chunk); });
+  runtime.server.stderr?.on('data', (chunk) => { runtime.stderr += String(chunk); });
   await waitForServer();
 
   let response = await request('/sign-in');
@@ -511,12 +543,56 @@ async function main() {
     missingHeaders.length ? `Missing: ${missingHeaders.join(', ')}` : 'All required headers present',
     missingHeaders.length === 0 && !response.headers.has('x-powered-by'),
   );
+  const contentSecurityPolicy = response.headers.get('content-security-policy') ?? '';
+  const publicHtml = await response.clone().text();
+  const nonce = contentSecurityPolicy.match(/'nonce-([A-Za-z0-9_-]{16,128})'/)?.[1] ?? '';
+  const scriptTags = [...publicHtml.matchAll(/<script\b[^>]*>/gi)].map((match) => match[0]);
+  record(
+    'Nonce-based production content policy',
+    'PASS',
+    contentSecurityPolicy,
+    /script-src[^;]*'nonce-[A-Za-z0-9_-]{16,128}'/.test(contentSecurityPolicy)
+      && /style-src[^;]*'nonce-[A-Za-z0-9_-]{16,128}'/.test(contentSecurityPolicy)
+      && !contentSecurityPolicy.includes("'unsafe-inline'")
+      && !contentSecurityPolicy.includes("'unsafe-eval'"),
+  );
+  record(
+    'Content policy nonce reaches rendered scripts',
+    'PASS',
+    `${scriptTags.length} script tag(s) checked`,
+    Boolean(nonce)
+      && scriptTags.length > 0
+      && scriptTags.every((tag) => tag.includes(`nonce="${nonce}"`) || tag.includes(`nonce='${nonce}'`)),
+  );
   record(
     'Cross-origin browser access policy',
     'BLOCKED',
     response.headers.has('access-control-allow-origin') ? 'CORS header present' : 'No CORS allow-origin header',
     !response.headers.has('access-control-allow-origin'),
   );
+  const unexpectedHost = await requestWithRawHost('/sign-in', 'attacker.example');
+  record('Unexpected Host header', 'BLOCKED', `HTTP ${unexpectedHost.status}`, unexpectedHost.status === 421);
+  const forwardedSpoof = await requestWithRawHost('/', new URL(publicOrigin).host, {
+    'x-forwarded-host': 'attacker.example',
+    'x-forwarded-proto': 'http',
+  });
+  const forwardedRedirect = forwardedSpoof.location;
+  record(
+    'Forwarded host and protocol spoofing',
+    'BLOCKED',
+    `HTTP ${forwardedSpoof.status} -> ${forwardedRedirect}`,
+    forwardedSpoof.status >= 300 && forwardedSpoof.status < 400
+      && Boolean(forwardedRedirect)
+      && new URL(forwardedRedirect!).protocol === 'https:'
+      && new URL(forwardedRedirect!).host !== 'attacker.example'
+      && new URL(forwardedRedirect!).pathname === '/sign-in',
+  );
+  response = await request('/api/health');
+  const healthBody = await response.clone().json() as Record<string, unknown>;
+  record('Minimal health response', 'PASS', JSON.stringify(healthBody), response.status === 200 && Object.keys(healthBody).join(',') === 'status');
+  response = await request('/api/ready');
+  const readyBody = await response.clone().json() as Record<string, unknown>;
+  record('Minimal readiness response', 'PASS', JSON.stringify(readyBody), [200, 503].includes(response.status) && Object.keys(readyBody).join(',') === 'status');
   response = await request('/');
   const anonymousRedirect = response.headers.get('location');
   const anonymousRedirectPath = anonymousRedirect ? new URL(anonymousRedirect, baseUrl).pathname : null;
@@ -535,6 +611,15 @@ async function main() {
   const invalid = await signIn(fixtures.userA.email, 'Not-the-password1!', '192.0.2.99');
   record('Invalid credentials', 'BLOCKED', `HTTP ${invalid.response.status}`, invalid.response.status === 401);
 
+  const fixationCookie = 'provider-tracker.session_token=fixed-by-attacker';
+  const fixation = await signIn(fixtures.userA.email, fixtures.userA.password, '192.0.2.17', fixationCookie);
+  record(
+    'Session fixation attempt',
+    'BLOCKED',
+    `HTTP ${fixation.response.status}; new cookie=${Boolean(fixation.cookie)}`,
+    fixation.response.status === 200 && Boolean(fixation.cookie) && !fixation.cookie.includes('fixed-by-attacker'),
+  );
+
   const userLogin = await signIn(fixtures.userA.email, fixtures.userA.password, '192.0.2.11');
   record('Valid sign-in', 'PASS', `HTTP ${userLogin.response.status}`, userLogin.response.status === 200 && Boolean(userLogin.cookie));
   const sessionCookieAttributes = userLogin.response.headers.getSetCookie().join('; ').toLowerCase();
@@ -546,6 +631,41 @@ async function main() {
       sessionCookieAttributes.includes('secure') &&
       sessionCookieAttributes.includes('samesite=lax') &&
       sessionCookieAttributes.includes('path=/'),
+  );
+  const sessionsBeforeResponse = await request('/api/account/sessions', { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
+  const sessionsBeforeBody = await sessionsBeforeResponse.json() as { sessions?: Array<{ id: string }> };
+  const sessionsBefore = new Set(sessionsBeforeBody.sessions?.map((session) => session.id) ?? []);
+  const secondUserLogin = await signIn(fixtures.userA.email, fixtures.userA.password, '192.0.2.18');
+  const ownSessionsResponse = await request('/api/account/sessions', { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
+  const ownSessionsBody = await ownSessionsResponse.json() as { sessions?: Array<{ id: string; current: boolean }> };
+  const otherSession = ownSessionsBody.sessions?.find((session) => !session.current && !sessionsBefore.has(session.id));
+  const ownRevokeResponse = otherSession
+    ? await mutation(`/api/account/sessions/${otherSession.id}`, userLogin.cookie, 'DELETE')
+    : new Response(null, { status: 500 });
+  const revokedUserSessionResponse = await request('/api/session', { cookie: secondUserLogin.cookie, clientIp: '192.0.2.18' });
+  record(
+    'User session inventory and targeted revocation',
+    'PASS',
+    `list HTTP ${ownSessionsResponse.status}; revoke HTTP ${ownRevokeResponse.status}; reused HTTP ${revokedUserSessionResponse.status}`,
+    ownSessionsResponse.status === 200
+      && Boolean(otherSession)
+      && ownRevokeResponse.status === 200
+      && revokedUserSessionResponse.status === 401,
+  );
+  const hostileSearch = `<script>alert(1)</script>' OR 1=1--`;
+  response = await request(`/provider-search?facilityName=${encodeURIComponent(hostileSearch)}`, {
+    cookie: userLogin.cookie,
+    clientIp: '192.0.2.11',
+  });
+  const hostileSearchHtml = await response.clone().text();
+  const userCountAfterSearch = await pool.query<{ count: number }>('SELECT count(*)::int AS count FROM users');
+  record(
+    'Search injection and reflected script payload',
+    'BLOCKED',
+    `HTTP ${response.status}; users=${userCountAfterSearch.rows[0]?.count}`,
+    response.status === 200
+      && (userCountAfterSearch.rows[0]?.count ?? 0) >= 3
+      && !hostileSearchHtml.includes('<script>alert(1)</script>'),
   );
   response = await mutation(`/api/facilities/${facility.id}/verifications`, userLogin.cookie, 'POST', {
     expectedVersion: 0,
@@ -664,7 +784,15 @@ async function main() {
   });
   record('Cross-site mutation request', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
 
-  const adminLogin = await signIn(fixtures.admin.email, fixtures.admin.password, '192.0.2.10');
+  let adminLogin = await signIn(fixtures.admin.email, fixtures.admin.password, '192.0.2.10');
+  await pool.query('UPDATE sessions SET created_at=$1 WHERE user_id=$2', [new Date(Date.now() - 901_000), admin.id]);
+  response = await mutation('/api/admin/automation/settings', adminLogin.cookie, 'PATCH', {
+    timeZone: 'America/New_York', upcomingStaleDays: 7, meaningfulWaitIncreaseDays: 14,
+    meaningfulWaitIncreasePercent: 50, highPriorityEscalationDays: 3, dailyDigestHour: 7, weeklyDigestDay: 1, batchSize: 500,
+  });
+  record('Stale login on privileged operation', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
+  adminLogin = await signIn(fixtures.admin.email, fixtures.admin.password, '192.0.2.10');
+  record('Fresh login restores privileged access', 'PASS', `HTTP ${adminLogin.response.status}`, adminLogin.response.status === 200 && Boolean(adminLogin.cookie));
   response = await request('/api/admin/migrations/not-a-uuid', { cookie: adminLogin.cookie, clientIp: '192.0.2.10' });
   record('Invalid migration route identifier', 'BLOCKED', `HTTP ${response.status}`, response.status === 400);
   const noOriginUpload = new FormData();
@@ -767,8 +895,33 @@ async function main() {
   const provisionedId = provisionedBody.user?.id;
   record('Admin → staff account creation', 'PASS', `HTTP ${response.status}`, response.status === 201 && Boolean(provisionedId));
 
-  const provisionedLogin = await signIn(`provisioned-${runId}@example.invalid`, provisionedPassword, '192.0.2.14');
+  let provisionedLogin = await signIn(`provisioned-${runId}@example.invalid`, provisionedPassword, '192.0.2.14');
   record('Provisioned account sign-in', 'PASS', `HTTP ${provisionedLogin.response.status}`, provisionedLogin.response.status === 200 && Boolean(provisionedLogin.cookie));
+  response = provisionedId
+    ? await request(`/api/admin/users/${provisionedId}/sessions`, { cookie: adminLogin.cookie, clientIp: '192.0.2.10' })
+    : new Response(null, { status: 500 });
+  const sessionListText = await response.clone().text();
+  const sessionListBody = response.ok ? JSON.parse(sessionListText) as { sessions?: Array<{ id: string }> } : {};
+  const provisionedSessionId = sessionListBody.sessions?.[0]?.id;
+  record(
+    'Administrator session inventory omits credentials',
+    'PASS',
+    `HTTP ${response.status}; sessions=${sessionListBody.sessions?.length ?? 0}`,
+    response.status === 200 && Boolean(provisionedSessionId)
+      && !sessionListText.toLowerCase().includes('token')
+      && !sessionListText.includes(provisionedLogin.cookie),
+  );
+  response = provisionedId && provisionedSessionId
+    ? await mutation(`/api/admin/users/${provisionedId}/sessions/${provisionedSessionId}`, adminLogin.cookie, 'DELETE')
+    : new Response(null, { status: 500 });
+  const afterTargetedRevocation = await request('/api/session', { cookie: provisionedLogin.cookie, clientIp: '192.0.2.14' });
+  record(
+    'Administrator revokes one user session',
+    'PASS',
+    `revoke HTTP ${response.status}; session HTTP ${afterTargetedRevocation.status}`,
+    response.status === 200 && afterTargetedRevocation.status === 401,
+  );
+  provisionedLogin = await signIn(`provisioned-${runId}@example.invalid`, provisionedPassword, '192.0.2.14');
   const replacementPassword = password();
   response = provisionedId
     ? await mutation(`/api/admin/users/${provisionedId}/password`, adminLogin.cookie, 'POST', { newPassword: replacementPassword })
@@ -780,6 +933,19 @@ async function main() {
     'PASS',
     `reset HTTP ${response.status}; old session HTTP ${revokedAfterReset.status}; new sign-in HTTP ${replacementLogin.response.status}`,
     response.status === 200 && revokedAfterReset.status === 401 && replacementLogin.response.status === 200,
+  );
+  const finalPassword = password();
+  response = await mutation('/api/account/password', replacementLogin.cookie, 'POST', {
+    currentPassword: replacementPassword,
+    newPassword: finalPassword,
+  });
+  const previousPasswordLogin = await signIn(`provisioned-${runId}@example.invalid`, replacementPassword, '192.0.2.19');
+  const changedPasswordLogin = await signIn(`provisioned-${runId}@example.invalid`, finalPassword, '192.0.2.20');
+  record(
+    'User password change verifies current password',
+    'PASS',
+    `change HTTP ${response.status}; old sign-in HTTP ${previousPasswordLogin.response.status}; new sign-in HTTP ${changedPasswordLogin.response.status}`,
+    response.status === 200 && previousPasswordLogin.response.status === 401 && changedPasswordLogin.response.status === 200,
   );
 
   const viewerLogin = await signIn(fixtures.userB.email, fixtures.userB.password, '192.0.2.13');
@@ -796,6 +962,11 @@ async function main() {
     headers: { 'content-type': 'application/json' }, body: JSON.stringify({ role: 'ura_user' }),
   });
   record('Missing CSRF origin → admin mutation', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+
+  const idleLogin = await signIn(fixtures.userA.email, fixtures.userA.password, '192.0.2.18');
+  await pool.query('UPDATE sessions SET updated_at=$1 WHERE user_id=$2', [new Date(Date.now() - 1_801_000), userA.id]);
+  response = await request('/api/session', { cookie: idleLogin.cookie, clientIp: '192.0.2.18' });
+  record('Idle session timeout', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
 
   const revokedLogin = await signIn(fixtures.userA.email, fixtures.userA.password, '192.0.2.11');
   await pool.query('DELETE FROM sessions WHERE user_id = $1', [userA.id]);
@@ -834,15 +1005,16 @@ async function main() {
   const auditRows = await pool.query<{ action: string; metadata: unknown }>(
     `SELECT action, metadata FROM audit_events
      WHERE action = ANY($1::text[])`,
-    [['auth.sign-in', 'auth.sign-out', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge', 'migration.preview']],
+    [['auth.sign-in', 'auth.sign-out', 'account.password-change', 'account.session-revoke', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge', 'migration.preview']],
   );
   const auditedActionsFound = new Set(auditRows.rows.map((row) => row.action));
-  const requiredAuditActions = ['auth.sign-in', 'auth.sign-out', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge', 'migration.preview'];
+  const requiredAuditActions = ['auth.sign-in', 'auth.sign-out', 'account.password-change', 'account.session-revoke', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge', 'migration.preview'];
   const serializedAuditRows = JSON.stringify(auditRows.rows);
   const sensitiveFixtureValues = [
     ...Object.values(fixtures).flatMap((fixture) => [fixture.email, fixture.password]),
     provisionedPassword,
     replacementPassword,
+    finalPassword,
     userLogin.cookie,
     adminLogin.cookie,
   ];
@@ -857,7 +1029,7 @@ async function main() {
   const failed = results.filter((result) => !result.pass);
   console.table(results);
   if (failed.length) {
-    throw new Error(`${failed.length} security acceptance scenario(s) failed.${serverError ? ` Server error: ${serverError.slice(0, 500)}` : ''}`);
+    throw new Error(`${failed.length} security acceptance scenario(s) failed: ${failed.map((result) => `${result.scenario} (${result.actual})`).join('; ')}.${runtime.stderr ? ` Server error: ${runtime.stderr.slice(0, 500)}` : ''}`);
   }
 }
 

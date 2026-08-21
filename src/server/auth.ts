@@ -29,14 +29,14 @@ function buildAuth(allowTrustedProvisioning = false) {
     emailAndPassword: {
       enabled: true,
       disableSignUp: !allowTrustedProvisioning,
-      minPasswordLength: 12,
+      minPasswordLength: 15,
       maxPasswordLength: 128,
       autoSignIn: false,
       revokeSessionsOnPasswordReset: true,
     },
     session: {
-      expiresIn: 60 * 60 * 8,
-      updateAge: 60 * 30,
+      expiresIn: config.AUTH_SESSION_ABSOLUTE_SECONDS,
+      disableSessionRefresh: true,
       cookieCache: { enabled: false },
     },
     user: {
@@ -93,6 +93,7 @@ function buildAuth(allowTrustedProvisioning = false) {
       },
       ipAddress: {
         ipAddressHeaders: config.AUTH_CLIENT_IP_HEADER ? [config.AUTH_CLIENT_IP_HEADER] : [],
+        trustedProxies: config.AUTH_TRUSTED_PROXY_CIDRS,
       },
       database: {
         generateId: 'uuid',

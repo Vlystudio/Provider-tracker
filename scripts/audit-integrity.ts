@@ -4,6 +4,16 @@ import pg from 'pg';
 const connectionString = process.env.DATABASE_URL?.trim();
 if (!connectionString) throw new Error('DATABASE_URL is required.');
 const allowedActions = [
+  'authorization.denied',
+  'user.session-revoke',
+  'user.sessions-revoke-all',
+  'account.password-change',
+  'account.session-revoke',
+  'account.sessions-revoke-others',
+  'automation.manual-run', 'automation.settings.update',
+  'coverage-watch.create', 'coverage-watch.update',
+  'migration.preview', 'migration.apply', 'migration.reverse', 'migration.diagnostic.resolve',
+  'notification.preferences.update', 'work.status.update',
   'admin.bootstrap', 'auth.sign-in', 'auth.sign-out',
   'authorization.update', 'authorization.delete',
   'facility.verification.create', 'facility.contact-attempt.create', 'facility.update',

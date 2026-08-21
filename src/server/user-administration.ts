@@ -1,23 +1,21 @@
 import 'server-only';
 
-import { and, asc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import { hashPassword } from 'better-auth/crypto';
 import { z } from 'zod';
 import { accounts, auditEvents, sessions, users } from '@/db/schema';
 import { userRoles } from '@/lib/access-control';
-import { assertPermission, type Principal } from './authorization';
+import { assertPermission, assertRecentAuthentication, type Principal } from './authorization';
 import { buildAuditEvent } from './audit';
 import { createTrustedProvisioningAuth } from './auth';
 import { requireDatabaseClient } from './database';
+import { isCommonPassword } from './password-policy';
 
 export const passwordSchema = z
   .string()
-  .min(14)
+  .min(15)
   .max(128)
-  .regex(/[a-z]/, 'Password must contain a lowercase letter.')
-  .regex(/[A-Z]/, 'Password must contain an uppercase letter.')
-  .regex(/[0-9]/, 'Password must contain a number.')
-  .regex(/[^A-Za-z0-9]/, 'Password must contain a symbol.');
+  .refine((value) => !isCommonPassword(value), 'Choose a password that is not commonly used.');
 
 export const createUserSchema = z
   .object({
@@ -51,6 +49,7 @@ export async function createUserByAdministrator(
   request: Request,
 ) {
   assertPermission(principal, 'admin:manage-users');
+  assertRecentAuthentication(principal);
   const db = requireDatabaseClient();
   const provisioningAuth = createTrustedProvisioningAuth();
   const created = await provisioningAuth.api.signUpEmail({
@@ -99,6 +98,7 @@ export async function updateUserAccessByAdministrator(
   request: Request,
 ) {
   assertPermission(principal, 'admin:manage-users');
+  assertRecentAuthentication(principal);
   if (principal.id === targetId) {
     throw new Error('Administrators cannot change their own role or activation state.');
   }
@@ -157,6 +157,7 @@ export async function resetUserPasswordByAdministrator(
   request: Request,
 ) {
   assertPermission(principal, 'admin:manage-users');
+  assertRecentAuthentication(principal);
   const password = passwordSchema.parse(newPassword);
   const db = requireDatabaseClient();
   const passwordHash = await hashPassword(password);
@@ -221,4 +222,129 @@ export async function listUsersForAdministrator(principal: Principal) {
     .from(users)
     .where(eq(users.isServiceAccount, false))
     .orderBy(asc(users.name), asc(users.email));
+}
+
+export async function listUserSessionsForAdministrator(principal: Principal, targetId: string) {
+  assertPermission(principal, 'admin:manage-users');
+  return requireDatabaseClient()
+    .select({
+      id: sessions.id,
+      createdAt: sessions.createdAt,
+      lastSeenAt: sessions.updatedAt,
+      expiresAt: sessions.expiresAt,
+    })
+    .from(sessions)
+    .where(eq(sessions.userId, targetId))
+    .orderBy(desc(sessions.updatedAt));
+}
+
+export async function listOwnSessions(principal: Principal) {
+  const rows = await requireDatabaseClient()
+    .select({
+      id: sessions.id,
+      createdAt: sessions.createdAt,
+      lastSeenAt: sessions.updatedAt,
+      expiresAt: sessions.expiresAt,
+    })
+    .from(sessions)
+    .where(eq(sessions.userId, principal.id))
+    .orderBy(desc(sessions.updatedAt));
+  return rows.map((row) => ({ ...row, current: row.id === principal.sessionId }));
+}
+
+export async function revokeOwnSession(
+  principal: Principal,
+  sessionId: string,
+  request: Request,
+) {
+  assertRecentAuthentication(principal);
+  if (sessionId === principal.sessionId) return false;
+  return requireDatabaseClient().transaction(async (tx) => {
+    const [removed] = await tx
+      .delete(sessions)
+      .where(and(eq(sessions.id, sessionId), eq(sessions.userId, principal.id)))
+      .returning({ id: sessions.id });
+    if (!removed) return false;
+    await tx.insert(auditEvents).values(buildAuditEvent({
+      actorId: principal.id,
+      action: 'account.session-revoke',
+      result: 'success',
+      entityType: 'session',
+      entityId: sessionId,
+      request,
+    }));
+    return true;
+  });
+}
+
+export async function revokeOwnOtherSessions(principal: Principal, request: Request) {
+  assertRecentAuthentication(principal);
+  return requireDatabaseClient().transaction(async (tx) => {
+    const removed = await tx
+      .delete(sessions)
+      .where(and(eq(sessions.userId, principal.id), ne(sessions.id, principal.sessionId)))
+      .returning({ id: sessions.id });
+    await tx.insert(auditEvents).values(buildAuditEvent({
+      actorId: principal.id,
+      action: 'account.sessions-revoke-others',
+      result: 'success',
+      entityType: 'user',
+      entityId: principal.id,
+      request,
+      metadata: { count: removed.length },
+    }));
+    return removed.length;
+  });
+}
+
+export async function revokeUserSessionByAdministrator(
+  principal: Principal,
+  targetId: string,
+  sessionId: string,
+  request: Request,
+) {
+  assertPermission(principal, 'admin:manage-users');
+  assertRecentAuthentication(principal);
+  return requireDatabaseClient().transaction(async (tx) => {
+    const [removed] = await tx
+      .delete(sessions)
+      .where(and(eq(sessions.id, sessionId), eq(sessions.userId, targetId)))
+      .returning({ id: sessions.id });
+    if (!removed) return false;
+    await tx.insert(auditEvents).values(buildAuditEvent({
+      actorId: principal.id,
+      action: 'user.session-revoke',
+      result: 'success',
+      entityType: 'user',
+      entityId: targetId,
+      request,
+      metadata: { sessionId },
+    }));
+    return true;
+  });
+}
+
+export async function revokeAllUserSessionsByAdministrator(
+  principal: Principal,
+  targetId: string,
+  request: Request,
+) {
+  assertPermission(principal, 'admin:manage-users');
+  assertRecentAuthentication(principal);
+  return requireDatabaseClient().transaction(async (tx) => {
+    const removed = await tx
+      .delete(sessions)
+      .where(eq(sessions.userId, targetId))
+      .returning({ id: sessions.id });
+    await tx.insert(auditEvents).values(buildAuditEvent({
+      actorId: principal.id,
+      action: 'user.sessions-revoke-all',
+      result: 'success',
+      entityType: 'user',
+      entityId: targetId,
+      request,
+      metadata: { count: removed.length },
+    }));
+    return removed.length;
+  });
 }

@@ -7,7 +7,7 @@ if (!Number.isInteger(firstPort) || firstPort < 1024 || firstPort > 65534) {
 }
 
 const credentialMarker = 'database-password-must-not-appear';
-const nextBin = 'node_modules/next/dist/bin/next';
+const standaloneServer = '.next/standalone/server.js';
 
 async function waitForHealth(baseUrl: string, child: ReturnType<typeof spawn>, output: () => string) {
   const deadline = Date.now() + 30_000;
@@ -28,7 +28,7 @@ async function verifyScenario(port: number, maintenanceMode: 'off' | 'on') {
   const baseUrl = `http://127.0.0.1:${port}`;
   let serverOutput = '';
   const operationsToken = randomBytes(32).toString('base64url');
-  const child = spawn(process.execPath, [nextBin, 'start', '--hostname', '127.0.0.1', '--port', String(port)], {
+  const child = spawn(process.execPath, [standaloneServer], {
     cwd: process.cwd(),
     windowsHide: true,
     env: {
@@ -36,16 +36,20 @@ async function verifyScenario(port: number, maintenanceMode: 'off' | 'on') {
       NODE_ENV: 'production',
       APP_ENV: 'production',
       APP_DATA_MODE: 'database',
+      NETWORK_ACCESS_MODE: 'private-vpn',
+      PROXY_TRUST_MODE: 'off',
       APP_MAINTENANCE_MODE: maintenanceMode,
       LOG_LEVEL: 'info',
       DATABASE_URL: `postgresql://failure_user:${credentialMarker}@127.0.0.1:1/provider_tracker`,
       DATABASE_CONNECT_TIMEOUT_MS: '500',
       DATABASE_STATEMENT_TIMEOUT_MS: '500',
-      BETTER_AUTH_URL: 'https://failure-test.example.invalid',
-      AUTH_TRUSTED_ORIGINS: 'https://failure-test.example.invalid',
+      BETTER_AUTH_URL: `https://127.0.0.1:${port}`,
+      AUTH_TRUSTED_ORIGINS: `https://127.0.0.1:${port}`,
       BETTER_AUTH_SECRET: randomBytes(48).toString('base64url'),
       AUDIT_LOG_IP_SALT: randomBytes(48).toString('base64url'),
       OPERATIONS_TOKEN: operationsToken,
+      HOSTNAME: '127.0.0.1',
+      PORT: String(port),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

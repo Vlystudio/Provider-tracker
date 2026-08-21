@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { notificationPreferences, notifications } from '@/db/schema';
 import { notificationSeverities, severityMeetsMinimum, type NotificationSeverity } from '@/lib/automation';
 import type { UserRole } from '@/lib/access-control';
+import { isSafeInternalPath } from '@/lib/safe-internal-path';
 import { recordAuditEvent } from './audit';
 import { assertPermission, type Principal } from './authorization';
 import { requireDatabaseClient } from './database';
@@ -116,6 +117,9 @@ export type SystemNotificationInput = {
 
 export async function createSystemNotification(input: SystemNotificationInput): Promise<boolean> {
   if (!roleCategories[input.recipient.role].has(input.category)) return false;
+  if (input.targetPath != null && !isSafeInternalPath(input.targetPath)) {
+    throw new Error('Notification target must be a safe application-relative path.');
+  }
   const db = requireDatabaseClient();
   const [preference] = await db.select().from(notificationPreferences).where(eq(notificationPreferences.userId, input.recipient.id)).limit(1);
   if (preference && (!preference.inAppEnabled || !preference.categories.includes(input.category) || !severityMeetsMinimum(input.severity, preference.minimumSeverity))) {

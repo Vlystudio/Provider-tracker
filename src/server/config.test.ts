@@ -8,6 +8,7 @@ const productionSecurity = {
   BETTER_AUTH_URL: 'https://provider.example.org',
   AUTH_TRUSTED_ORIGINS: ['https://provider.example.org'],
   AUDIT_LOG_IP_SALT: 'a-separate-production-salt-with-more-than-32-characters',
+  NETWORK_ACCESS_MODE: 'private-vpn' as const,
 };
 
 describe('server configuration', () => {
@@ -97,6 +98,36 @@ describe('server configuration', () => {
         AUTH_TRUSTED_ORIGINS: ['http://provider.example.org'],
       }),
     ).toThrow('HTTPS');
+  });
+
+  it('requires an explicit private-network deployment mode in production', () => {
+    expect(() => resolveSecurityConfig({ ...productionSecurity, NETWORK_ACCESS_MODE: 'local' })).toThrow(
+      'NETWORK_ACCESS_MODE=private-vpn',
+    );
+  });
+
+  it('accepts a trusted client address only from configured proxy networks', () => {
+    expect(() => resolveSecurityConfig({
+      ...productionSecurity,
+      AUTH_CLIENT_IP_HEADER: 'x-real-ip',
+      PROXY_TRUST_MODE: 'off',
+      AUTH_TRUSTED_PROXY_CIDRS: [],
+    })).toThrow('sanitized ingress');
+
+    expect(resolveSecurityConfig({
+      ...productionSecurity,
+      AUTH_CLIENT_IP_HEADER: 'x-real-ip',
+      PROXY_TRUST_MODE: 'sanitized-ingress',
+      AUTH_TRUSTED_PROXY_CIDRS: ['10.20.0.0/16'],
+    }).AUTH_TRUSTED_PROXY_CIDRS).toEqual(['10.20.0.0/16']);
+  });
+
+  it('rejects inconsistent session timing limits', () => {
+    expect(() => resolveSecurityConfig({
+      ...productionSecurity,
+      AUTH_SESSION_IDLE_SECONDS: 600,
+      AUTH_SESSION_TOUCH_SECONDS: 600,
+    })).toThrow('touch interval');
   });
 
   it('requires the configured auth origin in the allowlist', () => {

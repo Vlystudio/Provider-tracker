@@ -44,6 +44,7 @@ export function can(role: UserRole, permission: Permission): boolean {
 
 export function permissionForPage(pathname: string): Permission | null {
   if (pathname === '/') return 'app:access';
+  if (pathname.startsWith('/account')) return 'app:access';
   if (pathname.startsWith('/admin')) return 'admin:read';
   if (pathname.startsWith('/automation')) return 'automation:read';
   if (pathname.startsWith('/migration')) return 'migration:read';

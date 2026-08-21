@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 import { parseFreshnessPolicy, type FreshnessPolicy } from '../lib/provider-intelligence';
 
@@ -6,6 +7,8 @@ export const appEnvironmentSchema = z.enum(['development', 'test', 'production']
 export const logLevelSchema = z.enum(['debug', 'info', 'warn', 'error']);
 export const maintenanceModeSchema = z.enum(['off', 'on']);
 export const requestIdSourceSchema = z.enum(['generate', 'trusted-proxy']);
+export const networkAccessModeSchema = z.enum(['local', 'private-vpn']);
+export const proxyTrustModeSchema = z.enum(['off', 'sanitized-ingress']);
 
 export type AppDataMode = z.infer<typeof appDataModeSchema>;
 export type AppEnvironment = z.infer<typeof appEnvironmentSchema>;
@@ -33,10 +36,18 @@ export type SecurityConfig = {
   AUTH_TRUSTED_ORIGINS: string[];
   AUDIT_LOG_IP_SALT: string;
   AUTH_CLIENT_IP_HEADER?: 'x-real-ip' | 'cf-connecting-ip' | 'fly-client-ip';
+  AUTH_TRUSTED_PROXY_CIDRS: string[];
+  NETWORK_ACCESS_MODE: z.infer<typeof networkAccessModeSchema>;
+  PROXY_TRUST_MODE: z.infer<typeof proxyTrustModeSchema>;
+  AUTH_SESSION_ABSOLUTE_SECONDS: number;
+  AUTH_SESSION_IDLE_SECONDS: number;
+  AUTH_SESSION_TOUCH_SECONDS: number;
+  PRIVILEGED_AUTH_MAX_AGE_SECONDS: number;
 };
 
-type SecurityConfigOverrides = Partial<Omit<SecurityConfig, 'AUTH_TRUSTED_ORIGINS'>> & {
+type SecurityConfigOverrides = Partial<Omit<SecurityConfig, 'AUTH_TRUSTED_ORIGINS' | 'AUTH_TRUSTED_PROXY_CIDRS'>> & {
   AUTH_TRUSTED_ORIGINS?: string[] | string;
+  AUTH_TRUSTED_PROXY_CIDRS?: string[] | string;
 };
 
 const placeholderPattern = /(change[-_ ]?this|replace[-_ ]?me|example|placeholder|test[-_ ]?secret)/i;
@@ -44,6 +55,20 @@ const placeholderPattern = /(change[-_ ]?this|replace[-_ ]?me|example|placeholde
 function parseOrigins(value: string[] | string | undefined): string[] {
   const origins = Array.isArray(value) ? value : value?.split(',') ?? [];
   return [...new Set(origins.map((origin) => origin.trim()).filter(Boolean))];
+}
+
+function parseList(value: string[] | string | undefined): string[] {
+  const values = Array.isArray(value) ? value : value?.split(',') ?? [];
+  return [...new Set(values.map((item) => item.trim()).filter(Boolean))];
+}
+
+function isIpOrCidr(value: string): boolean {
+  const slash = value.lastIndexOf('/');
+  if (slash === -1) return isIP(value) !== 0;
+  const address = value.slice(0, slash);
+  const prefix = Number(value.slice(slash + 1));
+  const family = isIP(address);
+  return Number.isInteger(prefix) && ((family === 4 && prefix >= 0 && prefix <= 32) || (family === 6 && prefix >= 0 && prefix <= 128));
 }
 
 export function resolveServerConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
@@ -136,6 +161,19 @@ export function resolveSecurityConfig(overrides: SecurityConfigOverrides = {}): 
     AUTH_TRUSTED_ORIGINS: parseOrigins(overrides.AUTH_TRUSTED_ORIGINS ?? process.env.AUTH_TRUSTED_ORIGINS),
     AUDIT_LOG_IP_SALT: overrides.AUDIT_LOG_IP_SALT ?? process.env.AUDIT_LOG_IP_SALT,
     AUTH_CLIENT_IP_HEADER: overrides.AUTH_CLIENT_IP_HEADER ?? (process.env.AUTH_CLIENT_IP_HEADER || undefined),
+    AUTH_TRUSTED_PROXY_CIDRS: parseList(
+      overrides.AUTH_TRUSTED_PROXY_CIDRS ?? process.env.AUTH_TRUSTED_PROXY_CIDRS,
+    ),
+    NETWORK_ACCESS_MODE: overrides.NETWORK_ACCESS_MODE ?? process.env.NETWORK_ACCESS_MODE ?? 'local',
+    PROXY_TRUST_MODE: overrides.PROXY_TRUST_MODE ?? process.env.PROXY_TRUST_MODE ?? 'off',
+    AUTH_SESSION_ABSOLUTE_SECONDS:
+      overrides.AUTH_SESSION_ABSOLUTE_SECONDS ?? process.env.AUTH_SESSION_ABSOLUTE_SECONDS ?? 28_800,
+    AUTH_SESSION_IDLE_SECONDS:
+      overrides.AUTH_SESSION_IDLE_SECONDS ?? process.env.AUTH_SESSION_IDLE_SECONDS ?? 1_800,
+    AUTH_SESSION_TOUCH_SECONDS:
+      overrides.AUTH_SESSION_TOUCH_SECONDS ?? process.env.AUTH_SESSION_TOUCH_SECONDS ?? 60,
+    PRIVILEGED_AUTH_MAX_AGE_SECONDS:
+      overrides.PRIVILEGED_AUTH_MAX_AGE_SECONDS ?? process.env.PRIVILEGED_AUTH_MAX_AGE_SECONDS ?? 900,
   };
 
   const parsed = z.object({
@@ -146,9 +184,19 @@ export function resolveSecurityConfig(overrides: SecurityConfigOverrides = {}): 
     ),
     BETTER_AUTH_SECRET: z.string().min(32, 'BETTER_AUTH_SECRET must contain at least 32 characters.'),
     BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL must be an absolute URL.'),
-    AUTH_TRUSTED_ORIGINS: z.array(z.string().url()).min(1, 'AUTH_TRUSTED_ORIGINS must include the application origin.'),
+    AUTH_TRUSTED_ORIGINS: z.array(z.string().url().refine(
+      (value) => new URL(value).origin === value,
+      'Trusted origins must not include a path, query, or fragment.',
+    )).min(1, 'AUTH_TRUSTED_ORIGINS must include the application origin.'),
     AUDIT_LOG_IP_SALT: z.string().min(32, 'AUDIT_LOG_IP_SALT must contain at least 32 characters.'),
     AUTH_CLIENT_IP_HEADER: z.enum(['x-real-ip', 'cf-connecting-ip', 'fly-client-ip']).optional(),
+    AUTH_TRUSTED_PROXY_CIDRS: z.array(z.string().trim().refine(isIpOrCidr, 'Trusted proxy values must be IP addresses or CIDR ranges.')).max(32),
+    NETWORK_ACCESS_MODE: networkAccessModeSchema,
+    PROXY_TRUST_MODE: proxyTrustModeSchema,
+    AUTH_SESSION_ABSOLUTE_SECONDS: z.coerce.number().int().min(900).max(86_400),
+    AUTH_SESSION_IDLE_SECONDS: z.coerce.number().int().min(300).max(28_800),
+    AUTH_SESSION_TOUCH_SECONDS: z.coerce.number().int().min(30).max(900),
+    PRIVILEGED_AUTH_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(3_600),
   }).safeParse(source);
 
   if (!parsed.success) {
@@ -166,6 +214,24 @@ export function resolveSecurityConfig(overrides: SecurityConfigOverrides = {}): 
     throw new Error('Invalid security configuration: AUTH_TRUSTED_ORIGINS must include BETTER_AUTH_URL.');
   }
 
+  if (config.AUTH_SESSION_IDLE_SECONDS > config.AUTH_SESSION_ABSOLUTE_SECONDS) {
+    throw new Error('Invalid security configuration: idle session lifetime cannot exceed absolute session lifetime.');
+  }
+  if (config.AUTH_SESSION_TOUCH_SECONDS >= config.AUTH_SESSION_IDLE_SECONDS) {
+    throw new Error('Invalid security configuration: session touch interval must be shorter than idle lifetime.');
+  }
+  if (config.PRIVILEGED_AUTH_MAX_AGE_SECONDS > config.AUTH_SESSION_ABSOLUTE_SECONDS) {
+    throw new Error('Invalid security configuration: recent-authentication window cannot exceed session lifetime.');
+  }
+  if (config.AUTH_CLIENT_IP_HEADER) {
+    if (config.PROXY_TRUST_MODE !== 'sanitized-ingress') {
+      throw new Error('Invalid security configuration: trusted client IP headers require sanitized ingress.');
+    }
+    if (config.AUTH_TRUSTED_PROXY_CIDRS.length === 0) {
+      throw new Error('Invalid security configuration: trusted client IP headers require proxy CIDRs.');
+    }
+  }
+
   if (config.APP_ENV === 'production') {
     if (!config.BETTER_AUTH_URL.startsWith('https://')) {
       throw new Error('Invalid security configuration: BETTER_AUTH_URL must use HTTPS in production.');
@@ -175,6 +241,9 @@ export function resolveSecurityConfig(overrides: SecurityConfigOverrides = {}): 
     }
     if (placeholderPattern.test(config.BETTER_AUTH_SECRET) || placeholderPattern.test(config.AUDIT_LOG_IP_SALT)) {
       throw new Error('Invalid security configuration: placeholder secrets are not allowed in production.');
+    }
+    if (config.NETWORK_ACCESS_MODE !== 'private-vpn') {
+      throw new Error('Invalid security configuration: production requires NETWORK_ACCESS_MODE=private-vpn.');
     }
   }
 
@@ -195,6 +264,10 @@ export function assertProductionConfiguration(forceProduction = false): void {
     const appConfig = resolveServerConfig({ APP_ENV: 'production' });
     if (!appConfig.DATABASE_URL) {
       throw new Error('Invalid production configuration: DATABASE_URL is required.');
+    }
+    const securityConfig = resolveSecurityConfig({ APP_ENV: 'production' });
+    if (appConfig.REQUEST_ID_SOURCE === 'trusted-proxy' && securityConfig.PROXY_TRUST_MODE !== 'sanitized-ingress') {
+      throw new Error('Invalid production configuration: trusted request IDs require sanitized ingress.');
     }
   }
 }

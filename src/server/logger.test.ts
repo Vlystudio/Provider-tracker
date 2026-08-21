@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { classifyError, redactForLog } from './logger';
+import { describe, expect, it, vi } from 'vitest';
+import { classifyError, logEvent, redactForLog } from './logger';
 
 describe('structured logging safeguards', () => {
   it('redacts credentials and sensitive fields recursively', () => {
@@ -26,5 +26,17 @@ describe('structured logging safeguards', () => {
     expect(classifyError({ status: 429 })).toBe('rate_limit');
     expect(classifyError({ code: '23505' })).toBe('database');
     expect(classifyError(new Error('failed'))).toBe('application');
+  });
+
+  it('keeps line-break payloads inside one JSON log record', () => {
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      logEvent('info', 'security.test', { message: 'first line\n{"level":"error"}' });
+      const output = String(write.mock.calls[0]?.[0]);
+      expect(output.split('\n')).toHaveLength(2);
+      expect(JSON.parse(output.trim()).message).toBe('first line\n{"level":"error"}');
+    } finally {
+      write.mockRestore();
+    }
   });
 });

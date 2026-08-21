@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Unzip, UnzipInflate } from 'fflate';
 import { SaxesParser } from 'saxes';
@@ -22,6 +22,11 @@ export type WorkbookStreamOptions = {
   maxFileBytes?: number;
   maxUncompressedBytes?: number;
   maxRowsPerSheet?: number;
+  maxZipEntries?: number;
+  maxCompressionRatio?: number;
+  maxColumnsPerRow?: number;
+  maxCellCharacters?: number;
+  maxSharedStrings?: number;
 };
 
 export type WorkbookStreamResult = {
@@ -36,6 +41,18 @@ export type WorkbookStreamResult = {
 const DEFAULT_MAX_FILE_BYTES = 100 * 1024 * 1024;
 const DEFAULT_MAX_UNCOMPRESSED_BYTES = 512 * 1024 * 1024;
 const DEFAULT_MAX_ROWS_PER_SHEET = 100_000;
+const DEFAULT_MAX_ZIP_ENTRIES = 10_000;
+const DEFAULT_MAX_COMPRESSION_RATIO = 200;
+const DEFAULT_MAX_COLUMNS_PER_ROW = 4_096;
+const DEFAULT_MAX_CELL_CHARACTERS = 32_768;
+const DEFAULT_MAX_SHARED_STRINGS = 250_000;
+
+function positiveLimit(value: number, name: string, maximum: number): number {
+  if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
+    throw new Error(`${name} must be an integer between 1 and ${maximum}.`);
+  }
+  return value;
+}
 
 function shouldCollectEntry(name: string) {
   return (
@@ -46,14 +63,22 @@ function shouldCollectEntry(name: string) {
   );
 }
 
-async function collectZipEntries(filePath: string, maxUncompressedBytes: number) {
+async function collectZipEntries(
+  filePath: string,
+  limits: { maxUncompressedBytes: number; maxZipEntries: number; maxCompressionRatio: number },
+) {
   const collected = new Map<string, Uint8Array>();
   let declaredBytes = 0;
   let expandedBytes = 0;
   let failure: Error | null = null;
   const forbiddenEntries: string[] = [];
+  let entryCount = 0;
 
   const unzip = new Unzip((file) => {
+    entryCount += 1;
+    if (entryCount > limits.maxZipEntries) {
+      failure = new Error(`Workbook contains more than ${limits.maxZipEntries} ZIP entries.`);
+    }
     const normalizedName = file.name.replace(/\\/g, '/');
     if (normalizedName.startsWith('/') || normalizedName.split('/').includes('..')) {
       failure = new Error(`Unsafe ZIP entry path: ${file.name}`);
@@ -66,8 +91,15 @@ async function collectZipEntries(filePath: string, maxUncompressedBytes: number)
       || /\.(exe|dll|com|bat|cmd|js|vbs|ps1)$/i.test(normalizedName)
     ) forbiddenEntries.push(normalizedName);
     declaredBytes += file.originalSize ?? 0;
-    if (declaredBytes > maxUncompressedBytes) {
-      failure = new Error(`Workbook expands beyond the ${maxUncompressedBytes}-byte safety limit.`);
+    if (
+      file.size
+      && file.originalSize
+      && file.originalSize / file.size > limits.maxCompressionRatio
+    ) {
+      failure = new Error(`Workbook ZIP entry exceeds the ${limits.maxCompressionRatio}:1 compression ratio limit.`);
+    }
+    if (declaredBytes > limits.maxUncompressedBytes) {
+      failure = new Error(`Workbook expands beyond the ${limits.maxUncompressedBytes}-byte safety limit.`);
     }
 
     const keep = shouldCollectEntry(normalizedName);
@@ -80,8 +112,8 @@ async function collectZipEntries(filePath: string, maxUncompressedBytes: number)
       }
       entryBytes += data.byteLength;
       expandedBytes += data.byteLength;
-      if (expandedBytes > maxUncompressedBytes || entryBytes > maxUncompressedBytes) {
-        failure = new Error(`Workbook expands beyond the ${maxUncompressedBytes}-byte safety limit.`);
+      if (expandedBytes > limits.maxUncompressedBytes || entryBytes > limits.maxUncompressedBytes) {
+        failure = new Error(`Workbook expands beyond the ${limits.maxUncompressedBytes}-byte safety limit.`);
         file.terminate();
         return;
       }
@@ -122,7 +154,7 @@ function readEntryText(entry: Uint8Array, entryName: string, maxBytes = 8 * 1024
     throw new Error(`Workbook metadata entry ${entryName} exceeds the ${maxBytes}-byte safety limit.`);
   }
   const text = Buffer.from(entry).toString('utf8');
-  if (text.slice(0, 8192).toUpperCase().includes('<!DOCTYPE')) {
+  if (text.toUpperCase().includes('<!DOCTYPE')) {
     throw new Error('Workbook XML document types are not accepted.');
   }
   return text;
@@ -131,6 +163,9 @@ function readEntryText(entry: Uint8Array, entryName: string, maxBytes = 8 * 1024
 function feedXml(parser: SaxesParser<{ xmlns: false; fileName: string }>, bytes: Uint8Array) {
   const prefix = Buffer.from(bytes.subarray(0, Math.min(bytes.byteLength, 8192))).toString('utf8').toUpperCase();
   if (prefix.includes('<!DOCTYPE')) throw new Error('Workbook XML document types are not accepted.');
+  parser.on('doctype', () => {
+    throw new Error('Workbook XML document types are not accepted.');
+  });
   const decoder = new TextDecoder('utf-8', { fatal: true });
   const chunkSize = 64 * 1024;
   for (let index = 0; index < bytes.byteLength; index += chunkSize) {
@@ -188,7 +223,7 @@ function parseWorkbookRelationships(xml: string) {
   return relationships;
 }
 
-function parseSharedStrings(entry: Uint8Array | undefined) {
+function parseSharedStrings(entry: Uint8Array | undefined, maxStrings: number, maxCellCharacters: number) {
   if (!entry) return [] as string[];
   const sharedStrings: string[] = [];
   const parser = new SaxesParser({ xmlns: false, fileName: 'xl/sharedStrings.xml' });
@@ -205,14 +240,23 @@ function parseSharedStrings(entry: Uint8Array | undefined) {
     }
   });
   parser.on('text', (text) => {
-    if (inItem && inText) current += text;
+    if (inItem && inText) {
+      current += text;
+      if (current.length > maxCellCharacters) throw new Error('A workbook shared string exceeds the cell length limit.');
+    }
   });
   parser.on('cdata', (text) => {
-    if (inItem && inText) current += text;
+    if (inItem && inText) {
+      current += text;
+      if (current.length > maxCellCharacters) throw new Error('A workbook shared string exceeds the cell length limit.');
+    }
   });
   parser.on('closetag', (tag) => {
     if (tag.name === 't') inText = false;
     if (tag.name === 'si') {
+      if (sharedStrings.length >= maxStrings) {
+        throw new Error(`Workbook contains more than ${maxStrings} shared strings.`);
+      }
       sharedStrings.push(current);
       current = '';
       inItem = false;
@@ -223,10 +267,14 @@ function parseSharedStrings(entry: Uint8Array | undefined) {
   return sharedStrings;
 }
 
-function columnIndexFromReference(reference: string): number {
+function columnIndexFromReference(reference: string, maxColumns: number): number {
   const letters = reference.match(/^[A-Z]+/i)?.[0]?.toUpperCase() ?? '';
+  if (!letters) throw new Error(`Invalid worksheet cell reference: ${reference || '[empty]'}.`);
   let index = 0;
   for (const letter of letters) index = index * 26 + letter.charCodeAt(0) - 64;
+  if (index < 1 || index > maxColumns) {
+    throw new Error(`Worksheet cell reference exceeds the ${maxColumns}-column safety limit.`);
+  }
   return Math.max(0, index - 1);
 }
 
@@ -245,6 +293,8 @@ function parseWorksheet(
   sharedStrings: string[],
   sheetName: string,
   maxRows: number,
+  maxColumns: number,
+  maxCellCharacters: number,
   onRow: (row: WorksheetRow) => void,
 ): Omit<WorkbookSheetDetail, 'name' | 'hidden'> {
   const parser = new SaxesParser({ xmlns: false, fileName: sheetName });
@@ -269,7 +319,10 @@ function parseWorksheet(
       formulaCellIndexes = [];
     } else if (tag.name === 'c' && cells) {
       const reference = attribute(tag, 'r');
-      currentCellIndex = reference ? columnIndexFromReference(reference) : cells.length;
+      currentCellIndex = reference ? columnIndexFromReference(reference, maxColumns) : cells.length;
+      if (currentCellIndex >= maxColumns) {
+        throw new Error(`${sheetName} exceeds the ${maxColumns}-column safety limit.`);
+      }
       currentCellType = attribute(tag, 't');
       currentValue = '';
       currentCellHasFormula = false;
@@ -280,10 +333,16 @@ function parseWorksheet(
     }
   });
   parser.on('text', (text) => {
-    if (captureValue) currentValue += text;
+    if (captureValue) {
+      currentValue += text;
+      if (currentValue.length > maxCellCharacters) throw new Error('A workbook cell exceeds the cell length limit.');
+    }
   });
   parser.on('cdata', (text) => {
-    if (captureValue) currentValue += text;
+    if (captureValue) {
+      currentValue += text;
+      if (currentValue.length > maxCellCharacters) throw new Error('A workbook cell exceeds the cell length limit.');
+    }
   });
   parser.on('closetag', (tag) => {
     if (tag.name === 'v' || tag.name === 't') captureValue = false;
@@ -323,15 +382,38 @@ export async function streamWorkbook(
   }
 
   const file = await stat(filePath);
-  const maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
+  const maxFileBytes = positiveLimit(options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES, 'maxFileBytes', 1024 * 1024 * 1024);
+  const maxUncompressedBytes = positiveLimit(
+    options.maxUncompressedBytes ?? DEFAULT_MAX_UNCOMPRESSED_BYTES,
+    'maxUncompressedBytes',
+    2 * 1024 * 1024 * 1024,
+  );
+  const maxRowsPerSheet = positiveLimit(options.maxRowsPerSheet ?? DEFAULT_MAX_ROWS_PER_SHEET, 'maxRowsPerSheet', 1_048_576);
+  const maxZipEntries = positiveLimit(options.maxZipEntries ?? DEFAULT_MAX_ZIP_ENTRIES, 'maxZipEntries', 100_000);
+  const maxCompressionRatio = positiveLimit(options.maxCompressionRatio ?? DEFAULT_MAX_COMPRESSION_RATIO, 'maxCompressionRatio', 10_000);
+  const maxColumnsPerRow = positiveLimit(options.maxColumnsPerRow ?? DEFAULT_MAX_COLUMNS_PER_ROW, 'maxColumnsPerRow', 16_384);
+  const maxCellCharacters = positiveLimit(options.maxCellCharacters ?? DEFAULT_MAX_CELL_CHARACTERS, 'maxCellCharacters', 1_000_000);
+  const maxSharedStrings = positiveLimit(options.maxSharedStrings ?? DEFAULT_MAX_SHARED_STRINGS, 'maxSharedStrings', 2_000_000);
   if (file.size > maxFileBytes) {
     throw new Error(`Workbook ${path.basename(filePath)} is ${file.size} bytes; limit is ${maxFileBytes}.`);
   }
 
-  const entries = await collectZipEntries(
-    filePath,
-    options.maxUncompressedBytes ?? DEFAULT_MAX_UNCOMPRESSED_BYTES,
-  );
+  const handle = await open(filePath, 'r');
+  try {
+    const signature = Buffer.alloc(4);
+    const { bytesRead } = await handle.read(signature, 0, signature.byteLength, 0);
+    if (bytesRead !== 4 || !signature.equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
+      throw new Error('Invalid XLSX: ZIP file signature is missing.');
+    }
+  } finally {
+    await handle.close();
+  }
+
+  const entries = await collectZipEntries(filePath, {
+    maxUncompressedBytes,
+    maxZipEntries,
+    maxCompressionRatio,
+  });
     const workbookEntry = entries.get('xl/workbook.xml');
     const relationshipsEntry = entries.get('xl/_rels/workbook.xml.rels');
     if (!workbookEntry || !relationshipsEntry) throw new Error('Invalid XLSX: workbook metadata is missing.');
@@ -345,7 +427,7 @@ export async function streamWorkbook(
       entryName: relationships.get(sheet.relationshipId) ?? '',
     }));
 
-    const sharedStrings = parseSharedStrings(entries.get('xl/sharedStrings.xml'));
+    const sharedStrings = parseSharedStrings(entries.get('xl/sharedStrings.xml'), maxSharedStrings, maxCellCharacters);
     const sheetDetails: WorkbookSheetDetail[] = sheets.map((sheet) => ({
       name: sheet.name,
       hidden: sheet.hidden,
@@ -361,7 +443,9 @@ export async function streamWorkbook(
         entry,
         sharedStrings,
         sheet.name,
-        options.maxRowsPerSheet ?? DEFAULT_MAX_ROWS_PER_SHEET,
+        maxRowsPerSheet,
+        maxColumnsPerRow,
+        maxCellCharacters,
         (row) => options.onRow(sheet.name, row, { dateSystem: metadata.dateSystem }),
       );
       const stored = sheetDetails.find((candidate) => candidate.name === sheet.name)!;

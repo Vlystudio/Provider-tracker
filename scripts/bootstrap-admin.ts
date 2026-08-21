@@ -5,18 +5,16 @@ import { z } from 'zod';
 import { auditEvents, users } from '../src/db/schema';
 import { createTrustedProvisioningAuth } from '../src/server/auth';
 import { getDatabasePool, requireDatabaseClient } from '../src/server/database';
+import { isCommonPassword } from '../src/server/password-policy';
 
 const inputSchema = z.object({
   email: z.string().email().max(254).transform((value) => value.trim().toLowerCase()),
   name: z.string().trim().min(2).max(100),
   password: z
     .string()
-    .min(14)
+    .min(15)
     .max(128)
-    .regex(/[a-z]/, 'Password must contain a lowercase letter.')
-    .regex(/[A-Z]/, 'Password must contain an uppercase letter.')
-    .regex(/[0-9]/, 'Password must contain a number.')
-    .regex(/[^A-Za-z0-9]/, 'Password must contain a symbol.'),
+    .refine((value) => !isCommonPassword(value), 'Choose a password that is not commonly used.'),
 });
 
 function argument(name: string): string | undefined {

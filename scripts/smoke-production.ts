@@ -21,8 +21,10 @@ const signIn = await request('/sign-in');
 record('sign-in page', signIn, (status) => status === 200);
 const health = await request('/api/health');
 record('liveness', health, (status) => status === 200);
-const healthBody = await health.json() as { status?: string; release?: string };
-if (healthBody.status !== 'ok' || !healthBody.release) throw new Error('Health response is missing status or release identity.');
+const healthBody = await health.json() as { status?: string };
+if (healthBody.status !== 'ok' || Object.keys(healthBody).length !== 1) {
+  throw new Error('Health response is not the expected minimal body.');
+}
 const readiness = await request('/api/ready');
 record('readiness', readiness, (status) => status === 200);
 const anonymous = await request('/api/facilities/00000000-0000-4000-8000-000000000000');
@@ -40,6 +42,6 @@ for (const [header, expected] of [
 const requestId = health.headers.get('x-request-id');
 const release = health.headers.get('x-app-release');
 if (!requestId || requestId.length > 128) throw new Error('Health response is missing a bounded request ID.');
-if (release !== healthBody.release) throw new Error('Release header does not match the health response.');
+if (!release) throw new Error('Health response is missing the release header.');
 
 process.stdout.write(`${JSON.stringify({ status: 'PASS', baseUrl: baseUrl.origin, release, checks }, null, 2)}\n`);

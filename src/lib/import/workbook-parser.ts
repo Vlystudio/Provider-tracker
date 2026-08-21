@@ -439,6 +439,11 @@ export async function parseWorkbook(
     maxFileBytes: Number(process.env.WORKBOOK_MAX_FILE_BYTES ?? 100 * 1024 * 1024),
     maxUncompressedBytes: Number(process.env.WORKBOOK_MAX_UNCOMPRESSED_BYTES ?? 512 * 1024 * 1024),
     maxRowsPerSheet: Number(process.env.WORKBOOK_MAX_ROWS_PER_SHEET ?? 100_000),
+    maxZipEntries: Number(process.env.WORKBOOK_MAX_ZIP_ENTRIES ?? 10_000),
+    maxCompressionRatio: Number(process.env.WORKBOOK_MAX_COMPRESSION_RATIO ?? 200),
+    maxColumnsPerRow: Number(process.env.WORKBOOK_MAX_COLUMNS_PER_ROW ?? 4_096),
+    maxCellCharacters: Number(process.env.WORKBOOK_MAX_CELL_CHARACTERS ?? 32_768),
+    maxSharedStrings: Number(process.env.WORKBOOK_MAX_SHARED_STRINGS ?? 250_000),
     onRow(sheetName, row, context) {
       if (!headers.has(sheetName)) {
         const headerValues = row.cells.map((cell) => cleanText(cell));

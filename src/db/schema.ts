@@ -1058,7 +1058,13 @@ export const notifications = pgTable(
   (table) => [
     uniqueIndex('notifications_recipient_dedup_unique').on(table.recipientId, table.deduplicationKey),
     index('notifications_recipient_read_idx').on(table.recipientId, table.readAt, table.createdAt),
-    check('notifications_target_path_check', sql`${table.targetPath} is null or ${table.targetPath} like '/%'`),
+    check('notifications_target_path_check', sql`${table.targetPath} is null or (
+      char_length(${table.targetPath}) <= 512
+      and left(${table.targetPath}, 1) = '/'
+      and left(${table.targetPath}, 2) <> '//'
+      and position(chr(92) in ${table.targetPath}) = 0
+      and ${table.targetPath} !~ '[[:cntrl:]]'
+    )`),
   ],
 );
 
