@@ -93,3 +93,7 @@ npm start
 The included `Dockerfile` builds an unprivileged runtime image without development, optional, or peer-only packages. Environment values are supplied when the container starts, not during the image build.
 
 Deployment, account recovery, proxy, and session-revocation steps are in `docs/OPERATIONS.md`. The access model and endpoint map are in `docs/SECURITY_ARCHITECTURE.md`.
+
+## Product interface
+
+The current interface rules are in `docs/DESIGN_SYSTEM.md`. Phase 3 audit findings are in `docs/UX_AUDIT.md`, the implemented-screen inventory and Figma link are in `docs/FIGMA_HANDOFF.md`, and acceptance results are in `docs/PHASE3_ACCEPTANCE.md`.
