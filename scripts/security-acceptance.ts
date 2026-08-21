@@ -103,10 +103,17 @@ async function waitForServer() {
 
 async function createTestSchema() {
   await pool.query(`
-    DROP TABLE IF EXISTS facility_merge_records, reverification_assignments, facility_contact_attempts, facility_verification_events,
+    DROP TABLE IF EXISTS operational_digests, coverage_alert_events, coverage_watches, operational_change_events,
+      operational_work_items, notifications, notification_preferences, automation_settings, automation_job_executions,
+      facility_merge_records, reverification_assignments, facility_contact_attempts, facility_verification_events,
       facility_diagnosis_capabilities, facility_specialties, facilities, diagnoses, specialties,
       audit_events, authorizations, auth_rate_limits, verification_tokens, sessions, accounts, users CASCADE;
     DROP TYPE IF EXISTS assignment_status CASCADE;
+    DROP TYPE IF EXISTS coverage_state CASCADE;
+    DROP TYPE IF EXISTS work_item_status CASCADE;
+    DROP TYPE IF EXISTS digest_frequency CASCADE;
+    DROP TYPE IF EXISTS notification_severity CASCADE;
+    DROP TYPE IF EXISTS automation_result CASCADE;
     DROP TYPE IF EXISTS contact_outcome CASCADE;
     DROP TYPE IF EXISTS source_confidence CASCADE;
     DROP TYPE IF EXISTS verification_method CASCADE;
@@ -124,6 +131,11 @@ async function createTestSchema() {
     CREATE TYPE source_confidence AS ENUM ('direct', 'authoritative', 'secondary', 'unverified');
     CREATE TYPE contact_outcome AS ENUM ('verified', 'no_answer', 'voicemail_left', 'voicemail_not_left', 'disconnected', 'wrong_number', 'fax_only', 'callback_requested', 'unable_to_verify');
     CREATE TYPE assignment_status AS ENUM ('open', 'completed', 'dismissed');
+    CREATE TYPE automation_result AS ENUM ('running', 'succeeded', 'failed', 'skipped', 'dry_run');
+    CREATE TYPE notification_severity AS ENUM ('informational', 'attention', 'important');
+    CREATE TYPE digest_frequency AS ENUM ('none', 'daily', 'weekly');
+    CREATE TYPE work_item_status AS ENUM ('open', 'assigned', 'in_progress', 'completed', 'dismissed', 'blocked');
+    CREATE TYPE coverage_state AS ENUM ('unknown', 'healthy', 'alerting');
     CREATE TABLE users (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, email text NOT NULL UNIQUE,
       email_verified boolean NOT NULL DEFAULT false, display_name text, image text,
@@ -240,6 +252,68 @@ async function createTestSchema() {
     );
     CREATE INDEX audit_events_entity_idx ON audit_events(entity_type, entity_id, created_at);
     CREATE INDEX audit_events_actor_created_idx ON audit_events(actor_id, created_at);
+    CREATE TABLE automation_job_executions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), execution_key text NOT NULL UNIQUE, job_type text NOT NULL,
+      trigger text NOT NULL, scheduled_for timestamptz NOT NULL, started_at timestamptz NOT NULL DEFAULT now(),
+      finished_at timestamptz, result automation_result NOT NULL DEFAULT 'running', processed_count integer NOT NULL DEFAULT 0,
+      created_count integer NOT NULL DEFAULT 0, skipped_count integer NOT NULL DEFAULT 0, error_count integer NOT NULL DEFAULT 0,
+      retry_count integer NOT NULL DEFAULT 0, release_version text NOT NULL, error_category text, error_message text,
+      metadata jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE notification_preferences (
+      user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, in_app_enabled boolean NOT NULL DEFAULT true,
+      digest_frequency digest_frequency NOT NULL DEFAULT 'daily', categories jsonb NOT NULL DEFAULT '["work","changes","coverage","digest"]'::jsonb,
+      minimum_severity notification_severity NOT NULL DEFAULT 'informational', updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE notifications (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), recipient_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type text NOT NULL, category text NOT NULL, severity notification_severity NOT NULL DEFAULT 'informational',
+      title text NOT NULL, message text NOT NULL, target_path text, source text NOT NULL, deduplication_key text NOT NULL,
+      issue_key text, read_at timestamptz, delivered_at timestamptz NOT NULL DEFAULT now(), created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE(recipient_id,deduplication_key)
+    );
+    CREATE TABLE operational_work_items (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), work_type text NOT NULL, priority notification_severity NOT NULL DEFAULT 'attention',
+      target_type text NOT NULL, target_id uuid NOT NULL, due_at timestamptz, reason_codes jsonb NOT NULL DEFAULT '[]'::jsonb,
+      status work_item_status NOT NULL DEFAULT 'open', assigned_to uuid REFERENCES users(id) ON DELETE SET NULL, assigned_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      created_by uuid REFERENCES users(id) ON DELETE SET NULL, source text NOT NULL, deduplication_key text NOT NULL UNIQUE, cycle integer NOT NULL DEFAULT 1,
+      blocked_reason text, completed_at timestamptz, completed_by uuid REFERENCES users(id) ON DELETE SET NULL, dismissed_at timestamptz,
+      dismissed_by uuid REFERENCES users(id) ON DELETE SET NULL, dismissal_reason text, optimistic_lock_version integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE operational_change_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_id uuid REFERENCES facilities(id), event_type text NOT NULL,
+      severity notification_severity NOT NULL DEFAULT 'informational', occurred_at timestamptz NOT NULL, source_type text NOT NULL,
+      source_id uuid, deduplication_key text NOT NULL UNIQUE, before_value jsonb, after_value jsonb,
+      specialty_id uuid REFERENCES specialties(id), diagnosis_id uuid REFERENCES diagnoses(id), metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE coverage_watches (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, specialty_id uuid REFERENCES specialties(id), diagnosis_id uuid REFERENCES diagnoses(id),
+      postal_code text NOT NULL, radius_miles integer NOT NULL, minimum_count integer NOT NULL, freshness_days integer NOT NULL,
+      enabled boolean NOT NULL DEFAULT true, state coverage_state NOT NULL DEFAULT 'unknown', cycle integer NOT NULL DEFAULT 0,
+      last_count integer, last_evaluated_at timestamptz, created_by uuid NOT NULL REFERENCES users(id),
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE coverage_alert_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), watch_id uuid NOT NULL REFERENCES coverage_watches(id) ON DELETE CASCADE,
+      cycle integer NOT NULL, state text NOT NULL, observed_count integer NOT NULL, threshold_count integer NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(watch_id,cycle,state)
+    );
+    CREATE TABLE operational_digests (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), digest_type text NOT NULL, audience_key text NOT NULL,
+      recipient_id uuid REFERENCES users(id) ON DELETE CASCADE, period_start timestamptz NOT NULL, period_end timestamptz NOT NULL,
+      generated_at timestamptz NOT NULL DEFAULT now(), source_version text NOT NULL, sections jsonb NOT NULL DEFAULT '[]'::jsonb,
+      execution_id uuid REFERENCES automation_job_executions(id), created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE(digest_type,audience_key,period_start,period_end)
+    );
+    CREATE TABLE automation_settings (
+      scope text PRIMARY KEY DEFAULT 'global', time_zone text NOT NULL DEFAULT 'America/New_York', upcoming_stale_days integer NOT NULL DEFAULT 7,
+      meaningful_wait_increase_days integer NOT NULL DEFAULT 14, meaningful_wait_increase_percent integer NOT NULL DEFAULT 50,
+      high_priority_escalation_days integer NOT NULL DEFAULT 3, daily_digest_hour integer NOT NULL DEFAULT 7,
+      weekly_digest_day integer NOT NULL DEFAULT 1, batch_size integer NOT NULL DEFAULT 500,
+      updated_by uuid REFERENCES users(id), updated_at timestamptz NOT NULL DEFAULT now()
+    );
   `);
 }
 
@@ -311,6 +385,22 @@ async function main() {
      VALUES ($1, now() - interval '1 day', $2, 'phone', 'yes')`,
     [mergedFacility.id, userA.id],
   );
+  const notificationFixtures = await pool.query<{ id: string; recipient_id: string }>(`
+    INSERT INTO notifications (recipient_id,type,category,severity,title,message,target_path,source,deduplication_key)
+    VALUES
+      ($1,'work_ready','work','attention','User A work','A private notification.','/work','security_fixture',$3),
+      ($2,'automation_failure','automation','important','User B admin notice','B private notification.','/automation','security_fixture',$4)
+    RETURNING id, recipient_id`, [userA.id, userB.id, `security-a-${runId}`, `security-b-${runId}`]);
+  const notificationA = notificationFixtures.rows.find((row) => row.recipient_id === userA.id)!;
+  const notificationB = notificationFixtures.rows.find((row) => row.recipient_id === userB.id)!;
+  const workFixtures = await pool.query<{ id: string; assigned_to: string; optimistic_lock_version: number }>(`
+    INSERT INTO operational_work_items (work_type,target_type,target_id,status,assigned_to,source,deduplication_key)
+    VALUES
+      ('reverification','facility',$1,'assigned',$2,'security_fixture',$4),
+      ('reverification','facility',$1,'assigned',$3,'security_fixture',$5)
+    RETURNING id,assigned_to,optimistic_lock_version`, [facility.id, userA.id, userB.id, `work-a-${runId}`, `work-b-${runId}`]);
+  const workA = workFixtures.rows.find((row) => row.assigned_to === userA.id)!;
+  const workB = workFixtures.rows.find((row) => row.assigned_to === userB.id)!;
 
   const nextExecutable = fileURLToPath(new URL('../node_modules/next/dist/bin/next', import.meta.url));
   runtime.server = spawn(process.execPath, [nextExecutable, 'start', '-H', '127.0.0.1', '-p', new URL(baseUrl).port], {
@@ -484,6 +574,44 @@ async function main() {
   record('Cross-site mutation request', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
 
   const adminLogin = await signIn(fixtures.admin.email, fixtures.admin.password, '192.0.2.10');
+  response = await request('/api/notifications?limit=50', { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
+  const ownNotificationBody = response.ok ? await response.clone().json() as { rows?: Array<{ id: string }> } : {};
+  record('Notification list ownership', 'PASS', `HTTP ${response.status}`, response.status === 200 && ownNotificationBody.rows?.some((row) => row.id === notificationA.id) === true && ownNotificationBody.rows?.every((row) => row.id !== notificationB.id) === true);
+  response = await mutation(`/api/notifications/${notificationB.id}`, userLogin.cookie, 'PATCH');
+  record('Notification IDOR read-state mutation', 'BLOCKED', `HTTP ${response.status}`, response.status === 404);
+  response = await mutation(`/api/notifications/${notificationA.id}`, userLogin.cookie, 'PATCH');
+  record('Own notification read-state mutation', 'PASS', `HTTP ${response.status}`, response.status === 200);
+  response = await mutation('/api/notification-preferences', userLogin.cookie, 'PATCH', {
+    inAppEnabled: true, digestFrequency: 'weekly', categories: ['work', 'changes'], minimumSeverity: 'attention',
+  });
+  record('Own notification preference update', 'PASS', `HTTP ${response.status}`, response.status === 200);
+  response = await request('/automation', { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
+  record('Restricted notification target', 'BLOCKED', `HTTP ${response.status}`, response.status >= 300 && response.status < 400 && response.headers.get('location')?.endsWith('/forbidden') === true);
+  response = await mutation('/api/admin/automation/run', userLogin.cookie, 'POST', { jobType: 'reverification_scan', dryRun: true });
+  record('User manual automation execution', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await mutation('/api/admin/automation/settings', userLogin.cookie, 'PATCH', {
+    timeZone: 'America/New_York', upcomingStaleDays: 7, meaningfulWaitIncreaseDays: 14,
+    meaningfulWaitIncreasePercent: 50, highPriorityEscalationDays: 3, dailyDigestHour: 7, weeklyDigestDay: 1, batchSize: 500,
+  });
+  record('User automation configuration change', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await mutation(`/api/work-items/${workB.id}`, userLogin.cookie, 'PATCH', { status: 'completed', expectedVersion: workB.optimistic_lock_version });
+  record('Work item assignment IDOR', 'BLOCKED', `HTTP ${response.status}`, response.status === 404);
+  response = await mutation(`/api/work-items/${workA.id}`, userLogin.cookie, 'PATCH', { status: 'completed', expectedVersion: workA.optimistic_lock_version });
+  record('Assigned work completion', 'PASS', `HTTP ${response.status}`, response.status === 200);
+  response = await mutation('/api/admin/automation/settings', adminLogin.cookie, 'PATCH', {
+    timeZone: 'America/New_York', upcomingStaleDays: 7, meaningfulWaitIncreaseDays: 14,
+    meaningfulWaitIncreasePercent: 50, highPriorityEscalationDays: 3, dailyDigestHour: 7, weeklyDigestDay: 1, batchSize: 500,
+  });
+  record('Admin automation configuration change', 'PASS', `HTTP ${response.status}`, response.status === 200);
+  response = await mutation('/api/admin/automation/run', adminLogin.cookie, 'POST', { jobType: 'reverification_scan', dryRun: true });
+  record('Admin manual dry run', 'PASS', `HTTP ${response.status}`, response.status === 200);
+  response = await mutation('/api/admin/coverage-watches', adminLogin.cookie, 'POST', {
+    name: 'Security coverage watch', specialtyId: specialtyFixture.rows[0]?.id, diagnosisId: null,
+    postalCode: '04103', radiusMiles: 50, minimumCount: 2, freshnessDays: 45, enabled: true,
+  });
+  record('Admin coverage watch creation', 'PASS', `HTTP ${response.status}`, response.status === 201);
+  response = await request('/automation', { cookie: adminLogin.cookie, clientIp: '192.0.2.10' });
+  record('Admin automation health access', 'PASS', `HTTP ${response.status}`, response.status === 200);
   response = await mutation('/api/admin/reverification/assign', adminLogin.cookie, 'POST', {
     facilityIds: [facility.id], assignedTo: userA.id, reasonCodes: ['stale_accepting'],
   });

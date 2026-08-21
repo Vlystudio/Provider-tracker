@@ -38,6 +38,15 @@ const criticalTables = [
   'report_snapshots',
   'import_batches',
   'audit_events',
+  'automation_job_executions',
+  'notification_preferences',
+  'notifications',
+  'operational_work_items',
+  'operational_change_events',
+  'coverage_watches',
+  'coverage_alert_events',
+  'operational_digests',
+  'automation_settings',
 ];
 
 async function tableCounts(pool: pg.Pool): Promise<Record<string, number>> {
