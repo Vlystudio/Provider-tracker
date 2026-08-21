@@ -59,6 +59,19 @@ describe('server configuration', () => {
     ).toThrow();
   });
 
+  it('rejects debug logging in production', () => {
+    expect(() => resolveServerConfig({
+      APP_ENV: 'production',
+      APP_DATA_MODE: 'database',
+      LOG_LEVEL: 'debug',
+    })).toThrow('Debug logging is disabled in production.');
+  });
+
+  it('requires a strong operations token when metrics are enabled', () => {
+    expect(() => resolveServerConfig({ OPERATIONS_TOKEN: 'too-short' })).toThrow('OPERATIONS_TOKEN');
+    expect(resolveServerConfig({ OPERATIONS_TOKEN: 'a-strong-monitoring-token-value-over-32-characters' }).OPERATIONS_TOKEN).toBeDefined();
+  });
+
   it('accepts a complete production security configuration', () => {
     const config = resolveSecurityConfig(productionSecurity);
     expect(config.BETTER_AUTH_URL).toBe('https://provider.example.org');

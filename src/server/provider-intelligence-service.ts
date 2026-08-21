@@ -27,6 +27,7 @@ import {
 import { assertPermission, type Principal } from './authorization';
 import { buildAuditEvent } from './audit';
 import { getFreshnessPolicy } from './config';
+import { measureOperation } from './metrics';
 import { requireDatabaseClient } from './database';
 
 export class RecordConflictError extends Error {
@@ -385,13 +386,15 @@ export async function updateFacility(
   });
 }
 
-export async function listReverificationQueue(principal: Principal, input: {
+type ReverificationQueueInput = {
   query?: string;
   freshness?: string;
   assignedTo?: string;
   page?: number;
   pageSize?: number;
-} = {}) {
+};
+
+async function runReverificationQueue(principal: Principal, input: ReverificationQueueInput = {}) {
   assertPermission(principal, 'operations:read');
   const page = Math.max(1, Math.floor(input.page ?? 1));
   const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize ?? 25)));
@@ -463,6 +466,10 @@ export async function listReverificationQueue(principal: Principal, input: {
   }).sort((left, right) => right.priority.score - left.priority.score || left.facilityName.localeCompare(right.facilityName));
   const offset = (page - 1) * pageSize;
   return { rows: queue.slice(offset, offset + pageSize), total: queue.length, page, pageSize };
+}
+
+export async function listReverificationQueue(principal: Principal, input: ReverificationQueueInput = {}) {
+  return measureOperation('reverification_queue', () => runReverificationQueue(principal, input));
 }
 
 export async function refreshDuplicateCandidates(principal: Principal, request?: Request) {

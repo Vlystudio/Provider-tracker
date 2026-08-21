@@ -12,7 +12,7 @@ The main record types are:
 - `facility_specialties`: controlled specialty relationships and their verification date
 - `facility_diagnosis_capabilities`: explicit diagnosis capability; specialty alone does not imply it
 - `calls`: authorization workflow evidence and original workbook provenance
-- `facility_duplicate_candidates` and `facility_merge_records`: review decisions and merge reconstruction data
+- `facility_duplicate_candidates` and `facility_merge_records`: review decisions and merge recovery data
 
 ## Field ownership
 

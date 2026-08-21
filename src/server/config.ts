@@ -3,6 +3,9 @@ import { parseFreshnessPolicy, type FreshnessPolicy } from '../lib/provider-inte
 
 export const appDataModeSchema = z.enum(['database', 'demo']);
 export const appEnvironmentSchema = z.enum(['development', 'test', 'production']);
+export const logLevelSchema = z.enum(['debug', 'info', 'warn', 'error']);
+export const maintenanceModeSchema = z.enum(['off', 'on']);
+export const requestIdSourceSchema = z.enum(['generate', 'trusted-proxy']);
 
 export type AppDataMode = z.infer<typeof appDataModeSchema>;
 export type AppEnvironment = z.infer<typeof appEnvironmentSchema>;
@@ -12,6 +15,14 @@ export type ServerConfig = {
   APP_DATA_MODE: AppDataMode;
   DATABASE_URL?: string;
   DATABASE_POOL_SIZE: number;
+  DATABASE_IDLE_TIMEOUT_MS: number;
+  DATABASE_CONNECT_TIMEOUT_MS: number;
+  DATABASE_STATEMENT_TIMEOUT_MS: number;
+  GRACEFUL_SHUTDOWN_TIMEOUT_MS: number;
+  LOG_LEVEL: z.infer<typeof logLevelSchema>;
+  APP_MAINTENANCE_MODE: z.infer<typeof maintenanceModeSchema>;
+  REQUEST_ID_SOURCE: z.infer<typeof requestIdSourceSchema>;
+  OPERATIONS_TOKEN?: string;
 };
 
 export type SecurityConfig = {
@@ -41,6 +52,15 @@ export function resolveServerConfig(overrides: Partial<ServerConfig> = {}): Serv
     APP_DATA_MODE: overrides.APP_DATA_MODE ?? process.env.APP_DATA_MODE ?? 'database',
     DATABASE_URL: (overrides.DATABASE_URL ?? process.env.DATABASE_URL?.trim()) || undefined,
     DATABASE_POOL_SIZE: overrides.DATABASE_POOL_SIZE ?? process.env.DATABASE_POOL_SIZE ?? 10,
+    DATABASE_IDLE_TIMEOUT_MS: overrides.DATABASE_IDLE_TIMEOUT_MS ?? process.env.DATABASE_IDLE_TIMEOUT_MS ?? 30_000,
+    DATABASE_CONNECT_TIMEOUT_MS: overrides.DATABASE_CONNECT_TIMEOUT_MS ?? process.env.DATABASE_CONNECT_TIMEOUT_MS ?? 10_000,
+    DATABASE_STATEMENT_TIMEOUT_MS: overrides.DATABASE_STATEMENT_TIMEOUT_MS ?? process.env.DATABASE_STATEMENT_TIMEOUT_MS ?? 15_000,
+    GRACEFUL_SHUTDOWN_TIMEOUT_MS: overrides.GRACEFUL_SHUTDOWN_TIMEOUT_MS ?? process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS ?? 20_000,
+    LOG_LEVEL: overrides.LOG_LEVEL ?? process.env.LOG_LEVEL ??
+      ((overrides.APP_ENV ?? process.env.APP_ENV ?? process.env.NODE_ENV) === 'production' ? 'info' : 'debug'),
+    APP_MAINTENANCE_MODE: overrides.APP_MAINTENANCE_MODE ?? process.env.APP_MAINTENANCE_MODE ?? 'off',
+    REQUEST_ID_SOURCE: overrides.REQUEST_ID_SOURCE ?? process.env.REQUEST_ID_SOURCE ?? 'generate',
+    OPERATIONS_TOKEN: (overrides.OPERATIONS_TOKEN ?? process.env.OPERATIONS_TOKEN?.trim()) || undefined,
   };
 
   const parsed = z
@@ -55,6 +75,14 @@ export function resolveServerConfig(overrides: Partial<ServerConfig> = {}): Serv
         })
         .optional(),
       DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(50),
+      DATABASE_IDLE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000),
+      DATABASE_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000),
+      DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(500).max(300_000),
+      GRACEFUL_SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000),
+      LOG_LEVEL: logLevelSchema,
+      APP_MAINTENANCE_MODE: maintenanceModeSchema,
+      REQUEST_ID_SOURCE: requestIdSourceSchema,
+      OPERATIONS_TOKEN: z.string().min(32, 'OPERATIONS_TOKEN must contain at least 32 characters.').optional(),
     })
     .safeParse(source);
 
@@ -66,6 +94,14 @@ export function resolveServerConfig(overrides: Partial<ServerConfig> = {}): Serv
 
   if (config.APP_DATA_MODE === 'demo' && config.APP_ENV === 'production') {
     throw new Error('Demo data mode is disabled in production.');
+  }
+
+  if (config.APP_ENV === 'production' && config.LOG_LEVEL === 'debug') {
+    throw new Error('Debug logging is disabled in production.');
+  }
+
+  if (config.APP_ENV === 'production' && config.OPERATIONS_TOKEN && placeholderPattern.test(config.OPERATIONS_TOKEN)) {
+    throw new Error('Placeholder operations tokens are not allowed in production.');
   }
 
   return config;

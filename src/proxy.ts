@@ -1,34 +1,71 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { can, permissionForPage } from '@/lib/access-control';
 import { getPrincipal } from '@/server/authorization';
+import { getServerConfig } from '@/server/config';
+import { incrementMetric, observeDuration } from '@/server/metrics';
+import { getReleaseIdentifier } from '@/server/release';
+import { requestIdHeader, resolveRequestId } from '@/server/request-context';
+
+function routeGroup(pathname: string): string {
+  if (pathname.startsWith('/api/auth')) return 'auth';
+  if (pathname.startsWith('/api')) return 'api';
+  if (pathname.startsWith('/admin')) return 'admin';
+  if (pathname.startsWith('/provider-search')) return 'provider_search';
+  if (pathname.startsWith('/reports')) return 'reports';
+  return 'page';
+}
+
+function withOperationalHeaders(response: NextResponse, requestId: string): NextResponse {
+  response.headers.set(requestIdHeader, requestId);
+  response.headers.set('x-app-release', getReleaseIdentifier());
+  response.headers.set('cache-control', response.headers.get('cache-control') ?? 'private, no-store');
+  return response;
+}
 
 export async function proxy(request: NextRequest) {
-  const permission = permissionForPage(request.nextUrl.pathname);
-  if (!permission) return NextResponse.next();
+  const started = performance.now();
+  const runtimeConfig = getServerConfig();
+  const requestId = resolveRequestId(
+    request.headers.get(requestIdHeader),
+    runtimeConfig.REQUEST_ID_SOURCE === 'trusted-proxy',
+  );
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(requestIdHeader, requestId);
+  const group = routeGroup(request.nextUrl.pathname);
 
-  const principal = await getPrincipal(request.headers);
+  const finish = (response: NextResponse, status = response.status) => {
+    incrementMetric('provider_tracker_http_requests_total', {
+      route: group,
+      method: request.method,
+      status: String(status),
+    });
+    observeDuration('provider_tracker_proxy_duration_ms', performance.now() - started, { route: group });
+    return withOperationalHeaders(response, requestId);
+  };
+
+  const maintenanceExempt = ['/maintenance', '/api/health', '/api/ready', '/api/metrics'].includes(request.nextUrl.pathname);
+  if (runtimeConfig.APP_MAINTENANCE_MODE === 'on' && !maintenanceExempt) {
+    if (request.nextUrl.pathname.startsWith('/api/')) {
+      return finish(NextResponse.json({ error: 'Service temporarily unavailable.', requestId }, { status: 503 }));
+    }
+    return finish(NextResponse.redirect(new URL('/maintenance', request.url), 307));
+  }
+
+  const permission = permissionForPage(request.nextUrl.pathname);
+  if (!permission) return finish(NextResponse.next({ request: { headers: requestHeaders } }), 200);
+
+  const principal = await getPrincipal(requestHeaders);
   if (!principal) {
     const signInUrl = new URL('/sign-in', request.url);
     signInUrl.searchParams.set('reason', 'required');
-    return NextResponse.redirect(signInUrl);
+    return finish(NextResponse.redirect(signInUrl));
   }
   if (!can(principal.role, permission)) {
-    return NextResponse.redirect(new URL('/forbidden', request.url));
+    return finish(NextResponse.redirect(new URL('/forbidden', request.url)));
   }
-  return NextResponse.next();
+  return finish(NextResponse.next({ request: { headers: requestHeaders } }), 200);
 }
 
 export const config = {
-  matcher: [
-    '/',
-    '/admin/:path*',
-    '/audit/:path*',
-    '/authorization-summary/:path*',
-    '/call-log/:path*',
-    '/facilities/:path*',
-    '/new-call/:path*',
-    '/provider-search/:path*',
-    '/reports/:path*',
-    '/review-queue/:path*',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 };

@@ -1,8 +1,9 @@
 import { toNextJsHandler } from 'better-auth/next-js';
-import { randomUUID } from 'node:crypto';
 import { getAuth } from '@/server/auth';
 import { getPrincipal } from '@/server/authorization';
 import { hashAuditValue, recordAuditEventBestEffort } from '@/server/audit';
+import { incrementMetric } from '@/server/metrics';
+import { requestIdFromHeaders, resolveRequestId } from '@/server/request-context';
 
 const allowedGetPaths = new Set(['/api/auth/get-session']);
 const allowedPostPaths = new Set(['/api/auth/sign-in/email', '/api/auth/sign-out']);
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
   const action = auditedActions[pathname];
   if (!action) return new Response('Not Found', { status: 404 });
 
-  const requestId = randomUUID();
+  const requestId = requestIdFromHeaders(request.headers) ?? resolveRequestId(undefined);
   const principalBefore = action === 'auth.sign-out' ? await getPrincipal(request.headers) : null;
   const emailHash = await getSafeEmailHash(request);
   const response = await toNextJsHandler(getAuth()).POST(request);
@@ -65,6 +66,11 @@ export async function POST(request: Request) {
       status: response.status,
       ...(emailHash ? { emailHash } : {}),
     },
+  });
+
+  incrementMetric('provider_tracker_authentication_total', {
+    operation: action === 'auth.sign-in' ? 'sign_in' : 'sign_out',
+    result: response.ok ? 'success' : 'failure',
   });
 
   return response;

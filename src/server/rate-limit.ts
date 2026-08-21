@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { authRateLimits } from '@/db/schema';
 import { hashAuditValue } from './audit';
 import { requireDatabaseClient } from './database';
+import { incrementMetric } from './metrics';
 
 export class RateLimitExceededError extends Error {
   readonly status = 429;
@@ -35,6 +36,7 @@ export async function enforceDatabaseRateLimit(
     .returning({ count: authRateLimits.count, lastRequest: authRateLimits.lastRequest });
 
   if (row && row.count > options.max) {
+    incrementMetric('provider_tracker_rate_limit_events_total', { operation: action, result: 'blocked' });
     const retryAfterSeconds = Math.max(1, Math.ceil((row.lastRequest + options.windowSeconds * 1000 - now) / 1000));
     throw new RateLimitExceededError(retryAfterSeconds);
   }

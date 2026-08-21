@@ -109,7 +109,7 @@ Assignment history for queue work. Only one open assignment is allowed per facil
 
 ### facility_duplicate_candidates and facility_merge_records
 
-Candidate rows store ordered facility pairs, confidence, deterministic score, reason codes, and a human decision. Merge records retain the survivor, archived source, actor, reason, reconstruction snapshot, and optional undo metadata.
+Candidate rows store ordered facility pairs, confidence, deterministic score, reason codes, and a human decision. Merge records retain the survivor, archived source, actor, reason, recovery snapshot, and optional undo metadata.
 
 ### authorizations
 

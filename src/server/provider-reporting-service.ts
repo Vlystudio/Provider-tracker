@@ -5,6 +5,7 @@ import { parseReportPeriod, percentage } from '@/lib/provider-intelligence';
 import { assertPermission, type Principal } from './authorization';
 import { getFreshnessPolicy } from './config';
 import { getDatabasePool } from './database';
+import { measureOperation } from './metrics';
 
 export const reportingInputSchema = z.object({
   from: z.string().date(),
@@ -38,7 +39,7 @@ type SummaryRow = {
   wait_denominator: number;
 };
 
-export async function getOperationalReport(
+async function runOperationalReport(
   principal: Principal,
   input: z.input<typeof reportingInputSchema>,
 ): Promise<OperationalReport> {
@@ -107,6 +108,13 @@ export async function getOperationalReport(
     coverage: coverageResult.rows,
     drilldown,
   };
+}
+
+export async function getOperationalReport(
+  principal: Principal,
+  input: z.input<typeof reportingInputSchema>,
+): Promise<OperationalReport> {
+  return measureOperation('report_generation', () => runOperationalReport(principal, input));
 }
 
 async function getReportDrilldown(

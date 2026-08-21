@@ -12,6 +12,7 @@ import {
 import { assertPermission, type Principal } from './authorization';
 import { getFreshnessPolicy } from './config';
 import { getDatabasePool } from './database';
+import { incrementMetric, measureOperation } from './metrics';
 
 const optionalText = z.string().trim().max(200).optional().transform((value) => value || undefined);
 
@@ -117,7 +118,7 @@ function calendarDate(value: Date | string | null): string | null {
   return isoDate(value)?.slice(0, 10) ?? null;
 }
 
-export async function searchProviders(principal: Principal, input: z.input<typeof providerSearchInputSchema>): Promise<ProviderSearchPage> {
+async function runProviderSearch(principal: Principal, input: z.input<typeof providerSearchInputSchema>): Promise<ProviderSearchPage> {
   assertPermission(principal, 'operations:read');
   const value = providerSearchInputSchema.parse(input);
   const pool = getDatabasePool();
@@ -313,4 +314,11 @@ export async function searchProviders(principal: Principal, input: z.input<typeo
     originFound: true,
     excludedForMissingCoordinates: Number(missing.rows[0]?.count ?? 0),
   };
+}
+
+export async function searchProviders(principal: Principal, input: z.input<typeof providerSearchInputSchema>): Promise<ProviderSearchPage> {
+  if (input.radius !== undefined || input.memberZip) {
+    incrementMetric('provider_tracker_geographic_searches_total', { result: 'attempted' });
+  }
+  return measureOperation('provider_search', () => runProviderSearch(principal, input));
 }
