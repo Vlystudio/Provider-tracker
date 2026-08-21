@@ -60,10 +60,15 @@ jobs:
       - run: npm run db:audit-integrity
       - run: npm run test:restore
       - run: npm sbom --omit=dev --sbom-format cyclonedx > provider-tracker-sbom.cdx.json
+      - run: npm run release:evidence > release-evidence.json
+        env:
+          RELEASE_SBOM_FILE: provider-tracker-sbom.cdx.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: provider-tracker-sbom
-          path: provider-tracker-sbom.cdx.json
+          name: provider-tracker-release-evidence
+          path: |
+            provider-tracker-sbom.cdx.json
+            release-evidence.json
           if-no-files-found: error
           retention-days: 30
 
@@ -75,12 +80,23 @@ jobs:
         with:
           persist-credentials: false
       - run: docker build --tag provider-tracker:${{ github.sha }} .
+      - run: docker image inspect --format '{"imageId":"{{.Id}}"}' provider-tracker:${{ github.sha }} > container-image.json
       - uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: provider-tracker:${{ github.sha }}
-          format: table
+          format: json
+          output: container-scan.json
           exit-code: '1'
           ignore-unfixed: false
           vuln-type: os,library
           severity: CRITICAL,HIGH
           scanners: vuln,secret,misconfig
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: provider-tracker-container-evidence
+          path: |
+            container-image.json
+            container-scan.json
+          if-no-files-found: error
+          retention-days: 30

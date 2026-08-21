@@ -22,6 +22,7 @@ export const securityHeaders = [
 export const nextConfig: NextConfig = {
   agentRules: false,
   allowedDevOrigins: ['127.0.0.1'],
+  deploymentId: process.env.APP_RELEASE || process.env.BUILD_COMMIT || undefined,
   output: 'standalone',
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
