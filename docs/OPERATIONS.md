@@ -108,6 +108,17 @@ Use `AUTOMATION.md` for rules and recovery. Use `NOTIFICATIONS.md` for recipient
 
 Use `BACKUP_RESTORE.md` for executable backup/restore steps and acceptance criteria. Use `DEPLOYMENT.md` for least-privilege roles, migration preflight, release order, and rollback. Run housekeeping from external cron/job infrastructure; its default is a read-only dry run and it never selects audit, provider history, merge, or import history for deletion.
 
+## Governance operations
+
+- Review dormant and privileged accounts from Data Governance at least on the schedule approved by the organization. Every retain, modify, disable, or investigate decision is recorded.
+- Use emergency revocation for a suspected account compromise. It disables the account, changes its role to inactive URA, revokes all sessions, reports assigned work, and writes an audit event. It cannot target the current operator or the last active administrator.
+- Retention is disabled until an administrator enters an approved period and the exact `ENABLE RETENTION` confirmation. Run the dry report before any apply job.
+- Place a hold for affected records before an approved retention job. Releasing a hold requires a reason and is audited.
+- Housekeeping remains dry-run unless the environment, database, approval, and actor confirmations all match. It processes a bounded batch and never deletes audit or business history.
+- Provider CSV export requires a separate permission, uses the same provider-search scope, enforces a row cap, neutralizes spreadsheet formulas, and records an audit event without storing search values or exported content.
+
+The application does not set legal retention periods, manage backup expiration, approve exports, or decide whether an event is reportable. Those decisions remain with the named records, privacy, legal, and security owners in `DATA_GOVERNANCE.md`.
+
 ## Phase 4 staging checks
 
 1. Restore a recent non-production backup into a staging database.

@@ -69,3 +69,16 @@ Capture stdout/stderr and alert on a non-zero exit. Do not place database creden
 ## Approval boundary
 
 The application team can mark repository work ready and provide passing local checks. IT must separately approve the Phase 9 network, identity/MFA, TLS, secrets, PostGIS, database isolation, container, monitoring, backup/restore, scheduler, migration, and pilot gates in [STAGING_CERTIFICATION.md](STAGING_CERTIFICATION.md). Until those checks run, status is **PRODUCTION PILOT BLOCKED — INFRASTRUCTURE VALIDATION REQUIRED**.
+
+## Privacy and records decisions
+
+Before live data is loaded, IT must identify the records owner, privacy officer, security incident owner, legal contact, identity owner, export approver, backup owner, and vendor-contract owner. Those people must approve:
+
+- whether the deployment handles protected or otherwise regulated data;
+- each retention period and the separate backup-retention schedule;
+- the account-review cadence, dormant-account threshold, termination handoff, and emergency-access procedure;
+- permitted export destinations, endpoint controls, and any DLP rule;
+- incident notification and evidence-preservation procedures;
+- business associate agreements or other vendor terms for hosting, logging, identity, email, backup, and monitoring services.
+
+Run `npm run governance:evidence` for the repository evidence manifest. Run `npm run test:restore` in a tool-equipped disposable environment to prove access-review decisions, retention policies, and holds restore with the rest of the database. The application does not certify compliance or replace the organization's risk analysis.

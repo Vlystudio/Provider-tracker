@@ -35,6 +35,8 @@ Start every incident by recording time, release (`X-App-Release`), affected envi
 
 Auditors and administrators can view audit events according to the existing role policy. Trace a request with `X-Request-ID`, then compare the structured application event and `audit_events.request_id`. For a suspicious role change, identify actor, target, before/after values, correlated request, nearby authentication events, and session revocation. Export only the minimum necessary fields to approved encrypted storage. Never edit audit rows during cleanup; `npm run db:audit-integrity` is read-only.
 
+The Data Governance page can produce a bounded account activity report without returning tokens, raw network addresses, request bodies, or record contents. Use it to establish an initial timeline, then correlate the result with ingress, VPN, identity-provider, database, platform, and SIEM records. Its omissions are intentional and mean it is not a complete forensic record.
+
 Audit retention is an organization decision. Until approved, retain audit, verification, contact, import, duplicate, and merge history. Detached historical targets are reported separately because account removal can null a foreign-key actor while the audit event remains.
 
 ## Containment order for a suspected breach
@@ -61,3 +63,9 @@ A blocked primary workflow without a safe workaround is P1. A major issue with a
 ## Credential rotation notes
 
 Test rotations in staging first. Runtime database, metrics, IdP and backup credentials can be independently replaced through the secret store. A Better Auth secret change may invalidate every session; schedule and communicate a forced login if the deployed version cannot overlap secrets. Changing the audit HMAC salt changes future pseudonymous identifiers, so use a recorded versioned cutover and preserve the old salt only under approved forensic custody. Never rewrite old audit events.
+
+## Privacy and breach process
+
+Use `BREACH_RESPONSE.md` for the application-specific evidence and containment checklist. Place retention holds before approved cleanup jobs run, but also preserve external logs and backups under the organization's evidence process. Application holds do not control backup expiration, SIEM retention, or records held by a vendor.
+
+Privacy, legal, and security owners determine whether an event is a reportable breach and which notification deadlines apply. The application only supplies evidence and containment controls; operators must not treat its incident report as that determination.

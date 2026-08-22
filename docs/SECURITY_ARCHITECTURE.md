@@ -61,6 +61,11 @@ New staff accounts default to `ura_user` inside the identity adapter. A protecte
 | Reset staff password | database session | `admin:manage-users` | `401`, `403`, `404`, or validation `400` |
 | Change own password | database session plus current password | current user; revokes other sessions | `400`, `401`, or `429` |
 | List/revoke own sessions | database session | current user and owned session; recent login for revocation | `401`, `404`, or `429` |
+| Export provider search results | database session | `operations:export`; provider-search scope and configured row cap | `401`, `403`, `413`, or `429` |
+| Review access | database session | `governance:read`; decisions require `governance:manage` | `401`, `403`, or validation `400` |
+| Set retention policy or hold | database session | `governance:manage`; explicit enable or release confirmation | `401`, `403`, or validation `400` |
+| Investigate account activity | database session | `security:investigate`; bounded date range and event cap | `401`, `403`, or validation `400` |
+| Emergency account revocation | database session plus recent login | `governance:manage`; not self; last administrator protected | `401`, `403`, `404`, `409`, or `429` |
 
 All mutation APIs require a configured same-origin `Origin`, reject cross-site fetches, accept only JSON, reject unknown fields, and enforce a 16 KiB request limit. Better Auth also validates origins for cookie-authenticated identity requests.
 
@@ -79,6 +84,14 @@ Forwarded client addresses are ignored by default. `AUTH_CLIENT_IP_HEADER` is ac
 The audit table records actor, action, target type and ID, time, result, request ID, a hashed source address when available, and small allowlisted metadata. Covered events include sign-in success/failure, sign-out, initial admin creation, staff creation, role and activation changes, password resets, authorization changes, facility verification and edits, contact attempts, duplicate decisions, merges, bulk assignments, and imports.
 
 Passwords, cookies, tokens, authorization headers, reset values, and raw network addresses are not stored in audit metadata.
+
+Searches, report views, exports, access-review decisions, retention changes, legal holds, incident queries, and emergency revocations are also audited. Search and export metadata records counts and filter names, not query values or returned records. The runtime role can append audit events but cannot update or delete them.
+
+## Data governance boundary
+
+The application is treated as capable of holding regulated health information because authorization, diagnosis, referral, location, and free-text fields can become identifying when combined. That is a conservative engineering classification, not a legal conclusion that every deployment is subject to HIPAA.
+
+The governance workspace provides access review, dormant-account visibility, retention configuration, holds, export controls, and bounded incident investigation. It does not approve retention periods, determine notification obligations, certify compliance, configure network isolation, or replace the organization's privacy, legal, records, identity, and security processes. See `DATA_GOVERNANCE.md`, `HIPAA_TECHNICAL_READINESS.md`, and `BREACH_RESPONSE.md`.
 
 ## Environment and errors
 
