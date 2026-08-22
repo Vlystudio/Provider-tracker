@@ -1,9 +1,12 @@
 import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
+import { ProviderExportButton } from '@/components/provider-export-button';
 import { EmptyState, InlineMessage, PageHeader, ResultsSummary, StatusBadge, type StatusTone } from '@/components/ui';
 import { formatDate, humanizeKey } from '@/lib/format';
+import { canExportProviderDirectory } from '@/lib/governance';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
 import { requirePagePermission } from '@/server/authorization';
+import { getServerConfig } from '@/server/config';
 
 type ProviderSearchParams = {
   memberZip?: string;
@@ -111,6 +114,24 @@ export default async function ProviderSearchPage({ searchParams }: { searchParam
         </div>
         <div className="filter-actions"><ResultsSummary count={resultPage?.total ?? 0} noun="facility" activeFilters={activeFilters} /><div className="flex gap-2"><Link className="button button-secondary" href="/provider-search">Reset</Link><button type="submit" className="button button-primary">Search</button></div></div>
       </form>
+
+      {dataMode === 'database' && canExportProviderDirectory(principal.role) ? <ProviderExportButton
+        maximumRows={getServerConfig().EXPORT_MAX_ROWS}
+        filters={{
+          memberZip,
+          radius,
+          diagnosis: diagnosis || undefined,
+          specialty: specialty || undefined,
+          accepting,
+          scheduling,
+          urgentReferral,
+          freshness,
+          facilityName: params.facilityName?.trim() || undefined,
+          verifiedFrom: params.verifiedFrom || undefined,
+          verifiedTo: params.verifiedTo || undefined,
+          sort,
+        }}
+      /> : null}
 
       {resultPage && !resultPage.originFound ? <InlineMessage tone="warning" title="ZIP not available">No validated coordinate was found for {memberZip}. Add the ZIP centroid before running a radius search.</InlineMessage> : null}
       {resultPage?.excludedForMissingCoordinates ? <InlineMessage tone="info">{resultPage.excludedForMissingCoordinates} active {resultPage.excludedForMissingCoordinates === 1 ? 'facility was' : 'facilities were'} excluded because coordinates are missing.</InlineMessage> : null}

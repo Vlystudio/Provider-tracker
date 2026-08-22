@@ -11,10 +11,11 @@ export type ErrorCategory =
   | 'application'
   | 'unknown';
 
-const sensitiveKeyPattern = /(authorization|cookie|password|passwd|secret|token|credential|database[_-]?url|connection[_-]?string|comment|notes?)/i;
+const sensitiveKeyPattern = /(authorization|cookie|password|passwd|secret|token|credential|database[_-]?url|connection[_-]?string|comment|notes?|email|member|diagnos|referral|phone|address|facility)/i;
 const databaseUrlPattern = /postgres(?:ql)?:\/\/[^\s"']+/gi;
 const bearerPattern = /bearer\s+[a-z0-9._~+/=-]+/gi;
 const cookiePattern = /(?:session|auth|token|cookie)=[^;\s]+/gi;
+const emailPattern = /\b[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\b/gi;
 const maxStringLength = 2_000;
 const levelWeight: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
@@ -28,7 +29,8 @@ function redactString(value: string): string {
   return bounded
     .replace(databaseUrlPattern, '[REDACTED_DATABASE_URL]')
     .replace(bearerPattern, 'Bearer [REDACTED]')
-    .replace(cookiePattern, '[REDACTED_COOKIE]');
+    .replace(cookiePattern, '[REDACTED_COOKIE]')
+    .replace(emailPattern, '[REDACTED_EMAIL]');
 }
 
 export function redactForLog(value: unknown, key = '', depth = 0): unknown {

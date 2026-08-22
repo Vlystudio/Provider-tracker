@@ -300,8 +300,8 @@ export async function createVerificationEvent(
       resultingState,
     }).returning();
 
-    await tx.insert(auditEvents).values({
-      ...buildAuditEvent({
+    await tx.insert(auditEvents).values(
+      buildAuditEvent({
         actorId: principal.id,
         action: 'facility.verification.create',
         result: 'success',
@@ -314,9 +314,7 @@ export async function createVerificationEvent(
           changedFieldCount: verifiedFactFields.filter((field) => value[field] !== undefined).length,
         },
       }),
-      beforeJson: previousState,
-      afterJson: resultingState,
-    });
+    );
     return { event, facility: updated };
   });
 }
@@ -386,14 +384,12 @@ export async function updateFacility(
       .where(and(eq(facilities.id, parsedId), eq(facilities.optimisticLockVersion, expectedVersion))).returning();
     if (!after) throw new RecordConflictError();
     const fields = Object.keys(changes);
-    await tx.insert(auditEvents).values({
-      ...buildAuditEvent({
+    await tx.insert(auditEvents).values(
+      buildAuditEvent({
         actorId: principal.id, action: 'facility.update', result: 'success', entityType: 'facility', entityId: parsedId,
         request, metadata: { changedFields: fields.join(',') },
       }),
-      beforeJson: Object.fromEntries(fields.map((field) => [field, before[field as keyof typeof before] ?? null])),
-      afterJson: Object.fromEntries(fields.map((field) => [field, after[field as keyof typeof after] ?? null])),
-    });
+    );
     return after;
   });
 }

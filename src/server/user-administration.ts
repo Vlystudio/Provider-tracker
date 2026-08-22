@@ -3,7 +3,7 @@ import 'server-only';
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import { hashPassword } from 'better-auth/crypto';
 import { z } from 'zod';
-import { accounts, auditEvents, sessions, users } from '@/db/schema';
+import { accounts, auditEvents, operationalWorkItems, sessions, users } from '@/db/schema';
 import { userRoles } from '@/lib/access-control';
 import { assertPermission, assertRecentAuthentication, type Principal } from './authorization';
 import { buildAuditEvent } from './audit';
@@ -62,6 +62,7 @@ export async function createUserByAdministrator(
         .update(users)
         .set({
           role: input.role,
+          roleAssignedAt: new Date(),
           displayName: input.name,
           initials: initialsFor(input.name),
           emailVerified: true,
@@ -123,9 +124,15 @@ export async function updateUserAccessByAdministrator(
       if (!otherAdmin) throw new Error('The last active administrator cannot be removed.');
     }
 
+    const now = new Date();
     const [updated] = await tx
       .update(users)
-      .set({ ...input, updatedAt: new Date() })
+      .set({
+        ...input,
+        ...(input.role !== undefined && input.role !== target.role ? { roleAssignedAt: now } : {}),
+        ...(input.isActive === false ? { disabledAt: now } : input.isActive === true ? { disabledAt: null } : {}),
+        updatedAt: now,
+      })
       .where(eq(users.id, targetId))
       .returning({ id: users.id, name: users.name, email: users.email, role: users.role, isActive: users.isActive });
 
@@ -216,6 +223,9 @@ export async function listUsersForAdministrator(principal: Principal) {
       email: users.email,
       role: users.role,
       isActive: users.isActive,
+      lastSignedInAt: users.lastSignedInAt,
+      roleAssignedAt: users.roleAssignedAt,
+      disabledAt: users.disabledAt,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
     })
@@ -346,5 +356,73 @@ export async function revokeAllUserSessionsByAdministrator(
       metadata: { count: removed.length },
     }));
     return removed.length;
+  });
+}
+
+export async function emergencyRevokeUserByAdministrator(
+  principal: Principal,
+  targetId: string,
+  request: Request,
+) {
+  assertPermission(principal, 'admin:manage-users');
+  assertRecentAuthentication(principal);
+  if (principal.id === targetId) throw new Error('Administrators cannot revoke their own access.');
+
+  const db = requireDatabaseClient();
+  return db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ id: users.id, role: users.role, isActive: users.isActive, isServiceAccount: users.isServiceAccount })
+      .from(users)
+      .where(eq(users.id, targetId))
+      .limit(1);
+    if (!target || target.isServiceAccount) return null;
+
+    if (target.role === 'admin') {
+      const [otherAdmin] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.role, 'admin'), eq(users.isActive, true), ne(users.id, targetId)))
+        .limit(1);
+      if (!otherAdmin) throw new Error('The last active administrator cannot be revoked.');
+    }
+
+    const now = new Date();
+    await tx
+      .update(users)
+      .set({
+        role: 'ura_user',
+        isActive: false,
+        disabledAt: now,
+        ...(target.role !== 'ura_user' ? { roleAssignedAt: now } : {}),
+        updatedAt: now,
+      })
+      .where(eq(users.id, targetId));
+    const removed = await tx.delete(sessions).where(eq(sessions.userId, targetId)).returning({ id: sessions.id });
+    const [assignedWork] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(operationalWorkItems)
+      .where(and(eq(operationalWorkItems.assignedTo, targetId), sql`${operationalWorkItems.status} in ('open','assigned','in_progress','blocked')`));
+
+    await tx.insert(auditEvents).values(buildAuditEvent({
+      actorId: principal.id,
+      action: 'user.emergency-revoke',
+      result: 'success',
+      entityType: 'user',
+      entityId: targetId,
+      request,
+      metadata: {
+        previousRole: target.role,
+        previousActive: target.isActive,
+        sessionsRevoked: removed.length,
+        assignedWorkItems: assignedWork?.count ?? 0,
+      },
+    }));
+
+    return {
+      userId: targetId,
+      previousRole: target.role,
+      sessionsRevoked: removed.length,
+      assignedWorkItems: assignedWork?.count ?? 0,
+    };
   });
 }

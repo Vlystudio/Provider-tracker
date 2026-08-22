@@ -20,6 +20,20 @@ describe('structured logging safeguards', () => {
     expect(redacted).toMatchObject({ password: '[REDACTED]' });
   });
 
+  it('redacts account and operational fields before external error reporting', () => {
+    expect(redactForLog({
+      email: 'person@example.invalid',
+      memberZip: '04101',
+      diagnosis: 'sensitive value',
+      harmless: 'Contact person@example.invalid for help',
+    })).toEqual({
+      email: '[REDACTED]',
+      memberZip: '[REDACTED]',
+      diagnosis: '[REDACTED]',
+      harmless: 'Contact [REDACTED_EMAIL] for help',
+    });
+  });
+
   it('uses stable operational error categories', () => {
     expect(classifyError({ status: 401 })).toBe('authentication');
     expect(classifyError({ status: 403 })).toBe('authorization');

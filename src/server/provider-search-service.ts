@@ -10,9 +10,11 @@ import {
   type VerificationAnswer,
 } from '@/lib/provider-intelligence';
 import { assertPermission, type Principal } from './authorization';
+import { recordAuditEventBestEffort } from './audit';
 import { getFreshnessPolicy } from './config';
 import { getDatabasePool } from './database';
 import { incrementMetric, measureOperation } from './metrics';
+import { safeFilterKeys } from '@/lib/governance';
 
 const optionalText = z.string().trim().max(200).optional().transform((value) => value || undefined);
 
@@ -316,9 +318,28 @@ async function runProviderSearch(principal: Principal, input: z.input<typeof pro
   };
 }
 
-export async function searchProviders(principal: Principal, input: z.input<typeof providerSearchInputSchema>): Promise<ProviderSearchPage> {
+export async function searchProviders(
+  principal: Principal,
+  input: z.input<typeof providerSearchInputSchema>,
+  options: { audit?: boolean } = {},
+): Promise<ProviderSearchPage> {
   if (input.radius !== undefined || input.memberZip) {
     incrementMetric('provider_tracker_geographic_searches_total', { result: 'attempted' });
   }
-  return measureOperation('provider_search', () => runProviderSearch(principal, input));
+  const result = await measureOperation('provider_search', () => runProviderSearch(principal, input));
+  if (options.audit !== false) {
+    await recordAuditEventBestEffort({
+      actorId: principal.id,
+      action: 'provider.search',
+      result: 'success',
+      entityType: 'provider_search',
+      metadata: {
+        resultCount: result.rows.length,
+        totalMatches: result.total,
+        page: result.page,
+        filterKeys: safeFilterKeys(input as Record<string, unknown>).join(','),
+      },
+    });
+  }
+  return result;
 }

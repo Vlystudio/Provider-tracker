@@ -1,7 +1,4 @@
-export type HousekeepingPolicy = {
-  sessionRetentionDays: number;
-  verificationTokenRetentionDays: number;
-  rateLimitRetentionHours: number;
+export type HousekeepingExecutionPolicy = {
   batchSize: number;
 };
 
@@ -13,19 +10,17 @@ function boundedInteger(value: string | undefined, fallback: number, minimum: nu
   return parsed;
 }
 
-export function resolveHousekeepingPolicy(source: Record<string, string | undefined> = process.env): HousekeepingPolicy {
+export function resolveHousekeepingExecutionPolicy(
+  source: Record<string, string | undefined> = process.env,
+): HousekeepingExecutionPolicy {
   return {
-    sessionRetentionDays: boundedInteger(source.SESSION_EXPIRED_RETENTION_DAYS, 7, 0, 365),
-    verificationTokenRetentionDays: boundedInteger(source.VERIFICATION_TOKEN_RETENTION_DAYS, 7, 0, 90),
-    rateLimitRetentionHours: boundedInteger(source.RATE_LIMIT_RETENTION_HOURS, 24, 1, 720),
     batchSize: boundedInteger(source.HOUSEKEEPING_BATCH_SIZE, 1_000, 1, 10_000),
   };
 }
 
-export function housekeepingCutoffs(now: Date, policy: HousekeepingPolicy) {
-  return {
-    sessionsBefore: new Date(now.getTime() - policy.sessionRetentionDays * 86_400_000),
-    tokensBefore: new Date(now.getTime() - policy.verificationTokenRetentionDays * 86_400_000),
-    rateLimitsBeforeEpochMs: now.getTime() - policy.rateLimitRetentionHours * 3_600_000,
-  };
+export function retentionCutoff(now: Date, retentionDays: number): Date {
+  if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 36_500) {
+    throw new Error('Retention days must be between 1 and 36500.');
+  }
+  return new Date(now.getTime() - retentionDays * 86_400_000);
 }

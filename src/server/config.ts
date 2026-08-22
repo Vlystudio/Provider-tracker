@@ -26,6 +26,9 @@ export type ServerConfig = {
   APP_MAINTENANCE_MODE: z.infer<typeof maintenanceModeSchema>;
   REQUEST_ID_SOURCE: z.infer<typeof requestIdSourceSchema>;
   OPERATIONS_TOKEN?: string;
+  GOVERNANCE_DORMANT_ACCOUNT_DAYS: number;
+  GOVERNANCE_INCIDENT_MAX_EVENTS: number;
+  EXPORT_MAX_ROWS: number;
 };
 
 export type SecurityConfig = {
@@ -86,6 +89,11 @@ export function resolveServerConfig(overrides: Partial<ServerConfig> = {}): Serv
     APP_MAINTENANCE_MODE: overrides.APP_MAINTENANCE_MODE ?? process.env.APP_MAINTENANCE_MODE ?? 'off',
     REQUEST_ID_SOURCE: overrides.REQUEST_ID_SOURCE ?? process.env.REQUEST_ID_SOURCE ?? 'generate',
     OPERATIONS_TOKEN: (overrides.OPERATIONS_TOKEN ?? process.env.OPERATIONS_TOKEN?.trim()) || undefined,
+    GOVERNANCE_DORMANT_ACCOUNT_DAYS:
+      overrides.GOVERNANCE_DORMANT_ACCOUNT_DAYS ?? process.env.GOVERNANCE_DORMANT_ACCOUNT_DAYS ?? 90,
+    GOVERNANCE_INCIDENT_MAX_EVENTS:
+      overrides.GOVERNANCE_INCIDENT_MAX_EVENTS ?? process.env.GOVERNANCE_INCIDENT_MAX_EVENTS ?? 500,
+    EXPORT_MAX_ROWS: overrides.EXPORT_MAX_ROWS ?? process.env.EXPORT_MAX_ROWS ?? 1_000,
   };
 
   const parsed = z
@@ -108,6 +116,9 @@ export function resolveServerConfig(overrides: Partial<ServerConfig> = {}): Serv
       APP_MAINTENANCE_MODE: maintenanceModeSchema,
       REQUEST_ID_SOURCE: requestIdSourceSchema,
       OPERATIONS_TOKEN: z.string().min(32, 'OPERATIONS_TOKEN must contain at least 32 characters.').optional(),
+      GOVERNANCE_DORMANT_ACCOUNT_DAYS: z.coerce.number().int().min(1).max(730),
+      GOVERNANCE_INCIDENT_MAX_EVENTS: z.coerce.number().int().min(50).max(5_000),
+      EXPORT_MAX_ROWS: z.coerce.number().int().min(1).max(10_000),
     })
     .safeParse(source);
 

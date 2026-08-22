@@ -212,6 +212,12 @@ export const workItemStatusEnum = pgEnum('work_item_status', [
   'blocked',
 ]);
 export const coverageStateEnum = pgEnum('coverage_state', ['unknown', 'healthy', 'alerting']);
+export const accessReviewDecisionEnum = pgEnum('access_review_decision', [
+  'retain',
+  'modify',
+  'disable',
+  'investigate',
+]);
 
 export const users = pgTable(
   'users',
@@ -226,12 +232,16 @@ export const users = pgTable(
     role: userRoleEnum('role').notNull().default('ura_user'),
     isActive: boolean('is_active').notNull().default(true),
     isServiceAccount: boolean('is_service_account').notNull().default(false),
+    lastSignedInAt: timestamp('last_signed_in_at', { withTimezone: true }),
+    roleAssignedAt: timestamp('role_assigned_at', { withTimezone: true }),
+    disabledAt: timestamp('disabled_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex('users_email_unique').on(table.email),
     index('users_role_active_idx').on(table.role, table.isActive),
+    index('users_last_signed_in_idx').on(table.lastSignedInAt),
   ],
 );
 
@@ -996,6 +1006,83 @@ export const auditEvents = pgTable(
   (table) => [
     index('audit_events_entity_idx').on(table.entityType, table.entityId, table.createdAt),
     index('audit_events_actor_created_idx').on(table.actorId, table.createdAt),
+  ],
+);
+
+export const accessReviewDecisions = pgTable(
+  'access_review_decisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reviewPeriod: text('review_period').notNull(),
+    reviewedUserId: uuid('reviewed_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+    reviewerId: uuid('reviewer_id').references(() => users.id, { onDelete: 'set null' }),
+    reviewedRole: userRoleEnum('reviewed_role').notNull(),
+    accountActive: boolean('account_active').notNull(),
+    lastSignedInAt: timestamp('last_signed_in_at', { withTimezone: true }),
+    decision: accessReviewDecisionEnum('decision').notNull(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('access_review_period_user_reviewer_unique').on(
+      table.reviewPeriod,
+      table.reviewedUserId,
+      table.reviewerId,
+    ),
+    index('access_review_user_decided_idx').on(table.reviewedUserId, table.decidedAt),
+    index('access_review_period_decided_idx').on(table.reviewPeriod, table.decidedAt),
+    check('access_review_period_check', sql`${table.reviewPeriod} ~ '^[0-9]{4}-Q[1-4]$'`),
+  ],
+);
+
+export const dataRetentionPolicies = pgTable(
+  'data_retention_policies',
+  {
+    category: text('category').primaryKey(),
+    retentionDays: integer('retention_days'),
+    deletionEnabled: boolean('deletion_enabled').notNull().default(false),
+    policyReference: text('policy_reference'),
+    approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('data_retention_category_check', sql`char_length(${table.category}) between 2 and 80 and ${table.category} ~ '^[a-z][a-z0-9_]*$'`),
+    check('data_retention_days_check', sql`${table.retentionDays} is null or ${table.retentionDays} between 1 and 36500`),
+    check('data_retention_policy_reference_check', sql`${table.policyReference} is null or char_length(${table.policyReference}) between 3 and 200`),
+    check(
+      'data_retention_deletion_approval_check',
+      sql`not ${table.deletionEnabled} or (${table.retentionDays} is not null and ${table.policyReference} is not null and ${table.approvedBy} is not null and ${table.approvedAt} is not null)`,
+    ),
+  ],
+);
+
+export const dataRetentionHolds = pgTable(
+  'data_retention_holds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    category: text('category').notNull(),
+    entityType: text('entity_type'),
+    entityId: text('entity_id'),
+    reasonCode: text('reason_code').notNull(),
+    placedBy: uuid('placed_by').references(() => users.id, { onDelete: 'set null' }),
+    placedAt: timestamp('placed_at', { withTimezone: true }).notNull().defaultNow(),
+    releasedBy: uuid('released_by').references(() => users.id, { onDelete: 'set null' }),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('data_retention_hold_category_active_idx').on(table.category, table.releasedAt),
+    index('data_retention_hold_entity_idx').on(table.entityType, table.entityId, table.releasedAt),
+    check('data_retention_hold_category_check', sql`char_length(${table.category}) between 2 and 80 and ${table.category} ~ '^[a-z][a-z0-9_]*$'`),
+    check('data_retention_hold_reason_check', sql`char_length(${table.reasonCode}) between 2 and 80 and ${table.reasonCode} ~ '^[a-z][a-z0-9_]*$'`),
+    check(
+      'data_retention_hold_entity_pair_check',
+      sql`(${table.entityType} is null and ${table.entityId} is null) or (${table.entityType} is not null and ${table.entityId} is not null)`,
+    ),
+    check(
+      'data_retention_hold_release_pair_check',
+      sql`(${table.releasedBy} is null and ${table.releasedAt} is null) or (${table.releasedBy} is not null and ${table.releasedAt} is not null)`,
+    ),
   ],
 );
 

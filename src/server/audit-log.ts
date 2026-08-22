@@ -4,6 +4,7 @@ import { and, desc, eq, gte, ilike, lte, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { auditEvents, users } from '@/db/schema';
 import { assertPermission, type Principal } from './authorization';
+import { recordAuditEventBestEffort } from './audit';
 import { requireDatabaseClient } from './database';
 
 export const auditLogFilterSchema = z.object({
@@ -46,5 +47,15 @@ export async function listAuditEvents(principal: Principal, input: unknown) {
     .orderBy(desc(auditEvents.createdAt))
     .limit(100);
 
+  const filterKeys = Object.entries(filters).filter(([, value]) => Boolean(value)).map(([key]) => key).sort();
+  if (filterKeys.length) {
+    await recordAuditEventBestEffort({
+      actorId: principal.id,
+      action: 'audit.search',
+      result: 'success',
+      entityType: 'audit_event',
+      metadata: { filterKeys: filterKeys.join(','), resultCount: rows.length },
+    });
+  }
   return { filters, rows };
 }

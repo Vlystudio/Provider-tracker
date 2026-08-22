@@ -6,6 +6,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { accounts, authRateLimits, sessions, users, verificationTokens } from '@/db/schema';
 import { getSecurityConfig } from './config';
 import { requireDatabaseClient } from './database';
+import { hashAuditValue } from './audit';
 
 function buildAuth(allowTrustedProvisioning = false) {
   const config = getSecurityConfig();
@@ -65,7 +66,20 @@ function buildAuth(allowTrustedProvisioning = false) {
               .where(eq(users.id, session.userId))
               .limit(1);
 
-            return Boolean(user?.isActive && !user.isServiceAccount);
+            if (!user?.isActive || user.isServiceAccount) return false;
+            return {
+              data: {
+                ...session,
+                ipAddress: session.ipAddress ? hashAuditValue(session.ipAddress) : null,
+                userAgent: null,
+              },
+            };
+          },
+          after: async (session) => {
+            await db
+              .update(users)
+              .set({ lastSignedInAt: new Date(), updatedAt: new Date() })
+              .where(eq(users.id, session.userId));
           },
         },
       },

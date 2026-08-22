@@ -36,7 +36,7 @@ import type { ImportIssue, ImportPlan, WorkbookKind } from '@/lib/import/types';
 import { parseWorkbook } from '@/lib/import/workbook-parser';
 import { getReleaseIdentifier } from './release';
 import { getDatabasePool, requireDatabaseClient } from './database';
-import { assertRecentAuthentication, type Principal } from './authorization';
+import { assertPermission, assertRecentAuthentication, type Principal } from './authorization';
 import { buildAuditEvent } from './audit';
 
 const MAX_REQUEST_BYTES = 48 * 1024 * 1024;
@@ -480,12 +480,12 @@ export async function applyMigration(principal: Principal, runId: string, workbo
     const reconciliation = await finalReconciliation(runId, plan, readiness, applied);
     await db.transaction(async (tx) => {
       await tx.update(migrationRuns).set({ status: 'reconciled', applyCounts: applied, reconciliation, readiness: reconciliation.readiness, completedAt: sql`now()`, updatedAt: sql`now()` }).where(eq(migrationRuns.id, runId));
-      await tx.insert(auditEvents).values({ ...buildAuditEvent({ actorId: principal.id, action: 'migration.apply', result: 'success', entityType: 'migration_run', entityId: runId, request, metadata: { reason: input.reason } }), afterJson: { applied, reconciliation } });
+      await tx.insert(auditEvents).values({ ...buildAuditEvent({ actorId: principal.id, action: 'migration.apply', result: 'success', entityType: 'migration_run', entityId: runId, request, metadata: { reasonProvided: true } }), afterJson: { applied, reconciliation } });
     });
     return { applied, reconciliation };
   } catch (error) {
     await db.update(migrationRuns).set({ status: 'failed', failureCategory: error instanceof MigrationServiceError ? 'validation_or_lock' : 'apply_failure', failureMessage: error instanceof Error ? error.message.slice(0, 500) : 'Migration failed.', updatedAt: sql`now()` }).where(and(eq(migrationRuns.id, runId), eq(migrationRuns.status, 'running')));
-    await db.insert(auditEvents).values(buildAuditEvent({ actorId: principal.id, action: 'migration.apply', result: 'failure', entityType: 'migration_run', entityId: runId, request, metadata: { reason: input.reason } }));
+    await db.insert(auditEvents).values(buildAuditEvent({ actorId: principal.id, action: 'migration.apply', result: 'failure', entityType: 'migration_run', entityId: runId, request, metadata: { reasonProvided: true } }));
     throw error;
   } finally {
     if (locked) await lock.query(`SELECT pg_advisory_unlock(hashtext($1))`, [`provider-tracker:migration:${plan.sources.map((source) => source.sourceHash).sort().join(':')}`]);
@@ -544,15 +544,25 @@ export async function resolveMigrationDiagnostic(principal: Principal, runId: st
       },
     });
   }
-  await db.insert(auditEvents).values({ ...buildAuditEvent({ actorId: principal.id, action: 'migration.diagnostic.resolve', result: 'success', entityType: 'migration_diagnostic', entityId: diagnosticId, request, metadata: { note: input.note } }), afterJson: { runId, action: input.action, targetEntityId } });
+  await db.insert(auditEvents).values({ ...buildAuditEvent({ actorId: principal.id, action: 'migration.diagnostic.resolve', result: 'success', entityType: 'migration_diagnostic', entityId: diagnosticId, request, metadata: { noteProvided: true } }), afterJson: { runId, action: input.action, targetEntityId } });
   return serializeRun(updated[0]);
 }
 
-export async function exportMigrationDiagnostics(runId: string) {
+export async function exportMigrationDiagnostics(principal: Principal, runId: string, request: Request) {
+  assertPermission(principal, 'migration:export');
   const details = await getMigrationRun(runId);
   const headers = ['id', 'status', 'severity', 'entity_type', 'sheet', 'source_row', 'issue_code', 'message', 'suggested_action', 'resolution_action', 'resolution_note'];
   const lines = [headers.map(migrationCsvCell).join(',')];
   for (const item of details.diagnostics as Array<Record<string, unknown>>) lines.push([item.id, item.status, item.severity, item.entityType, item.sheetName, item.sourceRow, item.issueCode, item.message, item.suggestedAction, item.resolutionAction, item.resolutionNote].map(migrationCsvCell).join(','));
+  await requireDatabaseClient().insert(auditEvents).values(buildAuditEvent({
+    actorId: principal.id,
+    action: 'export.migration-diagnostics',
+    result: 'success',
+    entityType: 'migration_run',
+    entityId: runId,
+    request,
+    metadata: { recordCount: details.diagnostics.length },
+  }));
   return `\uFEFF${lines.join('\r\n')}\r\n`;
 }
 
@@ -591,7 +601,7 @@ export async function assessOrReverseMigration(principal: Principal, runId: stri
     await tx.execute(sql`DELETE FROM import_row_results WHERE batch_id IN (SELECT id FROM import_batches WHERE migration_run_id=${runId})`);
     await tx.execute(sql`DELETE FROM import_batches WHERE migration_run_id=${runId}`);
     await tx.update(migrationRuns).set({ status: 'reversed', readiness: 'no_go', reversedBy: principal.id, reversalReason: input.reason, reversedAt: sql`now()`, updatedAt: sql`now()` }).where(eq(migrationRuns.id, runId));
-    await tx.insert(auditEvents).values({ ...buildAuditEvent({ actorId: principal.id, action: 'migration.reverse', result: 'success', entityType: 'migration_run', entityId: runId, request, metadata: { reason: input.reason } }), beforeJson: result });
+    await tx.insert(auditEvents).values({ ...buildAuditEvent({ actorId: principal.id, action: 'migration.reverse', result: 'success', entityType: 'migration_run', entityId: runId, request, metadata: { reasonProvided: true } }), beforeJson: result });
   });
   return { ...result, reversed: true };
 }

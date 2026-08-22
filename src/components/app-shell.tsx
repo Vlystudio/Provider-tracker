@@ -25,6 +25,7 @@ const navItems = [
   { label: 'Data Quality', href: '/data-quality', permission: 'admin:read', section: 'System' },
   { label: 'Duplicate Review', href: '/duplicates', permission: 'admin:read', section: 'System' },
   { label: 'Audit', href: '/audit', permission: 'audit:read', section: 'Oversight' },
+  { label: 'Data Governance', href: '/governance', permission: 'governance:read', section: 'Oversight' },
   { label: 'Administration', href: '/admin', permission: 'admin:read', section: 'System' },
   { label: 'Automation', href: '/automation', permission: 'automation:read', section: 'System' },
   { label: 'Data Migration', href: '/migration', permission: 'migration:read', section: 'System' },

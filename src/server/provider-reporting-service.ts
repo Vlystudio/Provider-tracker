@@ -2,7 +2,9 @@ import 'server-only';
 
 import { z } from 'zod';
 import { parseReportPeriod, percentage } from '@/lib/provider-intelligence';
+import { safeFilterKeys } from '@/lib/governance';
 import { assertPermission, type Principal } from './authorization';
+import { recordAuditEventBestEffort } from './audit';
 import { getFreshnessPolicy } from './config';
 import { getDatabasePool } from './database';
 import { measureOperation } from './metrics';
@@ -114,7 +116,18 @@ export async function getOperationalReport(
   principal: Principal,
   input: z.input<typeof reportingInputSchema>,
 ): Promise<OperationalReport> {
-  return measureOperation('report_generation', () => runOperationalReport(principal, input));
+  const report = await measureOperation('report_generation', () => runOperationalReport(principal, input));
+  await recordAuditEventBestEffort({
+    actorId: principal.id,
+    action: 'report.view',
+    result: 'success',
+    entityType: 'operational_report',
+    metadata: {
+      rowCount: report.total,
+      filterKeys: safeFilterKeys(input as Record<string, unknown>).join(','),
+    },
+  });
+  return report;
 }
 
 async function getReportDrilldown(
