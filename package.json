@@ -16,6 +16,7 @@
     "audit:production": "npm audit --omit=dev --omit=optional --omit=peer",
     "audit:supply-chain": "node scripts/supply-chain-audit.mjs",
     "audit:static-security": "node scripts/static-security-audit.mjs",
+    "audit:privacy": "node scripts/privacy-static-audit.mjs",
     "scan:secrets": "tsx scripts/secret-scan.ts",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
@@ -42,13 +43,15 @@
     "audit:configuration-drift": "tsx scripts/configuration-drift.ts",
     "phase9:status": "tsx scripts/phase9-readiness.ts",
     "release:evidence": "tsx scripts/release-evidence.ts",
-    "verify:ci": "npm run lint && npm run typecheck && npm test && npm run build && npm run audit:production && npm run audit:supply-chain && npm run audit:static-security && npm run scan:secrets",
+    "governance:evidence": "tsx scripts/governance-evidence.ts",
+    "verify:ci": "npm run lint && npm run typecheck && npm test && npm run build && npm run audit:production && npm run audit:supply-chain && npm run audit:static-security && npm run audit:privacy && npm run scan:secrets",
     "verify:release": "tsx scripts/release-acceptance.ts",
     "db:studio": "drizzle-kit studio",
     "admin:bootstrap": "node --conditions=react-server --import tsx scripts/bootstrap-admin.ts",
     "import:workbooks": "tsx scripts/import-workbooks.ts",
     "test:migration": "tsx scripts/migration-acceptance.ts",
-    "test:migration-performance": "tsx scripts/migration-performance.ts"
+    "test:migration-performance": "tsx scripts/migration-performance.ts",
+    "test:governance-performance": "tsx scripts/governance-performance.ts"
   },
   "dependencies": {
     "@tanstack/react-table": "9.1.2",

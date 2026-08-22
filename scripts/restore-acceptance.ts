@@ -44,6 +44,9 @@ const criticalTables = [
   'legacy_actors',
   'legacy_value_mappings',
   'audit_events',
+  'access_review_decisions',
+  'data_retention_policies',
+  'data_retention_holds',
   'automation_job_executions',
   'notification_preferences',
   'notifications',
@@ -90,6 +93,9 @@ try {
     'legacy_actors',
     'legacy_value_mappings',
     'audit_events',
+    'access_review_decisions',
+    'data_retention_policies',
+    'data_retention_holds',
   ];
   const missing = required.filter((table) => !(table in sourceCounts));
   if (missing.length) throw new Error(`Source test database is missing critical tables: ${missing.join(', ')}`);

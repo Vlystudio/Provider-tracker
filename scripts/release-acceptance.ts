@@ -18,9 +18,12 @@ const steps: Array<{ name: string; command: string; args: string[] }> = [
   { name: 'typecheck', command: process.execPath, args: [npmCli,'run','typecheck'] },
   { name: 'tests', command: process.execPath, args: [npmCli,'test'] },
   { name: 'migration performance', command: process.execPath, args: [npmCli,'run','test:migration-performance'] },
-  { name: 'security matrix', command: process.execPath, args: [npmCli,'run','test:security'] },
   { name: 'production build', command: process.execPath, args: [npmCli,'run','build'] },
+  { name: 'security matrix', command: process.execPath, args: [npmCli,'run','test:security'] },
   { name: 'dependency audit', command: process.execPath, args: [npmCli,'run','audit:production'] },
+  { name: 'supply-chain audit', command: process.execPath, args: [npmCli,'run','audit:supply-chain'] },
+  { name: 'static security audit', command: process.execPath, args: [npmCli,'run','audit:static-security'] },
+  { name: 'privacy audit', command: process.execPath, args: [npmCli,'run','audit:privacy'] },
   { name: 'secret scan', command: process.execPath, args: [npmCli,'run','scan:secrets'] },
 ];
 const completed: string[] = [];
@@ -32,8 +35,22 @@ for (const step of steps) {
 if (process.env.RELEASE_RUN_DATABASE_GATES === 'true') {
   await run(process.execPath, [npmCli,'run','db:preflight']);
   await run(process.execPath, [npmCli,'run','test:postgis']);
+  await run(process.execPath, [npmCli,'run','test:database-security']);
   await run(process.execPath, [npmCli,'run','test:migration']);
-  completed.push('migration preflight','PostGIS staging gate','migration acceptance');
+  await run(process.execPath, [npmCli,'run','test:governance-performance']);
+  await run(process.execPath, [npmCli,'run','test:automation']);
+  await run(process.execPath, [npmCli,'run','db:audit-integrity']);
+  await run(process.execPath, [npmCli,'run','test:restore']);
+  completed.push(
+    'migration preflight',
+    'PostGIS staging gate',
+    'database privilege acceptance',
+    'migration acceptance',
+    'governance performance',
+    'automation acceptance',
+    'audit integrity',
+    'backup and restore',
+  );
 }
 if (process.env.SMOKE_BASE_URL) {
   await run(process.execPath, [npmCli,'run','test:smoke']);

@@ -156,13 +156,15 @@ async function waitForServer() {
 
 async function createTestSchema() {
   await pool.query(`
-    DROP TABLE IF EXISTS legacy_value_mappings, legacy_actors, migration_reconciliations, migration_diagnostics, migration_sources, migration_runs,
+    DROP TABLE IF EXISTS access_review_decisions, data_retention_holds, data_retention_policies,
+      legacy_value_mappings, legacy_actors, migration_reconciliations, migration_diagnostics, migration_sources, migration_runs,
       operational_digests, coverage_alert_events, coverage_watches, operational_change_events,
       operational_work_items, notifications, notification_preferences, automation_settings, automation_job_executions,
       facility_merge_records, reverification_assignments, facility_contact_attempts, facility_verification_events,
-      facility_diagnosis_capabilities, facility_specialties, facilities, diagnoses, specialties,
+      facility_diagnosis_capabilities, facility_specialties, facilities, postal_code_centroids, diagnoses, specialties,
       audit_events, authorizations, auth_rate_limits, verification_tokens, sessions, accounts, users CASCADE;
     DROP TYPE IF EXISTS assignment_status CASCADE;
+    DROP TYPE IF EXISTS access_review_decision CASCADE;
     DROP TYPE IF EXISTS migration_diagnostic_status CASCADE;
     DROP TYPE IF EXISTS migration_readiness CASCADE;
     DROP TYPE IF EXISTS migration_run_status CASCADE;
@@ -200,11 +202,13 @@ async function createTestSchema() {
     CREATE TYPE digest_frequency AS ENUM ('none', 'daily', 'weekly');
     CREATE TYPE work_item_status AS ENUM ('open', 'assigned', 'in_progress', 'completed', 'dismissed', 'blocked');
     CREATE TYPE coverage_state AS ENUM ('unknown', 'healthy', 'alerting');
+    CREATE TYPE access_review_decision AS ENUM ('retain', 'modify', 'disable', 'investigate');
     CREATE TABLE users (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, email text NOT NULL UNIQUE,
       email_verified boolean NOT NULL DEFAULT false, display_name text, image text,
       initials text NOT NULL DEFAULT '--', role user_role NOT NULL DEFAULT 'ura_user',
       is_active boolean NOT NULL DEFAULT true, is_service_account boolean NOT NULL DEFAULT false,
+      last_signed_in_at timestamptz, role_assigned_at timestamptz, disabled_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX users_role_active_idx ON users(role, is_active);
@@ -254,6 +258,9 @@ async function createTestSchema() {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text NOT NULL UNIQUE, description text NOT NULL,
       active boolean NOT NULL DEFAULT true, aliases jsonb NOT NULL DEFAULT '[]'::jsonb,
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE postal_code_centroids (
+      zip_code text PRIMARY KEY, geog_point text
     );
     CREATE TABLE facilities (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_name text NOT NULL, city text NOT NULL,
@@ -324,6 +331,27 @@ async function createTestSchema() {
     );
     CREATE INDEX audit_events_entity_idx ON audit_events(entity_type, entity_id, created_at);
     CREATE INDEX audit_events_actor_created_idx ON audit_events(actor_id, created_at);
+    CREATE TABLE access_review_decisions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), review_period text NOT NULL,
+      reviewed_user_id uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      reviewer_id uuid REFERENCES users(id) ON DELETE SET NULL, reviewed_role user_role NOT NULL,
+      account_active boolean NOT NULL, last_signed_in_at timestamptz,
+      decision access_review_decision NOT NULL, decided_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE(review_period,reviewed_user_id,reviewer_id)
+    );
+    CREATE INDEX access_review_user_decided_idx ON access_review_decisions(reviewed_user_id,decided_at);
+    CREATE TABLE data_retention_policies (
+      category text PRIMARY KEY, retention_days integer, deletion_enabled boolean NOT NULL DEFAULT false,
+      policy_reference text, approved_by uuid REFERENCES users(id) ON DELETE SET NULL, approved_at timestamptz,
+      updated_by uuid REFERENCES users(id) ON DELETE SET NULL, updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE data_retention_holds (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), category text NOT NULL, entity_type text, entity_id text,
+      reason_code text NOT NULL, placed_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      placed_at timestamptz NOT NULL DEFAULT now(), released_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      released_at timestamptz
+    );
+    CREATE INDEX data_retention_hold_category_active_idx ON data_retention_holds(category,released_at);
     CREATE TABLE migration_runs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), importer_version text NOT NULL,
       status migration_run_status NOT NULL DEFAULT 'previewed', release_version text NOT NULL,
@@ -793,6 +821,106 @@ async function main() {
   record('Stale login on privileged operation', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
   adminLogin = await signIn(fixtures.admin.email, fixtures.admin.password, '192.0.2.10');
   record('Fresh login restores privileged access', 'PASS', `HTTP ${adminLogin.response.status}`, adminLogin.response.status === 200 && Boolean(adminLogin.cookie));
+
+  response = await request('/governance', { cookie: adminLogin.cookie, clientIp: '192.0.2.10' });
+  record('Administrator governance access', 'PASS', `HTTP ${response.status}`, response.status === 200);
+  response = await request('/governance', { cookie: userLogin.cookie, clientIp: '192.0.2.11' });
+  record('URA governance page access', 'BLOCKED', `HTTP ${response.status}`, response.status >= 300 && response.status < 400 && response.headers.get('location')?.endsWith('/forbidden') === true);
+  response = await mutation('/api/governance/access-reviews', userLogin.cookie, 'POST', {
+    reviewedUserId: userA.id, reviewPeriod: '2026-Q3', decision: 'retain',
+  });
+  record('URA access certification decision', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await mutation('/api/governance/access-reviews', adminLogin.cookie, 'POST', {
+    reviewedUserId: userA.id, reviewPeriod: '2026-Q3', decision: 'retain',
+  });
+  const accessReviewAudit = await pool.query<{ decisions: number; events: number }>(`
+    SELECT
+      (SELECT count(*)::int FROM access_review_decisions WHERE reviewed_user_id=$1 AND review_period='2026-Q3') AS decisions,
+      (SELECT count(*)::int FROM audit_events WHERE action='access-review.decision' AND entity_id=$1::text) AS events`, [userA.id]);
+  record(
+    'Administrator records audited access decision',
+    'PASS',
+    `HTTP ${response.status}; decisions ${accessReviewAudit.rows[0]?.decisions}; audits ${accessReviewAudit.rows[0]?.events}`,
+    response.status === 201 && accessReviewAudit.rows[0]?.decisions === 1 && accessReviewAudit.rows[0]?.events === 1,
+  );
+  response = await mutation('/api/governance/retention', adminLogin.cookie, 'PATCH', {
+    category: 'expired_sessions', retentionDays: 30, deletionEnabled: false, policyReference: null,
+  });
+  record('Retention stays disabled without approved policy', 'PASS', `HTTP ${response.status}`, response.status === 200);
+  response = await mutation('/api/governance/retention', adminLogin.cookie, 'PATCH', {
+    category: 'expired_sessions', retentionDays: 30, deletionEnabled: true,
+    policyReference: 'TEST-POLICY', confirmation: 'wrong',
+  });
+  record('Retention enable confirmation', 'BLOCKED', `HTTP ${response.status}`, response.status === 400);
+  response = await mutation('/api/governance/retention/dry-run', adminLogin.cookie, 'POST', { category: 'expired_sessions' });
+  const retentionBody = response.ok ? await response.clone().json() as { result?: { configured?: boolean; mode?: string } } : {};
+  record('Retention dry run deletes nothing', 'PASS', `HTTP ${response.status}`, response.status === 200 && retentionBody.result?.configured === true && retentionBody.result?.mode === 'dry-run');
+  response = await mutation('/api/governance/holds', adminLogin.cookie, 'POST', {
+    category: 'expired_sessions', entityType: null, entityId: null, reasonCode: 'incident_preservation',
+  });
+  const holdBody = response.ok ? await response.clone().json() as { hold?: { id?: string } } : {};
+  const holdId = holdBody.hold?.id;
+  const releaseHold = holdId
+    ? await mutation(`/api/governance/holds/${holdId}`, adminLogin.cookie, 'DELETE', { reasonCode: 'test_complete' })
+    : new Response(null, { status: 500 });
+  record('Retention hold place and release', 'PASS', `place HTTP ${response.status}; release HTTP ${releaseHold.status}`, response.status === 201 && releaseHold.status === 200);
+  response = await mutation('/api/governance/incidents/scope', adminLogin.cookie, 'POST', {
+    userId: userA.id,
+    start: new Date(Date.now() - 86_400_000).toISOString(),
+    end: new Date(Date.now() + 60_000).toISOString(),
+  });
+  const incidentBody = response.ok ? await response.clone().json() as { report?: { summary?: { signIns?: number }; evidenceLimitations?: string[] } } : {};
+  record('Account investigation report', 'PASS', `HTTP ${response.status}`, response.status === 200 && (incidentBody.report?.summary?.signIns ?? 0) >= 1 && (incidentBody.report?.evidenceLimitations?.length ?? 0) >= 1);
+  response = await request('/api/exports/providers.csv', {
+    method: 'POST',
+    headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+    body: JSON.stringify({ unexpected: true }),
+  });
+  record('Anonymous provider export', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
+  response = await mutation('/api/exports/providers.csv', userLogin.cookie, 'POST', { memberZip: '04530', radius: 50 });
+  const providerExportText = await response.clone().text();
+  record(
+    'URA provider export with current scope',
+    'PASS',
+    `HTTP ${response.status}; ${response.headers.get('x-data-classification')}`,
+    response.status === 200
+      && response.headers.get('content-disposition')?.includes('provider-directory-') === true
+      && response.headers.get('cache-control')?.includes('no-store') === true
+      && response.headers.get('x-data-classification') === 'confidential-operational'
+      && providerExportText.includes('"Facility"'),
+  );
+  response = await mutation('/api/exports/providers.csv', adminLogin.cookie, 'POST', { unexpected: true });
+  record('Administrator provider export authorization boundary', 'PASS', `HTTP ${response.status}`, response.status === 400);
+
+  const emergencyPassword = password();
+  response = await mutation('/api/admin/users', adminLogin.cookie, 'POST', {
+    email: `emergency-${runId}@example.invalid`,
+    name: 'Emergency Revocation User',
+    password: emergencyPassword,
+    role: 'auditor',
+  });
+  const emergencyUserBody = response.ok ? await response.clone().json() as { user?: { id?: string } } : {};
+  const emergencyUserId = emergencyUserBody.user?.id;
+  const emergencyLogin = await signIn(`emergency-${runId}@example.invalid`, emergencyPassword, '192.0.2.81');
+  const emergencyRevoke = emergencyUserId
+    ? await mutation(`/api/governance/users/${emergencyUserId}/emergency-revoke`, adminLogin.cookie, 'POST')
+    : new Response(null, { status: 500 });
+  const emergencySessionReuse = await request('/api/session', { cookie: emergencyLogin.cookie, clientIp: '192.0.2.81' });
+  const emergencyState = emergencyUserId
+    ? await pool.query<{ is_active: boolean; role: string; audit_count: number }>(`
+        SELECT is_active,role::text,
+          (SELECT count(*)::int FROM audit_events WHERE action='user.emergency-revoke' AND entity_id=users.id::text) AS audit_count
+        FROM users WHERE id=$1`, [emergencyUserId])
+    : { rows: [] };
+  record(
+    'Emergency account revocation',
+    'BLOCKED',
+    `revoke HTTP ${emergencyRevoke.status}; reused HTTP ${emergencySessionReuse.status}`,
+    emergencyRevoke.status === 200 && emergencySessionReuse.status === 401
+      && emergencyState.rows[0]?.is_active === false && emergencyState.rows[0]?.role === 'ura_user'
+      && emergencyState.rows[0]?.audit_count === 1,
+  );
+
   response = await request('/api/admin/migrations/not-a-uuid', { cookie: adminLogin.cookie, clientIp: '192.0.2.10' });
   record('Invalid migration route identifier', 'BLOCKED', `HTTP ${response.status}`, response.status === 400);
   const noOriginUpload = new FormData();
@@ -957,6 +1085,24 @@ async function main() {
     `report HTTP ${viewerReport.status}; operations HTTP ${viewerOperations.status}`,
     viewerReport.status === 200 && viewerOperations.status >= 300 && viewerOperations.status < 400 && viewerOperations.headers.get('location')?.endsWith('/forbidden') === true,
   );
+  response = await mutation('/api/exports/providers.csv', viewerLogin.cookie, 'POST', { unexpected: true });
+  record('Report viewer provider row export', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await request('/governance', { cookie: viewerLogin.cookie, clientIp: '192.0.2.13' });
+  record('Report viewer governance access', 'BLOCKED', `HTTP ${response.status}`, response.status >= 300 && response.status < 400 && response.headers.get('location')?.endsWith('/forbidden') === true);
+  response = await request('/governance', { cookie: changedPasswordLogin.cookie, clientIp: '192.0.2.20' });
+  record('Auditor governance access', 'PASS', `HTTP ${response.status}`, response.status === 200);
+  response = await mutation('/api/exports/providers.csv', changedPasswordLogin.cookie, 'POST', { unexpected: true });
+  record('Auditor provider row export', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await mutation('/api/governance/access-reviews', changedPasswordLogin.cookie, 'POST', {
+    reviewedUserId: userA.id, reviewPeriod: '2026-Q3', decision: 'retain',
+  });
+  record('Auditor access certification write', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  response = await mutation('/api/governance/incidents/scope', changedPasswordLogin.cookie, 'POST', {
+    userId: userA.id,
+    start: new Date(Date.now() - 86_400_000).toISOString(),
+    end: new Date(Date.now() + 60_000).toISOString(),
+  });
+  record('Auditor incident investigation', 'PASS', `HTTP ${response.status}`, response.status === 200);
   response = await request(`/api/admin/users/${userB.id}`, {
     method: 'PATCH', cookie: adminLogin.cookie, clientIp: '192.0.2.10',
     headers: { 'content-type': 'application/json' }, body: JSON.stringify({ role: 'ura_user' }),
@@ -997,24 +1143,42 @@ async function main() {
   }
   record('Sign-in brute-force limit', 'BLOCKED', rateLimited ? 'HTTP 429 observed' : 'No HTTP 429', rateLimited);
 
-  const deletedUserLogin = await signIn(fixtures.userB.email, fixtures.userB.password, '192.0.2.16');
-  await pool.query('DELETE FROM users WHERE id = $1', [userB.id]);
+  const deletedAccountPassword = password();
+  const deletedAccountResponse = await mutation('/api/admin/users', adminLogin.cookie, 'POST', {
+    email: `deleted-${runId}@example.invalid`,
+    name: 'Deleted Session Fixture',
+    password: deletedAccountPassword,
+    role: 'ura_user',
+  });
+  const deletedAccountBody = deletedAccountResponse.ok
+    ? await deletedAccountResponse.json() as { user?: { id?: string } }
+    : {};
+  const deletedAccountId = deletedAccountBody.user?.id;
+  const deletedUserLogin = await signIn(`deleted-${runId}@example.invalid`, deletedAccountPassword, '192.0.2.16');
+  if (deletedAccountId) await pool.query('DELETE FROM users WHERE id = $1', [deletedAccountId]);
   response = await request('/api/session', { cookie: deletedUserLogin.cookie, clientIp: '192.0.2.16' });
-  record('Deleted user session', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
+  record(
+    'Deleted user session',
+    'BLOCKED',
+    `create HTTP ${deletedAccountResponse.status}; session HTTP ${response.status}`,
+    Boolean(deletedAccountId) && deletedUserLogin.response.status === 200 && response.status === 401,
+  );
 
   const auditRows = await pool.query<{ action: string; metadata: unknown }>(
     `SELECT action, metadata FROM audit_events
      WHERE action = ANY($1::text[])`,
-    [['auth.sign-in', 'auth.sign-out', 'account.password-change', 'account.session-revoke', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge', 'migration.preview']],
+    [['auth.sign-in', 'auth.sign-out', 'account.password-change', 'account.session-revoke', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'user.emergency-revoke', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge', 'migration.preview', 'export.migration-diagnostics', 'export.provider-directory', 'provider.search', 'report.view', 'access-review.decision', 'retention.policy-update', 'retention.dry-run', 'retention.hold-place', 'retention.hold-release', 'security.investigation.run']],
   );
   const auditedActionsFound = new Set(auditRows.rows.map((row) => row.action));
-  const requiredAuditActions = ['auth.sign-in', 'auth.sign-out', 'account.password-change', 'account.session-revoke', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge', 'migration.preview'];
+  const requiredAuditActions = ['auth.sign-in', 'auth.sign-out', 'account.password-change', 'account.session-revoke', 'user.create', 'user.role-change', 'user.password-reset', 'user.deactivate', 'user.emergency-revoke', 'facility.verification.create', 'facility.contact-attempt.create', 'reverification.bulk-assign', 'facility.merge', 'migration.preview', 'export.migration-diagnostics', 'export.provider-directory', 'provider.search', 'report.view', 'access-review.decision', 'retention.policy-update', 'retention.dry-run', 'retention.hold-place', 'retention.hold-release', 'security.investigation.run'];
   const serializedAuditRows = JSON.stringify(auditRows.rows);
   const sensitiveFixtureValues = [
     ...Object.values(fixtures).flatMap((fixture) => [fixture.email, fixture.password]),
     provisionedPassword,
     replacementPassword,
     finalPassword,
+    emergencyPassword,
+    deletedAccountPassword,
     userLogin.cookie,
     adminLogin.cookie,
   ];
