@@ -211,7 +211,7 @@ export async function applyImportPlan(
               zipCode: postalCode.zipCode,
               latitude: postalCode.latitude,
               longitude: postalCode.longitude,
-              geogPoint: { x: postalCode.longitude, y: postalCode.latitude },
+              geogPoint: sql`ST_SetSRID(ST_MakePoint(${postalCode.longitude}, ${postalCode.latitude}), 4326)`,
               source: `${postalCode.source.workbookKind}:${postalCode.source.sourceFileName}`,
             })),
           )
@@ -245,7 +245,10 @@ export async function applyImportPlan(
                 postalCode: facility.postalCode,
                 latitude,
                 longitude,
-                geogPoint: latitude !== null && longitude !== null ? { x: longitude, y: latitude } : null,
+                geogPoint:
+                  latitude !== null && longitude !== null
+                    ? sql`ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)`
+                    : null,
                 coordinateProvenance:
                   facility.latitude !== null && facility.longitude !== null
                     ? 'workbook_explicit'

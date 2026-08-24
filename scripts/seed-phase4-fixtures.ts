@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { and, inArray } from 'drizzle-orm';
+import { and, inArray, sql } from 'drizzle-orm';
 import { createDatabase } from '../src/db/client';
 import {
   diagnoses,
@@ -83,7 +83,10 @@ async function main() {
           postalCode: index === 7 ? null : '04103',
           latitude,
           longitude,
-          geogPoint: latitude !== null && longitude !== null ? { x: longitude, y: latitude } : null,
+          geogPoint:
+            latitude !== null && longitude !== null
+              ? sql`ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)`
+              : null,
           coordinateProvenance: hasCoordinates ? 'synthetic_fixture' : null,
           coordinateQuality: hasCoordinates ? ('address' as const) : ('unknown' as const),
           currentAcceptingStatus: index === 1 || index === 5 ? ('no' as const) : isNever ? ('unknown' as const) : ('yes' as const),
