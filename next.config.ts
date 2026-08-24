@@ -24,7 +24,7 @@ export const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1'],
   deploymentId:
     process.env.NEXT_DEPLOYMENT_ID || process.env.APP_RELEASE || process.env.BUILD_COMMIT || undefined,
-  output: 'standalone',
+  output: process.env.VERCEL ? undefined : 'standalone',
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
   experimental: {
