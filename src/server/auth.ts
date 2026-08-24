@@ -11,6 +11,7 @@ import { hashAuditValue } from './audit';
 function buildAuth(allowTrustedProvisioning = false) {
   const config = getSecurityConfig();
   const db = requireDatabaseClient();
+  const useSecureCookies = new URL(config.BETTER_AUTH_URL).protocol === 'https:';
 
   return betterAuth({
     appName: 'Provider Tracker',
@@ -97,11 +98,11 @@ function buildAuth(allowTrustedProvisioning = false) {
       },
     },
     advanced: {
-      useSecureCookies: config.APP_ENV === 'production',
+      useSecureCookies,
       cookiePrefix: 'provider-tracker',
       defaultCookieAttributes: {
         httpOnly: true,
-        secure: config.APP_ENV === 'production',
+        secure: useSecureCookies,
         sameSite: 'lax',
         path: '/',
       },
