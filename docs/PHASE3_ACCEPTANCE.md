@@ -41,14 +41,13 @@ The role-change check revoked the affected account’s active sessions as intend
 - Forms, filter controls, row links, save actions, and confirmation controls are reachable in a logical order.
 - Validation and mutation messages are announced with status or alert semantics.
 
-## Responsive checks
+## Viewport checks recorded at the time
 
 | Viewport | Screen | Result |
 | --- | --- | --- |
 | 1920×1080 | Authorizations | No document overflow; detail and table remain readable |
 | 1440×900 | Provider search | No document overflow; all filters and table columns remain usable |
 | 1366×768 | Call log | Dense table remains readable; horizontal overflow stays inside the table container |
-| 768×1024 | Authorizations | Filters and detail stack; table scrolls inside its container; no document overflow |
 
 Print styles were inspected for reports and operational tables. Navigation, filter actions, and row actions are removed from printed output.
 
@@ -83,6 +82,6 @@ A separate live header check confirmed:
 
 ## Figma and visual evidence
 
-The Figma file and screen inventory are recorded in [FIGMA_HANDOFF.md](./FIGMA_HANDOFF.md). Four implemented screens were captured as editable layers before the Starter-plan Figma call limit was reached. Eleven representative application states, two role-specific dashboards, and four responsive references were captured locally for review.
+The Figma file and screen inventory are recorded in [FIGMA_HANDOFF.md](./FIGMA_HANDOFF.md). Four implemented screens were captured as editable layers before the Starter-plan Figma call limit was reached. Eleven representative application states, two role-specific dashboards, and desktop viewport references were captured locally for review. Current support is limited to the desktop sizes listed in the interface guide.
 
 No production credentials or real member information appear in the captures.

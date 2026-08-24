@@ -32,7 +32,7 @@ The Starter-plan Figma call limit was reached after these four captures. The rem
 | `role-report-viewer.png` | Report-viewer dashboard |
 | `role-auditor.png` | Auditor dashboard |
 
-Responsive references cover 1920×1080, 1440×900, 1366×768, and 768×1024.
+Desktop references cover 1920×1080, 1440×900, and 1366×768. Phone and tablet layouts are outside the product support scope.
 
 ## Component inventory
 
@@ -70,7 +70,7 @@ Navigation visibility is only a usability layer. Direct page and API access rema
 - Tab and Shift+Tab loop inside the open drawer.
 - The skip link is the first keyboard stop and moves focus to the main region.
 - Filter values are visible in the URL, the active-filter count, and the control values. Reset clears only the current page filters.
-- Tables keep their header and row semantics. At tablet width, the table scrolls inside its own container while the document stays fixed.
+- Tables keep their header and row semantics. When a desktop window is reduced or zoomed, the table scrolls inside its own container while the document stays fixed.
 - Save and account actions disable duplicate submission and announce success or failure inline.
 - Validation moves focus to the first invalid field and leaves entered values in place.
 - Account deactivation requires a second deliberate action and states which account will lose access.

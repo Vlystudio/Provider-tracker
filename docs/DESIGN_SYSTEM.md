@@ -21,7 +21,7 @@ The spacing scale is 4, 8, 12, 16, 20, 24, and 32px. Routine forms and tables us
 ## Type hierarchy
 
 - Application name: 16px, semibold.
-- Page title: 28px desktop, 24px on narrow screens, bold.
+- Page title: 28px, bold.
 - Section title: 18px, semibold.
 - Body and form controls: 14px.
 - Labels and table headers: 12–13px, semibold.
@@ -35,7 +35,7 @@ Page titles stay short. Supporting copy explains the task in one sentence and av
 - `panel` is the standard bordered white surface.
 - `page-header` holds the area label, title, summary, and optional context.
 - `filter-bar` contains search, filters, a results summary, reset, and submit actions.
-- `table-shell` provides the bordered table container; `table-scroll` handles narrow viewports without converting rows to cards.
+- `table-shell` provides the bordered table container; `table-scroll` contains wide tables when a desktop window is reduced or zoomed.
 - Navigation is a drawer, closed by default. It traps focus while open, closes with Escape, and returns focus to the menu button.
 - Dialog-like interruptions are reserved for risky actions. Account deactivation uses an inline two-step confirmation so the affected account remains visible.
 
@@ -89,11 +89,12 @@ The reusable React patterns live in `src/components/ui.tsx` and the shared style
 - shared form controls and help/error text
 - shared filters and tables
 
-## Responsive and accessibility rules
+## Desktop and accessibility rules
 
-- Desktop is the primary layout, with dense readable tables.
-- Tablet layouts stack filters and details while preserving table semantics and horizontal table scrolling.
-- The document itself must not scroll horizontally.
+- The supported layout is a corporate desktop browser at 1366×768 or larger.
+- Dense tables stay readable at the supported desktop sizes. A table may scroll inside its own container when the window is reduced or zoomed.
+- The document itself must not scroll horizontally at supported desktop sizes.
+- Phone and tablet layouts are outside the product support scope.
 - Focus remains visible on links, controls, row actions, and the navigation drawer.
 - A skip link is the first keyboard stop.
 - Headings follow page title, section title, then subsection title order.

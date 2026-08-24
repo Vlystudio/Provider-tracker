@@ -56,14 +56,14 @@ Resolution: associate errors with controls, preserve form values, announce pendi
 
 - Page headings used repeated card wrappers and widely tracked eyebrow text, adding visual noise without helping orientation.
 - Raw ISO dates were used in tables while other screens used relative language.
-- Data tables needed clearer responsive overflow and sticky headings for longer result sets.
+- Data tables needed clearer contained overflow and sticky headings for longer result sets.
 - The drawer handled Escape and focus return, but needed a full keyboard focus loop and a visible role label.
 - The application had no skip link for repeated keyboard navigation.
 
 ## Polish
 
 - Standardize button, input, badge, table, empty-state, and message styles.
-- Tighten desktop spacing while keeping touch targets usable at tablet width.
+- Tighten desktop spacing while keeping controls easy to use on a standard work computer.
 - Use sentence case consistently and remove duplicated helper copy.
 - Keep status meaning in text and shape, not color alone.
 

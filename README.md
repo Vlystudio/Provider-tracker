@@ -4,7 +4,7 @@ Provider Tracker is an internal web app for facility discovery, availability ver
 
 ## Local setup
 
-Requirements: Node.js 22 or later and PostgreSQL 16 with PostGIS. Docker Desktop can provide the local database.
+Requirements: Node.js 22 or later and PostgreSQL 16 with PostGIS. Docker Desktop can provide the local database. The supported client is a current corporate desktop browser at 1366×768 or larger.
 
 1. Copy `.env.example` to `.env` and replace the local passwords and secrets.
 2. Start PostgreSQL:

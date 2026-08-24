@@ -118,7 +118,6 @@ The primary Chrome walkthrough covered sign-in plus 19 authenticated routes. Eve
 2. Operations overview and menu — the menu opens on demand, closes with Escape, and returns focus to the menu button.
 3. Provider search — specialty and availability filters returned the expected row and stayed in the URL.
 4. Reports — the report loaded and the selected transition drill-down returned its detail row.
-5. Mobile reports — at 390 by 844, the page had no page-level horizontal overflow; wide report tables remained horizontally scrollable inside their container.
 
 Evidence:
 
@@ -130,9 +129,7 @@ Evidence:
 
 ![Provider search results](../screenshots/phase11/04-provider-search.png)
 
-![Mobile reports view](../screenshots/phase11/05-mobile-reports.png)
-
-No Critical or High browser-layout defect was found. This workstation check did not include a screen reader or a Firefox, Safari, or managed Edge test. Those checks belong in the staging/UAT run with the target corporate browser policy.
+No Critical or High desktop-browser layout defect was found. The supported client is a current corporate desktop browser at 1366×768 or larger. Phone and tablet layouts are outside scope. Staging/UAT still needs the managed work-browser version and the organization's desktop accessibility checks.
 
 ## Closed defects
 
@@ -165,7 +162,7 @@ Open defects: 0 Critical, 0 High, 0 Medium, 0 Low.
 | Secret scan | PASS |
 | Local HTTP load | PASS — 100 requests, 0 errors |
 | Dependency failure behavior | PASS |
-| Primary Chrome workflow and responsive layout | PASS with the browser limitations noted above |
+| Primary Chrome desktop workflow and layout | PASS with the browser limitations noted above |
 | PostGIS staging gate | PENDING — extension is not installed in the local test database |
 | Backup/restore gate | PENDING — PostgreSQL client tools are not installed locally |
 
@@ -179,7 +176,7 @@ Production approval remains blocked on:
 - corporate identity, MFA, lifecycle provisioning, service accounts, and emergency access;
 - centralized logs, monitoring, alert delivery, dashboards, and on-call routing;
 - container build, image scan, registry, runtime limits, and deployment rollback;
-- the approved browser matrix, screen-reader check, and real-user UAT;
+- the approved managed desktop browser, screen-reader check, and real-user UAT;
 - production-like load, long-running soak, failover, restart, and multi-day automation runs;
 - completion of the organizational privacy, legal, records, incident, and security approvals carried forward from earlier phases.
 

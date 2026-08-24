@@ -16,7 +16,7 @@ Provider verification history, failed-contact tracking, freshness, reverificatio
 | Browser: provider search | Passed; filters returned the expected facility and result count |
 | Browser: report drill-down | Passed; a summary card opened its underlying facility list |
 | Browser: review queue | Passed; highest priority appears first |
-| Browser: mobile menu | Passed; the menu opens, receives focus, and closes with Escape |
+| Browser: narrow-window menu | Passed; the menu opens, receives focus, and closes with Escape |
 | Browser: error overlay and layout | Passed; no application error overlay or horizontal page overflow |
 | Repository term scan | Passed; no public references to coding assistants or prior versions |
 
@@ -29,9 +29,9 @@ The browser extension logged two failed requests from its own `ag-scripts.js`. T
 3. [Reports](../screenshots/phase4-audit/03-reports.png) — Healthy. Every percentage includes its denominator, with activity and specialty coverage below.
 4. [Data quality](../screenshots/phase4-audit/04-data-quality.png) — Healthy. Totals link to concrete issue lists, and overlapping issues remain visible.
 5. [Duplicate review](../screenshots/phase4-audit/05-duplicate-review.png) — Healthy. Both records and the matching evidence are shown side by side.
-6. [Mobile navigation](../screenshots/phase4-audit/06-mobile-menu.png) — Healthy. The menu is hidden by default, covers the page only while open, and supports keyboard dismissal.
+6. [Narrow-window navigation](../screenshots/phase4-audit/06-narrow-window-menu.png) — Historical check. The menu is hidden by default, covers the page only while open, and supports keyboard dismissal. This viewport is no longer a supported product target.
 
-The screenshots confirm visible hierarchy, responsive layout, labels, and basic keyboard behavior. They do not by themselves establish full WCAG conformance or screen-reader compatibility.
+The screenshots confirm visible hierarchy, layout, labels, and basic keyboard behavior. They do not by themselves establish full WCAG conformance or screen-reader compatibility.
 
 ## Staging checks for IT
 
