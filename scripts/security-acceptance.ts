@@ -160,7 +160,7 @@ async function createTestSchema() {
       legacy_value_mappings, legacy_actors, migration_reconciliations, migration_diagnostics, migration_sources, migration_runs,
       operational_digests, coverage_alert_events, coverage_watches, operational_change_events,
       operational_work_items, notifications, notification_preferences, automation_settings, automation_job_executions,
-      facility_merge_records, reverification_assignments, facility_contact_attempts, facility_verification_events,
+      facility_merge_records, facility_duplicate_candidates, reverification_assignments, facility_contact_attempts, facility_verification_events,
       facility_diagnosis_capabilities, facility_specialties, facilities, postal_code_centroids, diagnoses, specialties,
       audit_events, authorizations, auth_rate_limits, verification_tokens, sessions, accounts, users CASCADE;
     DROP TYPE IF EXISTS assignment_status CASCADE;
@@ -180,6 +180,8 @@ async function createTestSchema() {
     DROP TYPE IF EXISTS verification_method CASCADE;
     DROP TYPE IF EXISTS verification_answer CASCADE;
     DROP TYPE IF EXISTS coordinate_quality CASCADE;
+    DROP TYPE IF EXISTS duplicate_decision CASCADE;
+    DROP TYPE IF EXISTS duplicate_confidence CASCADE;
     DROP TYPE IF EXISTS data_quality_status CASCADE;
     DROP TYPE IF EXISTS authorization_status CASCADE;
     DROP TYPE IF EXISTS user_role CASCADE;
@@ -192,6 +194,8 @@ async function createTestSchema() {
     CREATE TYPE authorization_status AS ENUM ('open', 'complete', 'cancelled');
     CREATE TYPE data_quality_status AS ENUM ('clean', 'needs_review', 'rejected');
     CREATE TYPE coordinate_quality AS ENUM ('exact', 'address', 'zip_centroid', 'manual', 'unknown');
+    CREATE TYPE duplicate_confidence AS ENUM ('exact', 'probable', 'possible');
+    CREATE TYPE duplicate_decision AS ENUM ('pending', 'not_duplicate', 'deferred', 'merged');
     CREATE TYPE verification_answer AS ENUM ('yes', 'no', 'unknown', 'not_asked', 'unable_to_verify', 'not_applicable');
     CREATE TYPE verification_method AS ENUM ('phone', 'fax', 'portal', 'website', 'email', 'internal_source', 'other');
     CREATE TYPE source_confidence AS ENUM ('direct', 'authoritative', 'secondary', 'unverified');
@@ -317,6 +321,13 @@ async function createTestSchema() {
       status assignment_status NOT NULL DEFAULT 'open', reason_codes jsonb NOT NULL DEFAULT '[]'::jsonb,
       completed_at timestamptz, completed_by uuid, created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE facility_duplicate_candidates (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), left_facility_id uuid NOT NULL, right_facility_id uuid NOT NULL,
+      confidence duplicate_confidence NOT NULL, score integer NOT NULL, reason_codes jsonb NOT NULL DEFAULT '[]'::jsonb,
+      decision duplicate_decision NOT NULL DEFAULT 'pending', reviewed_by uuid, reviewed_at timestamptz,
+      review_note text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE(left_facility_id,right_facility_id), CHECK(left_facility_id<right_facility_id), CHECK(score between 0 and 100)
     );
     CREATE TABLE facility_merge_records (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), survivor_facility_id uuid NOT NULL, merged_facility_id uuid NOT NULL,

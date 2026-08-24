@@ -56,6 +56,7 @@ jobs:
       - run: npm run test:postgis
       - run: npm run test:performance
       - run: npm run test:security
+      - run: npm run test:phase11
       - run: npm run test:governance-performance
       - run: npm run test:automation
       - run: npm run db:audit-integrity

@@ -20,6 +20,7 @@ const steps: Array<{ name: string; command: string; args: string[] }> = [
   { name: 'migration performance', command: process.execPath, args: [npmCli,'run','test:migration-performance'] },
   { name: 'production build', command: process.execPath, args: [npmCli,'run','build'] },
   { name: 'security matrix', command: process.execPath, args: [npmCli,'run','test:security'] },
+  { name: 'full-system data simulation', command: process.execPath, args: [npmCli,'run','test:phase11'] },
   { name: 'dependency audit', command: process.execPath, args: [npmCli,'run','audit:production'] },
   { name: 'supply-chain audit', command: process.execPath, args: [npmCli,'run','audit:supply-chain'] },
   { name: 'static security audit', command: process.execPath, args: [npmCli,'run','audit:static-security'] },

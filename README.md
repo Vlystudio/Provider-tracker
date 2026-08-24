@@ -116,3 +116,5 @@ Start with `docs/IT_HANDOFF.md`, `docs/SECURITY_INFRASTRUCTURE_HANDOFF.md`, and 
 ## Product interface
 
 The current interface rules are in `docs/DESIGN_SYSTEM.md`. The screen inventory and Figma link are in `docs/FIGMA_HANDOFF.md`. Acceptance records are in the `docs/PHASE*_ACCEPTANCE.md` files, including the staging evidence still required for legacy cutover.
+
+For a full database exercise on a test database, run `npm run test:security` followed by `npm run test:phase11`. The second command loads 10,000 synthetic providers, checks reporting and workflow truth, and removes its fixtures when it finishes. It refuses to run unless the database name ends in `_test`.

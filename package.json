@@ -51,7 +51,8 @@
     "import:workbooks": "tsx scripts/import-workbooks.ts",
     "test:migration": "tsx scripts/migration-acceptance.ts",
     "test:migration-performance": "tsx scripts/migration-performance.ts",
-    "test:governance-performance": "tsx scripts/governance-performance.ts"
+    "test:governance-performance": "tsx scripts/governance-performance.ts",
+    "test:phase11": "node --import ./scripts/register-server-only-loader.mjs --import tsx scripts/phase11-acceptance.ts"
   },
   "dependencies": {
     "@tanstack/react-table": "9.1.2",

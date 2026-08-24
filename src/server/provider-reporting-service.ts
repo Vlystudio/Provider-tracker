@@ -62,8 +62,8 @@ async function runOperationalReport(
         (SELECT count(*)::int FROM facility_verification_events WHERE verified_at >= $1 AND verified_at < $2) AS verification_events,
         (SELECT count(*)::int FROM facility_verification_events WHERE verified_at >= $1 AND verified_at < $2 AND method='phone') AS phone_verifications,
         (SELECT count(*)::int FROM facility_contact_attempts WHERE attempted_at >= $1 AND attempted_at < $2 AND outcome <> 'verified') AS failed_contacts,
-        (SELECT count(*)::int FROM facility_verification_events WHERE verified_at >= $1 AND verified_at < $2 AND accepting_status='yes' AND previous_state->>'acceptingStatus' IN ('no','unknown','unable_to_verify')) AS newly_accepting,
-        (SELECT count(*)::int FROM facility_verification_events WHERE verified_at >= $1 AND verified_at < $2 AND accepting_status='no' AND previous_state->>'acceptingStatus'='yes') AS became_unavailable,
+        (SELECT count(DISTINCT facility_id)::int FROM facility_verification_events WHERE verified_at >= $1 AND verified_at < $2 AND accepting_status='yes' AND previous_state->>'acceptingStatus' IN ('no','unknown','unable_to_verify')) AS newly_accepting,
+        (SELECT count(DISTINCT facility_id)::int FROM facility_verification_events WHERE verified_at >= $1 AND verified_at < $2 AND accepting_status='no' AND previous_state->>'acceptingStatus'='yes') AS became_unavailable,
         (SELECT count(*)::int FROM reverification_assignments WHERE created_at >= $1 AND created_at < $2) AS assignments_created,
         (SELECT count(*)::int FROM reverification_assignments WHERE created_at >= $1 AND created_at < $2 AND status='completed') AS assignments_completed,
         (SELECT round(avg(estimated_wait_days)::numeric, 1)::text FROM facility_verification_events WHERE verified_at >= $1 AND verified_at < $2 AND estimated_wait_days IS NOT NULL) AS average_wait_days,
@@ -142,9 +142,14 @@ async function getReportDrilldown(
     newly_accepting: `EXISTS (SELECT 1 FROM facility_verification_events ve WHERE ve.facility_id=f.id AND ve.verified_at >= $1 AND ve.verified_at < $2 AND ve.accepting_status='yes' AND ve.previous_state->>'acceptingStatus' IN ('no','unknown','unable_to_verify'))`,
     became_unavailable: `EXISTS (SELECT 1 FROM facility_verification_events ve WHERE ve.facility_id=f.id AND ve.verified_at >= $1 AND ve.verified_at < $2 AND ve.accepting_status='no' AND ve.previous_state->>'acceptingStatus'='yes')`,
   };
+  const queryParameters = kind === 'newly_accepting' || kind === 'became_unavailable'
+    ? parameters.slice(0, 2)
+    : kind === 'fresh'
+      ? parameters.slice(0, 3)
+      : parameters;
   const result = await pool.query<{ facility_id: string; facility_name: string; city: string; accepting_status: string; last_verified_at: Date | null }>(`
     SELECT f.id AS facility_id, f.facility_name, f.city, f.current_accepting_status::text AS accepting_status, f.last_verified_at
     FROM facilities f WHERE f.active AND f.merged_into_facility_id IS NULL AND ${conditions[kind]}
-    ORDER BY f.facility_name LIMIT 500`, parameters);
+    ORDER BY f.facility_name LIMIT 500`, queryParameters);
   return result.rows.map((row) => ({ facilityId: row.facility_id, facilityName: row.facility_name, city: row.city, acceptingStatus: row.accepting_status, lastVerifiedAt: row.last_verified_at?.toISOString() ?? null }));
 }

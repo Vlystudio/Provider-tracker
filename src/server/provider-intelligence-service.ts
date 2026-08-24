@@ -333,6 +333,30 @@ export async function createContactAttempt(
     const [facility] = await tx.select({ id: facilities.id }).from(facilities)
       .where(and(eq(facilities.id, parsedId), eq(facilities.active, true))).limit(1);
     if (!facility) throw new RecordNotFoundError('The active facility was not found.');
+    const signature = JSON.stringify([
+      facility.id,
+      principal.id,
+      value.attemptedAt.toISOString(),
+      value.method,
+      value.outcome,
+      value.contactPerson ?? null,
+      value.contactChannel ?? null,
+      value.comments ?? null,
+      value.relatedCallId ?? null,
+    ]);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${signature}, 0))`);
+    const [existing] = await tx.select().from(facilityContactAttempts).where(and(
+      eq(facilityContactAttempts.facilityId, facility.id),
+      eq(facilityContactAttempts.attemptedBy, principal.id),
+      eq(facilityContactAttempts.attemptedAt, value.attemptedAt),
+      eq(facilityContactAttempts.method, value.method),
+      eq(facilityContactAttempts.outcome, value.outcome),
+      sql`${facilityContactAttempts.contactPerson} is not distinct from ${value.contactPerson ?? null}`,
+      sql`${facilityContactAttempts.contactChannel} is not distinct from ${value.contactChannel ?? null}`,
+      sql`${facilityContactAttempts.comments} is not distinct from ${value.comments ?? null}`,
+      sql`${facilityContactAttempts.relatedCallId} is not distinct from ${value.relatedCallId ?? null}`,
+    )).limit(1);
+    if (existing) return existing;
     const [attempt] = await tx.insert(facilityContactAttempts).values({
       facilityId: facility.id,
       attemptedAt: value.attemptedAt,
