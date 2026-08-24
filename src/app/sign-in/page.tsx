@@ -14,7 +14,9 @@ export default async function SignInPage({ searchParams }: { searchParams?: Prom
         <p className="text-sm font-semibold text-slate-600">Provider Tracker</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">Sign in</h1>
         <p className="mt-2 text-sm text-slate-600">Use the account provided by your administrator.</p>
-        {params.reason === 'required' ? (
+        {params.reason === 'invalid' ? (
+          <div className="mt-5"><InlineMessage tone="error" role="alert">The email or password was not accepted.</InlineMessage></div>
+        ) : params.reason === 'required' ? (
           <div className="mt-5"><InlineMessage tone="info">Your sign-in is no longer active. Sign in to continue.</InlineMessage></div>
         ) : params.status === 'signed-out' ? (
           <div className="mt-5"><InlineMessage tone="success" role="status">You are signed out.</InlineMessage></div>

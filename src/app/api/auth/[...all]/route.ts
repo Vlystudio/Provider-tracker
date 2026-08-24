@@ -5,6 +5,7 @@ import { hashAuditValue, recordAuditEventBestEffort } from '@/server/audit';
 import { incrementMetric } from '@/server/metrics';
 import { requestIdFromHeaders, resolveRequestId } from '@/server/request-context';
 import { getDatabasePool } from '@/server/database';
+import { getSecurityConfig } from '@/server/config';
 
 const allowedGetPaths = new Set(['/api/auth/get-session']);
 const allowedPostPaths = new Set(['/api/auth/sign-in/email', '/api/auth/sign-out']);
@@ -44,6 +45,9 @@ export async function POST(request: Request) {
   const principalBefore = action === 'auth.sign-out' ? await getPrincipal(request.headers) : null;
   const signInEmail = await getSafeEmail(request);
   const emailHash = signInEmail ? hashAuditValue(signInEmail) : null;
+  const browserFormSubmission = action === 'auth.sign-in'
+    && (request.headers.get('sec-fetch-mode') === 'navigate'
+      || request.headers.get('accept')?.includes('text/html') === true);
   const response = await toNextJsHandler(getAuth()).POST(request);
 
   let actorId = principalBefore?.id ?? null;
@@ -78,6 +82,17 @@ export async function POST(request: Request) {
     operation: action === 'auth.sign-in' ? 'sign_in' : 'sign_out',
     result: response.ok ? 'success' : 'failure',
   });
+
+  if (browserFormSubmission) {
+    const location = new URL(response.ok ? '/' : '/sign-in?reason=invalid', getSecurityConfig().BETTER_AUTH_URL);
+    const headers = new Headers({
+      'cache-control': 'private, no-store',
+      location: location.toString(),
+    });
+    const sessionCookie = response.headers.get('set-cookie');
+    if (sessionCookie) headers.append('set-cookie', sessionCookie);
+    return new Response(null, { status: 303, headers });
+  }
 
   return response;
 }
