@@ -154,9 +154,8 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
                 onChange={(event) => chooseFacility(event.target.value)}
                 required
               >
-                {filteredFacilities.length
-                  ? filteredFacilities.map((facility) => <option key={facility.id} value={facility.id}>{facility.label}</option>)
-                  : <option value="" disabled>No facilities found</option>}
+                <option value="" disabled>{filteredFacilities.length ? 'Choose a facility' : 'No facilities found'}</option>
+                {filteredFacilities.map((facility) => <option key={facility.id} value={facility.id}>{facility.label}</option>)}
               </select>
               <span className="form-help">Showing up to 75 matches.</span>
             </label>
