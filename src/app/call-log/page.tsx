@@ -1,16 +1,17 @@
 import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
-import { EmptyState, PageHeader, ResultsSummary, StatusBadge, type StatusTone } from '@/components/ui';
-import { formatDate } from '@/lib/format';
+import { EmptyState, InlineMessage, PageHeader, ResultsSummary, StatusBadge, type StatusTone } from '@/components/ui';
+import { can } from '@/lib/access-control';
+import { formatDateTime } from '@/lib/format';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
 import { requirePagePermission } from '@/server/authorization';
 
-type CallLogSearchParams = { q?: string; status?: string; from?: string; to?: string; sort?: string };
+type CallLogSearchParams = { q?: string; status?: string; from?: string; to?: string; sort?: string; saved?: string };
 
 function statusTone(status: string): StatusTone {
   const value = status.toLowerCase();
   if (value.includes('closed') || value.includes('complete')) return 'positive';
-  if (value.includes('retry') || value.includes('review')) return 'warning';
+  if (value.includes('retry') || value.includes('review') || value.includes('follow-up')) return 'warning';
   return 'neutral';
 }
 
@@ -43,7 +44,13 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
 
   return (
     <AppShell user={principal} dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
-      <PageHeader eyebrow="Operations" title="Call log" summary="Review recorded provider calls and outcomes. Use filters to narrow the working set." />
+      <PageHeader
+        eyebrow="Operations"
+        title="Call log"
+        summary="Review recorded provider calls and outcomes."
+        meta={can(principal.role, 'operations:write') ? <Link className="button button-primary" href="/new-call">Enter call</Link> : null}
+      />
+      {params.saved === '1' ? <InlineMessage tone="success" role="status">Call saved.</InlineMessage> : null}
 
       <form className="filter-bar" method="get" action="/call-log" aria-label="Call log filters">
         <div className="filter-grid xl:grid-cols-5">
@@ -97,17 +104,19 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
                   <th scope="col">Provider</th>
                   <th scope="col">Outcome</th>
                   <th scope="col">Status</th>
+                  <th scope="col">Entered by</th>
                   <th scope="col">Call date</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((call) => (
-                  <tr key={`${call.number}-${call.provider}-${call.date}`}>
+                  <tr key={call.id}>
                     <td className="font-semibold text-slate-950">{call.number}</td>
                     <td>{call.provider}</td>
                     <td>{call.outcome}</td>
                     <td><StatusBadge tone={statusTone(call.status)}>{call.status}</StatusBadge></td>
-                    <td className="whitespace-nowrap">{formatDate(call.date)}</td>
+                    <td>{call.caller}</td>
+                    <td className="whitespace-nowrap">{formatDateTime(call.calledAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -118,7 +127,9 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
         <EmptyState
           title={activeFilters ? 'No calls match these filters' : 'No calls recorded'}
           description={activeFilters ? 'Clear one or more filters and try again.' : 'Call records will appear here after they are saved.'}
-          action={activeFilters ? <Link className="button button-secondary" href="/call-log">Clear filters</Link> : undefined}
+          action={activeFilters
+            ? <Link className="button button-secondary" href="/call-log">Clear filters</Link>
+            : can(principal.role, 'operations:write') ? <Link className="button button-primary" href="/new-call">Enter call</Link> : undefined}
         />
       ) : null}
     </AppShell>

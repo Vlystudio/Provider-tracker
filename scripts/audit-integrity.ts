@@ -20,11 +20,11 @@ const allowedActions = [
   'provider.search', 'report.view',
   'retention.policy-update', 'retention.hold-place', 'retention.hold-release', 'retention.dry-run', 'retention.apply',
   'security.investigation.run', 'user.emergency-revoke',
-  'authorization.update', 'authorization.delete',
+  'authorization.update', 'authorization.delete', 'call.create',
   'facility.verification.create', 'facility.contact-attempt.create', 'facility.update',
   'facility.duplicates.refresh', 'facility.duplicate.decision', 'facility.merge',
   'reverification.bulk-assign', 'user.create', 'user.role-change', 'user.password-reset',
-  'user.deactivate', 'user.activate', 'workbook.import.applied',
+  'user.deactivate', 'user.activate', 'workbook.import.applied', 'workbook.provider-directory.applied',
 ];
 
 const pool = new pg.Pool({ connectionString, max: 1, statement_timeout: 20_000 });

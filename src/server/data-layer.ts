@@ -3,6 +3,7 @@ import { getDatabaseHealth, getDatabaseClient } from './database';
 import { getDemoAdminOverview, getDemoCallLog, getDemoDashboard, getDemoFacilities, getDemoProviderResults, getDemoReports, getDemoReviewQueue } from './demo-data';
 import { getDataMode, getServerConfig } from './config';
 import { assertPermission, type Principal } from './authorization';
+import { listCallLog, type CallLogRow } from './call-service';
 import { providerSearchInputSchema, searchProviders, type ProviderSearchPage } from './provider-search-service';
 import { facilityDirectoryInputSchema, listFacilities, type FacilityDirectoryPage } from './facility-directory-service';
 import { getOperationalReport, reportingInputSchema, type OperationalReport } from './provider-reporting-service';
@@ -23,7 +24,7 @@ export type DashboardPageState = DataState<ReturnType<typeof getDemoDashboard>>;
 export interface AppDataAdapter {
   getDashboard(principal: Principal): Promise<DashboardPageState>;
   getProviderSearch(principal: Principal, input: z.input<typeof providerSearchInputSchema>): Promise<DataState<ProviderSearchPage>>;
-  getCallLog(principal: Principal, input?: Record<string, string | number>): Promise<DataState<ReturnType<typeof getDemoCallLog>>>;
+  getCallLog(principal: Principal, input?: Record<string, string | number>): Promise<DataState<CallLogRow[]>>;
   getFacilities(principal: Principal, input?: z.input<typeof facilityDirectoryInputSchema>): Promise<DataState<FacilityDirectoryPage>>;
   getReviewQueue(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>>;
   getReports(principal: Principal, input: ReportRange): Promise<DataState<OperationalReport>>;
@@ -79,9 +80,20 @@ class DemoDataAdapter implements AppDataAdapter {
     };
   }
 
-  async getCallLog(principal: Principal): Promise<DataState<ReturnType<typeof getDemoCallLog>>> {
+  async getCallLog(principal: Principal): Promise<DataState<CallLogRow[]>> {
     assertPermission(principal, 'operations:read');
-    return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoCallLog() };
+    return {
+      ok: true,
+      dataMode: 'demo',
+      databaseAvailable: false,
+      data: getDemoCallLog().map((row, index) => ({
+        ...row,
+        id: `demo-call-${index + 1}`,
+        calledAt: `${row.date}T14:00:00.000Z`,
+        caller: 'Demo user',
+        status: row.status === 'Retry due' ? ('Follow-up' as const) : ('Complete' as const),
+      })),
+    };
   }
 
   async getFacilities(principal: Principal, input: z.input<typeof facilityDirectoryInputSchema> = {}): Promise<DataState<FacilityDirectoryPage>> {
@@ -193,7 +205,7 @@ class DatabaseDataAdapter implements AppDataAdapter {
     }
   }
 
-  async getCallLog(principal: Principal): Promise<DataState<ReturnType<typeof getDemoCallLog>>> {
+  async getCallLog(principal: Principal): Promise<DataState<CallLogRow[]>> {
     assertPermission(principal, 'operations:read');
     const health = await getDatabaseHealth();
     if (!health.ok) {
@@ -206,8 +218,7 @@ class DatabaseDataAdapter implements AppDataAdapter {
     }
 
     try {
-      await db.execute(`SELECT 1 as ok`);
-      return { ok: true, dataMode: 'database', databaseAvailable: true, data: [] };
+      return { ok: true, dataMode: 'database', databaseAvailable: true, data: await listCallLog(principal) };
     } catch {
       return {
         ok: false,
