@@ -48,7 +48,7 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
         eyebrow="Operations"
         title="Call log"
         summary="Review recorded provider calls and outcomes."
-        meta={can(principal.role, 'operations:write') ? <Link className="button button-primary" href="/new-call">Enter call</Link> : null}
+        meta={can(principal.role, 'operations:write') ? <Link className="button button-primary" href="/new-call">Enter calls</Link> : null}
       />
       {params.saved === '1' ? <InlineMessage tone="success" role="status">Call saved.</InlineMessage> : null}
 
@@ -129,7 +129,7 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
           description={activeFilters ? 'Clear one or more filters and try again.' : 'Call records will appear here after they are saved.'}
           action={activeFilters
             ? <Link className="button button-secondary" href="/call-log">Clear filters</Link>
-            : can(principal.role, 'operations:write') ? <Link className="button button-primary" href="/new-call">Enter call</Link> : undefined}
+            : can(principal.role, 'operations:write') ? <Link className="button button-primary" href="/new-call">Enter calls</Link> : undefined}
         />
       ) : null}
     </AppShell>

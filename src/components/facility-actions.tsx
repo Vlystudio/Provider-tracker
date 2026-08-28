@@ -82,7 +82,7 @@ export function FacilityActions({
 
   return (
     <section className="space-y-4" aria-labelledby="facility-work-heading">
-      <div><h2 id="facility-work-heading" className="section-title">Record verification</h2><p className="mt-1 text-sm text-slate-600">Save confirmed provider facts here. Record calls from Enter Call.</p></div>
+      <div><h2 id="facility-work-heading" className="section-title">Record verification</h2><p className="mt-1 text-sm text-slate-600">Save confirmed provider facts here. Record calls from the Enter Calls page.</p></div>
       {message ? <InlineMessage tone={message.tone} role={message.tone === 'error' ? 'alert' : 'status'}>{message.text}</InlineMessage> : null}
       <div>
         <form className="panel space-y-4 p-4" onSubmit={saveVerification}>

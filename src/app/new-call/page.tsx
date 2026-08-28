@@ -19,7 +19,7 @@ export default async function NewCallPage() {
 
   return (
     <AppShell user={principal} dataMode={getResolvedDataMode()} statusMessage={loadError}>
-      <PageHeader eyebrow="Operations" title="Enter call" summary="Record a provider call and its result." />
+      <PageHeader eyebrow="Operations" title="Enter calls" summary="Enter the authorization once, then record each facility call." />
       {options?.facilities.length ? (
         <CallEntryForm {...options} />
       ) : !loadError ? (

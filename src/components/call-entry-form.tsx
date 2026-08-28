@@ -1,8 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { InlineMessage } from './ui';
 
 type Option = { id: string; label: string; phone?: string | null };
@@ -28,13 +27,21 @@ const availabilityOptions = [
 ] as const;
 
 export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusiness }: CallEntryFormProps) {
-  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const authorizationInputRef = useRef<HTMLInputElement>(null);
+  const facilitySearchRef = useRef<HTMLInputElement>(null);
+  const [callAt, setCallAt] = useState(localDateTime);
+  const [authorizationNumber, setAuthorizationNumber] = useState('');
+  const [lobId, setLobId] = useState('');
+  const [specialtyId, setSpecialtyId] = useState('');
+  const [diagnosisId, setDiagnosisId] = useState('');
   const [facilityQuery, setFacilityQuery] = useState('');
   const [facilityId, setFacilityId] = useState('');
   const [phone, setPhone] = useState('');
   const [contactOutcome, setContactOutcome] = useState('reached');
+  const [savedCallCount, setSavedCallCount] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ tone: 'info' | 'success' | 'warning' | 'error'; text: string } | null>(null);
   const filteredFacilities = useMemo(() => {
     const query = facilityQuery.trim().toLowerCase();
     const matches = query
@@ -49,19 +56,47 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
     setPhone(facility?.phone ?? '');
   }
 
+  function resetCallFields(form: HTMLFormElement) {
+    form.reset();
+    setCallAt(localDateTime());
+    setFacilityQuery('');
+    setFacilityId('');
+    setPhone('');
+    setContactOutcome('reached');
+    window.setTimeout(() => facilitySearchRef.current?.focus(), 0);
+  }
+
+  function startDifferentAuthorization() {
+    const form = formRef.current;
+    if (form) form.reset();
+    setCallAt(localDateTime());
+    setAuthorizationNumber('');
+    setLobId('');
+    setSpecialtyId('');
+    setDiagnosisId('');
+    setFacilityQuery('');
+    setFacilityId('');
+    setPhone('');
+    setContactOutcome('reached');
+    setSavedCallCount(0);
+    setMessage({ tone: 'info', text: 'Ready for a different authorization.' });
+    window.setTimeout(() => authorizationInputRef.current?.focus(), 0);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
     if (!facilityId) {
-      setMessage('Choose a facility before saving the call.');
+      setMessage({ tone: 'error', text: 'Choose a facility before saving the call.' });
       return;
     }
 
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const field = (name: string) => String(form.get(name) ?? '').trim();
-    const callAt = new Date(field('callAt'));
-    if (Number.isNaN(callAt.valueOf())) {
-      setMessage('Enter a valid call date and time.');
+    const callDate = new Date(callAt);
+    if (Number.isNaN(callDate.valueOf())) {
+      setMessage({ tone: 'error', text: 'Enter a valid call date and time.' });
       return;
     }
 
@@ -71,12 +106,12 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          callAt: callAt.toISOString(),
+          callAt: callDate.toISOString(),
           facilityId,
-          authorizationNumber: field('authorizationNumber') || null,
-          lobId: field('lobId') || null,
-          specialtyId: field('specialtyId') || null,
-          diagnosisId: field('diagnosisId') || null,
+          authorizationNumber: authorizationNumber.trim().toUpperCase() || null,
+          lobId: lobId || null,
+          specialtyId: specialtyId || null,
+          diagnosisId: diagnosisId || null,
           phone: field('phone') || null,
           contactOutcome,
           acceptingNewPatients: contactOutcome === 'reached' ? field('acceptingNewPatients') : 'unknown',
@@ -86,38 +121,72 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
           notes: field('notes') || null,
         }),
       });
-      const body = await response.json().catch(() => null) as { call?: { id: string }; error?: string } | null;
+      const body = await response.json().catch(() => null) as { call?: { id: string; duplicate?: boolean }; error?: string } | null;
       if (!response.ok || !body?.call) {
-        setMessage(body?.error ?? 'The call could not be saved.');
+        setMessage({ tone: 'error', text: body?.error ?? 'The call could not be saved.' });
         return;
       }
-      router.push('/call-log?saved=1');
-      router.refresh();
+      const selectedFacility = facilities.find((facility) => facility.id === facilityId)?.label ?? 'Facility call';
+      setAuthorizationNumber(authorizationNumber.trim().toUpperCase());
+      if (body.call.duplicate) {
+        setMessage({ tone: 'warning', text: `${selectedFacility} was already in the call log. The authorization is still selected.` });
+      } else {
+        setSavedCallCount((count) => count + 1);
+        setMessage({ tone: 'success', text: `${selectedFacility} was saved. The authorization is still selected.` });
+      }
+      resetCallFields(formElement);
     } catch {
-      setMessage('The call could not be saved. Check the connection and try again.');
+      setMessage({ tone: 'error', text: 'The call could not be saved. Check the connection and try again.' });
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <form className="space-y-5" onSubmit={submit}>
-      {message ? <InlineMessage tone="error" role="alert">{message}</InlineMessage> : null}
+    <form ref={formRef} className="space-y-5" onSubmit={submit}>
+      {message ? <InlineMessage tone={message.tone} role={message.tone === 'error' ? 'alert' : 'status'}>{message.text}</InlineMessage> : null}
 
       <section className="panel p-5" aria-labelledby="call-details-heading">
-        <h2 id="call-details-heading" className="section-title">Call details</h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="call-details-heading" className="section-title">Authorization and call time</h2>
+            <p className="mt-1 text-sm text-slate-600">Enter the authorization once. It stays selected while you record the facility calls.</p>
+          </div>
+          {savedCallCount ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm font-semibold text-slate-700" role="status">
+                {savedCallCount} {savedCallCount === 1 ? 'call' : 'calls'} saved this session
+              </p>
+              <button className="button button-secondary" type="button" disabled={saving} onClick={startDifferentAuthorization}>
+                Start different authorization
+              </button>
+            </div>
+          ) : null}
+        </div>
         <div className="mt-4 grid gap-4 xl:grid-cols-3">
           <label className="form-label">
             Call date and time
-            <input className="form-control" name="callAt" type="datetime-local" defaultValue={localDateTime()} required />
+            <input className="form-control" name="callAt" type="datetime-local" value={callAt} onChange={(event) => setCallAt(event.target.value)} required />
           </label>
           <label className="form-label">
             Authorization number
-            <input className="form-control" name="authorizationNumber" maxLength={100} autoComplete="off" />
+            <input
+              ref={authorizationInputRef}
+              className="form-control"
+              name="authorizationNumber"
+              value={authorizationNumber}
+              onChange={(event) => setAuthorizationNumber(event.target.value)}
+              maxLength={100}
+              autoComplete="off"
+              disabled={savedCallCount > 0}
+            />
+            <span className="form-help">
+              {savedCallCount ? 'Finish this group before changing the authorization.' : 'This field stays filled after each call is saved.'}
+            </span>
           </label>
           <label className="form-label">
             Line of business
-            <select className="form-control" name="lobId" defaultValue="">
+            <select className="form-control" name="lobId" value={lobId} onChange={(event) => setLobId(event.target.value)}>
               <option value="">Not recorded</option>
               {linesOfBusiness.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
@@ -132,6 +201,7 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
             <label className="form-label">
               Find a facility
               <input
+                ref={facilitySearchRef}
                 className="form-control"
                 type="search"
                 value={facilityQuery}
@@ -163,14 +233,14 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
             </label>
             <label className="form-label">
               Specialty checked
-              <select className="form-control" name="specialtyId" defaultValue="">
+              <select className="form-control" name="specialtyId" value={specialtyId} onChange={(event) => setSpecialtyId(event.target.value)}>
                 <option value="">Not recorded</option>
                 {specialties.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
             <label className="form-label">
               Diagnosis checked
-              <select className="form-control" name="diagnosisId" defaultValue="">
+              <select className="form-control" name="diagnosisId" value={diagnosisId} onChange={(event) => setDiagnosisId(event.target.value)}>
                 <option value="">Not recorded</option>
                 {diagnoses.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
@@ -245,11 +315,13 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
         </label>
       </section>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button className="button button-primary" type="submit" disabled={saving || !facilities.length}>
           {saving ? 'Saving…' : 'Save call'}
         </button>
-        <Link className="button button-secondary" href="/call-log">Cancel</Link>
+        <Link className="button button-secondary" href="/call-log">
+          {savedCallCount ? 'Finish and view call log' : 'Cancel'}
+        </Link>
       </div>
     </form>
   );
