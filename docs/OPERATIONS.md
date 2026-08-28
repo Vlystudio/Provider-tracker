@@ -31,6 +31,8 @@ Set these as runtime secrets or configuration in the hosting platform:
 
 Generate the authentication secret and audit salt independently. Store them in the deployment secret manager. Do not put them in an image, source file, build argument, ticket, or log.
 
+For Vercel, the application limits each function instance to one database connection. A Supabase shared-pooler URL on port 5432 is switched to its serverless transaction port, 6543. For other hosted databases, use the provider's transaction-pooler connection string when one is available. A long-running server can use `DATABASE_POOL_SIZE` to set a larger local pool.
+
 ## Release order
 
 1. Back up the database and confirm the restore procedure.

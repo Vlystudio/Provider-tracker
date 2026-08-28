@@ -8,6 +8,23 @@ import { incrementMetric, observeDuration } from './metrics';
 
 let sharedPool: Pool | null = null;
 
+function runtimePoolSize(configuredSize: number): number {
+  // A Vercel function can be copied across several instances. Keep each copy to
+  // one database connection so the instances do not exhaust a small hosted pool.
+  return process.env.VERCEL === '1' ? 1 : configuredSize;
+}
+
+function runtimeConnectionString(connectionString: string): string {
+  if (process.env.VERCEL !== '1') return connectionString;
+
+  const url = new URL(connectionString);
+  if (url.hostname.endsWith('.pooler.supabase.com') && url.port === '5432') {
+    // Supabase reserves port 6543 for short-lived serverless connections.
+    url.port = '6543';
+  }
+  return url.toString();
+}
+
 export function getDatabasePool(): Pool | null {
   const config = getServerConfig();
   const url = config.DATABASE_URL;
@@ -15,8 +32,8 @@ export function getDatabasePool(): Pool | null {
 
   if (!sharedPool) {
     sharedPool = new Pool({
-      connectionString: url,
-      max: config.DATABASE_POOL_SIZE,
+      connectionString: runtimeConnectionString(url),
+      max: runtimePoolSize(config.DATABASE_POOL_SIZE),
       idleTimeoutMillis: config.DATABASE_IDLE_TIMEOUT_MS,
       connectionTimeoutMillis: config.DATABASE_CONNECT_TIMEOUT_MS,
       statement_timeout: config.DATABASE_STATEMENT_TIMEOUT_MS,
@@ -174,7 +191,7 @@ export function getDatabasePoolStats(): { total: number; idle: number; waiting: 
     total: pool?.totalCount ?? 0,
     idle: pool?.idleCount ?? 0,
     waiting: pool?.waitingCount ?? 0,
-    max: getServerConfig().DATABASE_POOL_SIZE,
+    max: runtimePoolSize(getServerConfig().DATABASE_POOL_SIZE),
   };
 }
 
