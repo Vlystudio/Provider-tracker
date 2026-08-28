@@ -293,7 +293,7 @@ async function seedMigrationTruth(users: Record<string, TestUser>) {
 async function main() {
   const requiredTables = [
     'users', 'facilities', 'specialties', 'diagnoses', 'facility_specialties', 'facility_diagnosis_capabilities',
-    'facility_verification_events', 'facility_contact_attempts', 'reverification_assignments', 'audit_events',
+    'calls', 'facility_verification_events', 'facility_contact_attempts', 'reverification_assignments', 'audit_events',
     'notifications', 'operational_work_items', 'migration_runs', 'migration_reconciliations',
   ];
   const missing = [];
@@ -309,8 +309,9 @@ async function main() {
     import('../src/server/operational-service'),
     import('../src/server/provider-intelligence-service'),
     import('../src/server/provider-reporting-service'),
+    import('../src/server/call-service'),
   ]);
-  const [access, intelligence, database, directory, notification, operational, provider, reporting] = modules;
+  const [access, intelligence, database, directory, notification, operational, provider, reporting, callService] = modules;
 
   const users = await seedUsers();
   await seedFacilities(users);
@@ -405,7 +406,7 @@ async function main() {
     expectedVersion: workflowFacility.optimistic_lock_version,
     verifiedAt: new Date(), method: 'phone', confidence: 'direct', acceptingStatus: 'yes',
     schedulingWithinFourWeeks: 'yes', urgentReferralStatus: 'no', estimatedWaitDays: 14,
-    contactPerson: 'Jordan Lee', comments: 'Called the main line. Scheduling confirmed. سليم ✓',
+    comments: 'Called the main line. Scheduling confirmed. سليم ✓',
   });
   record('Successful verification current-state update', 'yes with refreshed timestamps and history', verified.facility.currentAcceptingStatus, verified.facility.currentAcceptingStatus === 'yes' && verified.facility.acceptingVerifiedAt instanceof Date);
   const refreshedAt = verified.facility.acceptingVerifiedAt?.valueOf();
@@ -420,26 +421,35 @@ async function main() {
   });
   record('Known state after unknown', 'yes and complete ordered history', knownAgain.facility.currentAcceptingStatus, knownAgain.facility.currentAcceptingStatus === 'yes');
 
-  const attemptInput = {
-    attemptedAt: new Date(Date.now() - 60_000), method: 'phone' as const, outcome: 'voicemail_left' as const,
-    contactChannel: '207-555-0180', comments: 'Left one callback message. <script>alert(1)</script>',
-  };
-  const [attempt1, attempt2] = await Promise.all([
-    provider.createContactAttempt(ura1, workflowFacility.id, attemptInput),
-    provider.createContactAttempt(ura1, workflowFacility.id, attemptInput),
-  ]);
+  const failedCallAt = new Date(Date.now() - 60_000);
+  const failedCallNotes = 'Left one callback message. <script>alert(1)</script>';
+  const failedCall = await callService.createCallRecord(ura1, {
+    callAt: failedCallAt,
+    facilityId: workflowFacility.id,
+    authorizationNumber: null,
+    lobId: null,
+    specialtyId: null,
+    diagnosisId: null,
+    phone: null,
+    contactOutcome: 'voicemail_left',
+    acceptingNewPatients: 'unknown',
+    canTreatDiagnosis: 'unknown',
+    canScheduleWithinFourWeeks: 'unknown',
+    specialtyConfirmed: 'unknown',
+    notes: failedCallNotes,
+  });
   const attemptCount = Number(requireRow((await pool.query<{ count: number }>(`
-    select count(*)::int as count from facility_contact_attempts where facility_id=$1 and attempted_by=$2 and attempted_at=$3 and method=$4 and outcome=$5`,
-    [workflowFacility.id, ura1.id, attemptInput.attemptedAt, attemptInput.method, attemptInput.outcome])).rows, 'contact attempt count').count);
+    select count(*)::int as count from facility_contact_attempts where facility_id=$1 and attempted_by=$2 and attempted_at=$3 and outcome=$4 and related_call_id=$5`,
+    [workflowFacility.id, ura1.id, failedCallAt, 'voicemail_left', failedCall.id])).rows, 'contact attempt count').count);
   const afterFailedContact = requireRow((await pool.query<{ status: string; verified_at: Date | null }>('select current_accepting_status as status,accepting_verified_at as verified_at from facilities where id=$1', [workflowFacility.id])).rows, 'failed contact state');
-  record('Duplicate contact submission', 'one stored attempt and one returned id', `${attemptCount}/${attempt1.id === attempt2.id}`, attemptCount === 1 && attempt1.id === attempt2.id);
+  record('Failed call creates contact history', 'one linked contact attempt', attemptCount, attemptCount === 1);
   record('Failed contact leaves availability unchanged', 'yes and accepting timestamp unchanged', `${afterFailedContact.status}/${afterFailedContact.verified_at?.toISOString()}`, afterFailedContact.status === 'yes' && afterFailedContact.verified_at?.valueOf() === knownAgain.facility.acceptingVerifiedAt?.valueOf());
 
   const detail = await provider.getFacilityDetail(ura2, workflowFacility.id);
   const workflowHistory = detail?.verifications ?? [];
   const textRoundTrip = Boolean(
     workflowHistory.some((event) => event.comments === 'Called the main line. Scheduling confirmed. سليم ✓')
-      && detail?.contacts.some((attempt) => attempt.comments === attemptInput.comments),
+      && detail?.contacts.some((attempt) => attempt.comments === failedCallNotes),
   );
   const orderedHistory = workflowHistory.every((event, index) => index === 0 || event.verifiedAt.valueOf() <= workflowHistory[index - 1]!.verifiedAt.valueOf());
   record('Database text round trip', 'Unicode, punctuation, and markup-shaped text preserved', textRoundTrip, textRoundTrip);
@@ -507,7 +517,15 @@ async function main() {
 
   let reportWriteDenied = false;
   let auditorWriteDenied = false;
-  try { await provider.createContactAttempt(reportViewer, workflowFacility.id, { ...attemptInput, attemptedAt: new Date(Date.now() - 120_000) }); } catch (error) { reportWriteDenied = error instanceof Error && 'status' in error && error.status === 403; }
+  try {
+    await callService.createCallRecord(reportViewer, {
+      callAt: new Date(Date.now() - 120_000), facilityId: workflowFacility.id,
+      authorizationNumber: null, lobId: null, specialtyId: null, diagnosisId: null, phone: null,
+      contactOutcome: 'no_answer',
+      acceptingNewPatients: 'unknown', canTreatDiagnosis: 'unknown', canScheduleWithinFourWeeks: 'unknown',
+      specialtyConfirmed: 'unknown', notes: 'Permission boundary test.',
+    });
+  } catch (error) { reportWriteDenied = error instanceof Error && 'status' in error && error.status === 403; }
   try { await provider.updateFacility(auditor, workflowFacility.id, { expectedVersion: zipUpdated.optimisticLockVersion, city: 'Augusta' }); } catch (error) { auditorWriteDenied = error instanceof Error && 'status' in error && error.status === 403; }
   record('Read-only role mutation rejection', 'Report Viewer and Auditor denied', `${reportWriteDenied}/${auditorWriteDenied}`, reportWriteDenied && auditorWriteDenied);
 

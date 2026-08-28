@@ -103,8 +103,6 @@ export default async function HomePage() {
     }
   }
   const statCards = state.data?.cards ?? [];
-  const recentAuthorizations = state.data?.recentAuthorizations ?? [];
-  const reviewPreview = state.data?.reviewPreview ?? [];
   const actions = principal.role === 'admin'
     ? [
         { label: 'Open work inbox', href: '/work' },
@@ -163,44 +161,6 @@ export default async function HomePage() {
           ))}
         </div>
       </section>
-
-      {principal.role === 'ura_user' ? (
-        <section className="grid gap-5 xl:grid-cols-2">
-          <div className="panel p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="section-title">Recent authorizations</h2>
-              <Link className="button-link" href="/authorization-summary">View all</Link>
-            </div>
-            {recentAuthorizations.length ? (
-              <div className="mt-3 divide-y divide-slate-200 border-y border-slate-200">
-                {recentAuthorizations.map((item) => (
-                  <Link key={item.number} href={`/authorization-summary?number=${encodeURIComponent(item.number)}`} className="flex items-center justify-between gap-3 py-3 hover:bg-slate-50">
-                    <span><span className="block font-semibold text-slate-950">{item.number}</span><span className="block text-xs text-slate-500">{item.lob} · owner {item.owner}</span></span>
-                    <StatusBadge tone="info">{item.status}</StatusBadge>
-                  </Link>
-                ))}
-              </div>
-            ) : <p className="mt-3 text-sm text-slate-600">No recent authorizations.</p>}
-          </div>
-
-          <div className="panel p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="section-title">Review queue</h2>
-              <Link className="button-link" href="/review-queue">View all</Link>
-            </div>
-            {reviewPreview.length ? (
-              <div className="mt-3 divide-y divide-slate-200 border-y border-slate-200">
-                {reviewPreview.map((item) => (
-                  <Link key={item.caseId} href={`/authorization-summary?number=${encodeURIComponent(item.caseId)}`} className="flex items-center justify-between gap-3 py-3 hover:bg-slate-50">
-                    <span><span className="block font-semibold text-slate-950">{item.facility}</span><span className="block text-xs text-slate-500">{item.caseId}</span></span>
-                    <StatusBadge tone={item.priority === 'danger' ? 'danger' : item.priority === 'warning' ? 'warning' : 'info'}>{item.due}</StatusBadge>
-                  </Link>
-                ))}
-              </div>
-            ) : <p className="mt-3 text-sm text-slate-600">Nothing is due for review.</p>}
-          </div>
-        </section>
-      ) : null}
     </AppShell>
   );
 }

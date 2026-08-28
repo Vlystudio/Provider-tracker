@@ -8,7 +8,6 @@ import {
   currentReviewPeriod,
   listAccessReviewAccounts,
   listRetentionState,
-  listSecurityTimeline,
   phase10PolicySnapshot,
 } from '@/server/governance-service';
 
@@ -17,12 +16,10 @@ export default async function GovernancePage() {
   let loadError: string | null = null;
   let accounts: Awaited<ReturnType<typeof listAccessReviewAccounts>> = [];
   let retention: Awaited<ReturnType<typeof listRetentionState>> = { policies: [], holds: [] };
-  let timeline: Awaited<ReturnType<typeof listSecurityTimeline>> = [];
   try {
-    [accounts, retention, timeline] = await Promise.all([
+    [accounts, retention] = await Promise.all([
       listAccessReviewAccounts(principal),
       listRetentionState(principal),
-      listSecurityTimeline(principal),
     ]);
   } catch {
     loadError = 'Governance records could not be loaded. Confirm the Phase 10 database migration is applied.';
@@ -59,7 +56,6 @@ export default async function GovernancePage() {
           placedAt: hold.placedAt.toISOString(),
           releasedAt: hold.releasedAt?.toISOString() ?? null,
         }))}
-        timeline={timeline.map((event) => ({ ...event, createdAt: event.createdAt.toISOString() }))}
         reviewPeriod={currentReviewPeriod()}
         canManage={can(principal.role, 'governance:manage')}
       /> : null}

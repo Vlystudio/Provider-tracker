@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { getDatabaseHealth, getDatabaseClient } from './database';
-import { getDemoAdminOverview, getDemoCallLog, getDemoDashboard, getDemoFacilities, getDemoProviderResults, getDemoReports, getDemoReviewQueue } from './demo-data';
+import { getDemoCallLog, getDemoDashboard, getDemoFacilities, getDemoProviderResults, getDemoReports, getDemoReviewQueue } from './demo-data';
 import { getDataMode, getServerConfig } from './config';
 import { assertPermission, type Principal } from './authorization';
 import { listCallLog, type CallLogRow } from './call-service';
@@ -28,7 +28,6 @@ export interface AppDataAdapter {
   getFacilities(principal: Principal, input?: z.input<typeof facilityDirectoryInputSchema>): Promise<DataState<FacilityDirectoryPage>>;
   getReviewQueue(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>>;
   getReports(principal: Principal, input: ReportRange): Promise<DataState<OperationalReport>>;
-  getAdminOverview(principal: Principal): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>>;
   getDatabaseHealth(principal: Principal): Promise<{ ok: boolean; message: string }>;
 }
 
@@ -129,11 +128,6 @@ class DemoDataAdapter implements AppDataAdapter {
     return { ok: true, dataMode: 'demo', databaseAvailable: false, data: demo };
   }
 
-  async getAdminOverview(principal: Principal): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>> {
-    assertPermission(principal, 'admin:read');
-    return { ok: true, dataMode: 'demo', databaseAvailable: false, data: getDemoAdminOverview() };
-  }
-
   async getDatabaseHealth(principal: Principal): Promise<{ ok: boolean; message: string }> {
     assertPermission(principal, 'admin:read');
     return { ok: false, message: 'Demo mode is active; database access is intentionally disabled for local demo work.' };
@@ -144,9 +138,6 @@ class DatabaseDataAdapter implements AppDataAdapter {
   private emptyDashboard() {
     return {
       cards: [],
-      recentAuthorizations: [],
-      providerPreview: [],
-      reviewPreview: [],
     };
   }
 
@@ -312,32 +303,6 @@ class DatabaseDataAdapter implements AppDataAdapter {
         databaseAvailable: false,
         message: 'The reports could not be loaded.',
         data: { metrics: [], generatedAt: new Date().toISOString(), period: parsed.data, total: 0, trend: [], coverage: [], drilldown: [] },
-      };
-    }
-  }
-
-  async getAdminOverview(principal: Principal): Promise<DataState<ReturnType<typeof getDemoAdminOverview>>> {
-    assertPermission(principal, 'admin:read');
-    const health = await getDatabaseHealth();
-    if (!health.ok) {
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: { tasks: [], importBatches: [] } };
-    }
-
-    const db = getDatabaseClient();
-    if (!db) {
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message: 'Database configuration is missing.', data: { tasks: [], importBatches: [] } };
-    }
-
-    try {
-      await db.execute(`SELECT 1 as ok`);
-      return { ok: true, dataMode: 'database', databaseAvailable: true, data: { tasks: [], importBatches: [] } };
-    } catch {
-      return {
-        ok: false,
-        dataMode: 'database',
-        databaseAvailable: false,
-        message: 'The admin overview could not be loaded.',
-        data: { tasks: [], importBatches: [] },
       };
     }
   }

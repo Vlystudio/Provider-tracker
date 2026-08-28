@@ -62,17 +62,22 @@ for (const [name, response] of [
   checks[name] = 'PASS';
 }
 
-const mutation = await authenticated(`/api/facilities/${facilityId}/contact-attempts`, ura, {
+const mutation = await authenticated('/api/calls', ura, {
   method: 'POST',
   headers: { 'content-type': 'application/json', origin: baseUrl.origin },
-  body: JSON.stringify({ attemptedAt: new Date().toISOString(), method: 'phone', outcome: 'no_answer' }),
+  body: JSON.stringify({
+    callAt: new Date().toISOString(),
+    facilityId,
+    contactOutcome: 'no_answer',
+    notes: 'Staging smoke test.',
+  }),
 });
 if (mutation.status !== 201) throw new Error(`Staging fixture mutation failed with HTTP ${mutation.status}.`);
 const requestId = mutation.headers.get('x-request-id');
 if (!requestId) throw new Error('Mutation response did not include a request ID.');
 const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
 try {
-  const audit = await pool.query<{ count: number }>(`SELECT count(*)::int AS count FROM audit_events WHERE request_id=$1 AND action='facility.contact-attempt.create'`, [requestId]);
+  const audit = await pool.query<{ count: number }>(`SELECT count(*)::int AS count FROM audit_events WHERE request_id=$1 AND action='call.create'`, [requestId]);
   if ((audit.rows[0]?.count ?? 0) !== 1) throw new Error('Mutation audit event was not found by request ID.');
   const spatial = await pool.query<{ ordered: boolean }>(`
     WITH origin AS (SELECT ST_SetSRID(ST_MakePoint(-70.29,43.68),4326)::geography point),

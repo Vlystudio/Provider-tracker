@@ -48,7 +48,6 @@ IT must keep all four behind the VPN/private ingress. A route being unauthentica
 | `/api/account/sessions/[sessionId]` | DELETE | Any active signed-in user | Session ID must belong to caller; current session is not a valid target; recent login required |
 | `/api/authorizations/[id]` | GET, PATCH, DELETE | Authorization read/write | Normal users are filtered by owner ID; cross-owner lookup is hidden or denied |
 | `/api/facilities/[id]` | GET, PATCH | Operations read/write | Facility ID validated; update uses expected version |
-| `/api/facilities/[id]/contact-attempts` | POST | Operations write | Facility ID and strict activity body; rate limited |
 | `/api/facilities/[id]/verifications` | POST | Operations write | Facility ID, strict enum/date body, expected version |
 | `/api/notification-preferences` | GET, PATCH | Notifications | Current user's preferences only |
 | `/api/notifications` | GET, PATCH | Notifications | Current user's notification rows only |

@@ -403,24 +403,6 @@ export async function retentionDryRun(principal: Principal, rawInput: unknown, r
 
 const securityActionPattern = /^(auth\.|authorization\.denied|user\.|account\.|access-review\.|retention\.|export\.|migration\.|automation\.settings|security\.|audit\.)/;
 
-export async function listSecurityTimeline(principal: Principal) {
-  assertPermission(principal, 'security:investigate');
-  const rows = await requireDatabaseClient()
-    .select({
-      id: auditEvents.id,
-      actorId: auditEvents.actorId,
-      action: auditEvents.action,
-      result: auditEvents.result,
-      entityType: auditEvents.entityType,
-      entityId: auditEvents.entityId,
-      createdAt: auditEvents.createdAt,
-    })
-    .from(auditEvents)
-    .orderBy(desc(auditEvents.createdAt))
-    .limit(500);
-  return rows.filter((row) => securityActionPattern.test(row.action)).slice(0, 100);
-}
-
 export async function investigateAccount(
   principal: Principal,
   rawInput: unknown,

@@ -51,10 +51,8 @@ export const callEntryInputSchema = z.object({
   acceptingNewPatients: z.enum(availabilityStatuses).default('unknown'),
   canTreatDiagnosis: z.enum(treatmentStatuses).default('unknown'),
   canScheduleWithinFourWeeks: z.enum(scheduleStatuses).default('unknown'),
-  bookingOut: optionalText(250),
   notes: optionalText(2000),
   specialtyConfirmed: z.enum(availabilityStatuses).default('unknown'),
-  useInFdm: z.boolean().default(false),
 }).strict().superRefine((value, context) => {
   if (value.callAt.valueOf() > Date.now() + 5 * 60_000) {
     context.addIssue({ code: 'custom', path: ['callAt'], message: 'Call time cannot be in the future.' });
@@ -216,8 +214,6 @@ export async function createCallRecord(
       const [inserted] = await tx.insert(authorizations).values({
         authorizationNumber: value.authorizationNumber,
         lobId: lob?.id ?? null,
-        defaultDiagnosisId: diagnosis?.id ?? null,
-        defaultSpecialtyId: specialty?.id ?? null,
         createdBy: principal.id,
       }).onConflictDoNothing({ target: authorizations.authorizationNumber }).returning({ id: authorizations.id });
       createdAuthorization = Boolean(inserted);
@@ -287,10 +283,8 @@ export async function createCallRecord(
       acceptingNewPatients: value.acceptingNewPatients,
       canTreatDiagnosis: value.canTreatDiagnosis,
       canScheduleWithinFourWeeks: value.canScheduleWithinFourWeeks,
-      bookingOutRaw: value.bookingOut,
       notes: value.notes,
       specialtyConfirmed: value.specialtyConfirmed,
-      useInFdm: value.useInFdm,
       weekStart: weekStartForDate(value.callAt),
       duplicateGroupKey,
       resultCode: derived.resultCode,
@@ -305,7 +299,6 @@ export async function createCallRecord(
         attemptedBy: principal.id,
         method: 'phone',
         outcome: failedOutcome,
-        contactChannel: value.phone ?? facility.phoneRaw,
         comments: value.notes,
         relatedCallId: call.id,
       });
@@ -382,7 +375,6 @@ export async function createCallRecord(
         verifiedBy: principal.id,
         method: 'phone',
         confidence: 'direct',
-        contactChannel: value.phone ?? facility.phoneRaw,
         acceptingStatus,
         specialtyId: specialty?.id ?? null,
         specialtyStatus,

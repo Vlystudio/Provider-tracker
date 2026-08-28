@@ -40,7 +40,6 @@ Working rule for this application: treat authorization records, member-location 
 | `lines_of_business` | Business-line reference list | Internal | Can add health-plan context when joined | Operational roles | Retained |
 | `specialties` | Provider specialty reference list | Internal | Health context, not patient data alone | Operational/report roles | Retained |
 | `diagnoses` | Diagnosis code reference list | Confidential operational | Not PHI alone; sensitive when tied to a member or authorization | Operational/report roles as scoped | Retained |
-| `booking_out_buckets` | Wait-time reference bands | Internal | No direct identifier | Operational/report roles | Retained |
 | `postal_code_centroids` | Distance-search reference data | Internal | Not member data; a searched member ZIP may be sensitive | Operational service | Retained |
 | `facilities` | Provider directory and current status | Confidential operational | Provider address/phone; no patient data by design | Admin and URA row access; reports aggregate | Retained; archive state enforced |
 | `authorizations` | Authorization workflow | Potential PHI | Authorization number, member ZIP, diagnosis/specialty links | Creator and admin; no report-viewer row access | Retained pending approved policy |

@@ -75,7 +75,7 @@ Do not describe the report as a complete breach scope. It is an application-evid
 1. Create a separate synthetic administrator; never use a real production account.
 2. Change a synthetic user role, record an access decision, run an approved test export/admin action, and place/release a test hold.
 3. Revoke the administrator from a second administrator account.
-4. Confirm session invalidation, role removal, account disablement, audit events, and security timeline.
+4. Confirm session invalidation, role removal, account disablement, and audit events.
 5. Preserve the generated evidence and remove synthetic data under the test-environment cleanup procedure.
 
 ## Evidence preservation

@@ -5,12 +5,6 @@ export const statCards = [
   { label: 'Avg success rate', value: '76%', tone: 'badge-info' },
 ];
 
-export const recentAuthorizations = [
-  { number: 'A-10482', lob: 'GA', status: 'In progress', owner: 'DS' },
-  { number: 'A-10497', lob: 'USFHP', status: 'Awaiting review', owner: 'AB' },
-  { number: 'A-10512', lob: 'GA', status: 'Needs follow-up', owner: 'MR' },
-];
-
 export const quickActions = [
   { label: 'Start authorization', href: '/authorization-summary', accent: 'bg-slate-900 text-white' },
   { label: 'Provider search', href: '/provider-search', accent: 'bg-sky-100 text-sky-900' },
@@ -74,10 +68,4 @@ export const reportMetrics = [
   { label: 'Calls meeting criteria', value: '76', change: '+4.3%' },
   { label: 'Avg turnaround', value: '2.4d', change: '-0.6d' },
   { label: 'Import match rate', value: '96.8%', change: '+1.2%' },
-];
-
-export const adminTasks = [
-  { title: 'Workbook import reconcile', detail: '2 files matched; 14 warnings needing review', status: 'Needs attention' },
-  { title: 'Facility master validation', detail: '3 records missing ZIP centroids', status: 'Queued' },
-  { title: 'Audit trail verification', detail: 'Last run successful for 2026-05-04', status: 'Verified' },
 ];

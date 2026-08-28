@@ -82,10 +82,8 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
           acceptingNewPatients: contactOutcome === 'reached' ? field('acceptingNewPatients') : 'unknown',
           canTreatDiagnosis: contactOutcome === 'reached' ? field('canTreatDiagnosis') : 'unknown',
           canScheduleWithinFourWeeks: contactOutcome === 'reached' ? field('canScheduleWithinFourWeeks') : 'unknown',
-          bookingOut: contactOutcome === 'reached' ? field('bookingOut') || null : null,
           specialtyConfirmed: contactOutcome === 'reached' ? field('specialtyConfirmed') : 'unknown',
           notes: field('notes') || null,
-          useInFdm: form.get('useInFdm') === 'on',
         }),
       });
       const body = await response.json().catch(() => null) as { call?: { id: string }; error?: string } | null;
@@ -234,10 +232,6 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
                 </select>
                 <span className="form-help">Records the provider requirement only. Provider Tracker does not create or submit referrals.</span>
               </label>
-              <label className="form-label">
-                Booking out
-                <input className="form-control" name="bookingOut" maxLength={250} placeholder="Example: 6 weeks" />
-              </label>
             </>
           ) : null}
         </div>
@@ -248,10 +242,6 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
         <label className="form-label mt-4">
           Notes
           <textarea className="form-control min-h-28" name="notes" maxLength={2000} />
-        </label>
-        <label className="mt-4 flex items-center gap-2 text-sm font-medium text-slate-800">
-          <input name="useInFdm" type="checkbox" className="h-4 w-4" />
-          Use this call in FDM
         </label>
       </section>
 

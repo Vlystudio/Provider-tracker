@@ -442,10 +442,6 @@ export async function applyImportPlan(
             batch.map(([authorizationNumber, call]) => ({
               authorizationNumber,
               lobId: call.lob ? lobIdByCode.get(call.lob) ?? null : null,
-              defaultDiagnosisId: call.diagnosisCode ? diagnosisIdByCode.get(call.diagnosisCode) ?? null : null,
-              defaultSpecialtyId: call.normalizedSpecialty
-                ? specialtyIdByName.get(call.normalizedSpecialty) ?? null
-                : null,
             })),
           )
           .onConflictDoNothing({ target: authorizations.authorizationNumber });
@@ -485,13 +481,8 @@ export async function applyImportPlan(
               acceptingNewPatients: call.acceptingNewPatients,
               canTreatDiagnosis: call.canTreatDiagnosis,
               canScheduleWithinFourWeeks: call.canScheduleWithinFourWeeks,
-              bookingOutRaw: call.bookingOut,
               notes: call.notes,
               specialtyConfirmed: call.specialtyConfirmed,
-              useInFdm: call.useInFdm,
-              manualCallTimeOverride: call.manualCallTimeOverride
-                ? new Date(call.manualCallTimeOverride)
-                : null,
               weekStart: call.weekStart,
               duplicateGroupKey: call.duplicateGroupKey,
               resultCode: call.resultCode,

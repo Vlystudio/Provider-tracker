@@ -160,7 +160,7 @@ async function createTestSchema() {
       legacy_value_mappings, legacy_actors, migration_reconciliations, migration_diagnostics, migration_sources, migration_runs,
       operational_digests, coverage_alert_events, coverage_watches, operational_change_events,
       operational_work_items, notifications, notification_preferences, automation_settings, automation_job_executions,
-      facility_merge_records, facility_duplicate_candidates, reverification_assignments, facility_contact_attempts, facility_verification_events,
+      facility_merge_records, facility_duplicate_candidates, reverification_assignments, facility_contact_attempts, facility_verification_events, calls,
       facility_diagnosis_capabilities, facility_specialties, facilities, postal_code_centroids, diagnoses, specialties,
       audit_events, authorizations, auth_rate_limits, verification_tokens, sessions, accounts, users CASCADE;
     DROP TYPE IF EXISTS assignment_status CASCADE;
@@ -248,7 +248,7 @@ async function createTestSchema() {
     );
     CREATE TABLE authorizations (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), authorization_number text NOT NULL UNIQUE,
-      lob_id uuid, default_diagnosis_id uuid, default_specialty_id uuid,
+      lob_id uuid,
       member_zip text, created_by uuid REFERENCES users(id) ON DELETE SET NULL,
       status authorization_status NOT NULL DEFAULT 'open', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
@@ -299,21 +299,35 @@ async function createTestSchema() {
       optimistic_lock_version integer NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(facility_id,diagnosis_id)
     );
+    CREATE TABLE calls (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), authorization_id uuid, facility_id uuid,
+      caller_user_id uuid, legacy_actor_id uuid, import_batch_id uuid, call_at timestamptz NOT NULL,
+      caller_initials_snapshot text, lob_snapshot text, authorization_number_snapshot text,
+      facility_snapshot text NOT NULL, diagnosis_code_snapshot text, diagnosis_description_snapshot text,
+      specialty_snapshot text, phone_snapshot text, did_not_leave_vm boolean NOT NULL DEFAULT false,
+      accepting_new_patients text NOT NULL DEFAULT 'unknown', can_treat_diagnosis text NOT NULL DEFAULT 'unknown',
+      can_schedule_within_four_weeks text NOT NULL DEFAULT 'unknown', notes text,
+      specialty_confirmed text NOT NULL DEFAULT 'unknown', week_start date, duplicate_group_key text,
+      result_code text NOT NULL, result_phrase text NOT NULL, rule_version text NOT NULL DEFAULT 'v1',
+      import_fingerprint text, source_workbook text, source_sheet text, source_row integer,
+      source_metadata jsonb NOT NULL DEFAULT '{}'::jsonb, optimistic_lock_version integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE facility_verification_events (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_id uuid NOT NULL, verified_at timestamptz NOT NULL,
       verified_by uuid, legacy_actor_id uuid, method verification_method NOT NULL, confidence source_confidence NOT NULL DEFAULT 'direct',
-      contact_person text, contact_channel text, accepting_status verification_answer, specialty_id uuid,
+      accepting_status verification_answer, specialty_id uuid,
       specialty_status verification_answer, diagnosis_id uuid, diagnosis_status verification_answer,
       scheduling_within_four_weeks verification_answer, urgent_referral_status verification_answer,
       next_available_date date, estimated_wait_days integer, comments text, related_call_id uuid,
-      related_contact_attempt_id uuid, import_batch_id uuid, previous_state jsonb NOT NULL DEFAULT '{}'::jsonb,
+      import_batch_id uuid, previous_state jsonb NOT NULL DEFAULT '{}'::jsonb,
       resulting_state jsonb NOT NULL DEFAULT '{}'::jsonb, source_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE facility_contact_attempts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), facility_id uuid NOT NULL, attempted_at timestamptz NOT NULL,
       attempted_by uuid, legacy_actor_id uuid, method verification_method NOT NULL, outcome contact_outcome NOT NULL,
-      contact_person text, contact_channel text, comments text, related_call_id uuid,
+      comments text, related_call_id uuid,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE reverification_assignments (
@@ -728,8 +742,8 @@ async function main() {
   const freshnessBeforeContact = await pool.query<{ verified_at: Date | null }>(
     'SELECT accepting_verified_at AS verified_at FROM facilities WHERE id=$1', [facility.id],
   );
-  response = await mutation(`/api/facilities/${facility.id}/contact-attempts`, userLogin.cookie, 'POST', {
-    attemptedAt: new Date().toISOString(), method: 'phone', outcome: 'no_answer', comments: 'Acceptance test.',
+  response = await mutation('/api/calls', userLogin.cookie, 'POST', {
+    callAt: new Date().toISOString(), facilityId: facility.id, contactOutcome: 'no_answer', notes: 'Acceptance test.',
   });
   const freshnessAfterContact = await pool.query<{ verified_at: Date | null; attempt_count: number }>(
     `SELECT accepting_verified_at AS verified_at,
@@ -757,11 +771,11 @@ async function main() {
     body: JSON.stringify({ expectedVersion: 1, verifiedAt: new Date().toISOString(), method: 'phone', acceptingStatus: 'no' }),
   });
   record('Anonymous facility verification', 'BLOCKED', `HTTP ${response.status}`, response.status === 401);
-  response = await request(`/api/facilities/${facility.id}/contact-attempts`, {
+  response = await request('/api/calls', {
     method: 'POST', cookie: userLogin.cookie, clientIp: '192.0.2.11', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ attemptedAt: new Date().toISOString(), method: 'phone', outcome: 'no_answer' }),
+    body: JSON.stringify({ callAt: new Date().toISOString(), facilityId: facility.id, contactOutcome: 'no_answer' }),
   });
-  record('Missing CSRF origin on facility activity', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
+  record('Missing CSRF origin on call entry', 'BLOCKED', `HTTP ${response.status}`, response.status === 403);
   response = await mutation('/api/admin/facilities/merge', userLogin.cookie, 'POST', {
     survivorFacilityId: facility.id, mergedFacilityId: crypto.randomUUID(), reason: 'Acceptance test',
     survivorExpectedVersion: 1, mergedExpectedVersion: 0, confirmation: 'MERGE',

@@ -89,7 +89,6 @@ Append-only verification history. Fields are optional so one event can update on
 - facility_id / verified_at / verified_by
 - method: phone | fax | portal | website | email | internal_source | other
 - confidence: direct | authoritative | secondary | unverified
-- contact_person / contact_channel
 - accepting_status
 - specialty_id / specialty_status
 - diagnosis_id / diagnosis_status
@@ -97,7 +96,7 @@ Append-only verification history. Fields are optional so one event can update on
 - urgent_referral_status: the verified provider requirement; Provider Tracker does not create or submit referrals
 - next_available_date / estimated_wait_days
 - comments
-- related_call_id / related_contact_attempt_id / import_batch_id
+- related_call_id / import_batch_id
 - previous_state / resulting_state
 - source_metadata
 
@@ -108,7 +107,7 @@ Contact activity that may not have produced verified information.
 - facility_id / attempted_at / attempted_by
 - method
 - outcome: verified | no_answer | voicemail_left | voicemail_not_left | disconnected | wrong_number | fax_only | callback_requested | unable_to_verify
-- contact_person / contact_channel / comments
+- comments
 - related_call_id
 
 ### reverification_assignments
@@ -131,8 +130,6 @@ Authorization context reused across multiple call attempts.
 - id
 - authorization_number
 - lob_id
-- default_diagnosis_id
-- default_specialty_id
 - member_postal_code
 - created_by
 - status
@@ -154,7 +151,6 @@ Operational evidence record created from a facility contact attempt.
 - accepting_new_patients
 - can_treat_diagnosis
 - can_schedule_within_four_weeks
-- booking_out_bucket_id
 - notes
 - result_code
 - result_phrase
@@ -171,7 +167,6 @@ Operational evidence record created from a facility contact attempt.
 - lines_of_business
 - specialties
 - diagnoses
-- booking_out_buckets
 - postal_code_centroids
 
 ## Derived query models
@@ -179,7 +174,6 @@ Operational evidence record created from a facility contact attempt.
 - latest_facility_observations
 - latest_facility_specialty_diagnosis_observations
 - facility_review_queue
-- latest_fdm_eligible_observations
 - weekly_duplicate_groups
 - authorization_summary_stats
 - scheduling_trend_observations

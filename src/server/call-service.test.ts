@@ -20,7 +20,6 @@ describe('call entry validation', () => {
   it('normalizes the authorization number and applies safe defaults', () => {
     const parsed = callEntryInputSchema.parse(validCall());
     expect(parsed.authorizationNumber).toBe('AUTH-123');
-    expect(parsed.useInFdm).toBe(false);
   });
 
   it('accepts a controlled failed-contact outcome', () => {

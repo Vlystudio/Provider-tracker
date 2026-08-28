@@ -1,10 +1,7 @@
-import { providerResults, reviewQueue, callLogRows, facilityRows, adminTasks, recentAuthorizations, statCards } from '@/lib/mock-data';
+import { providerResults, reviewQueue, callLogRows, facilityRows, statCards } from '@/lib/mock-data';
 
 export type DashboardSummary = {
   cards: typeof statCards;
-  recentAuthorizations: typeof recentAuthorizations;
-  providerPreview: typeof providerResults;
-  reviewPreview: typeof reviewQueue;
 };
 
 export type ProviderSearchResult = {
@@ -26,12 +23,8 @@ export type ProviderSearchResult = {
 export function getDemoDashboard(): DashboardSummary {
   return {
     cards: statCards,
-    recentAuthorizations,
-    providerPreview: providerResults,
-    reviewPreview: reviewQueue,
   };
 }
-
 export function getDemoProviderResults() {
   return providerResults.map((result, index) => ({
     facilityId: `demo-${result.facility.toLowerCase().replace(/\s+/g, '-')}`,
@@ -161,21 +154,5 @@ export function getDemoReports(from = '2026-05-01', to = '2026-05-31', drilldown
       acceptingStatus: facility.acceptingStatus,
       lastVerifiedAt: facility.lastVerifiedAt,
     })),
-  };
-}
-
-export function getDemoAdminOverview() {
-  return {
-    tasks: adminTasks,
-    importBatches: [
-      {
-        batchId: 'demo-batch-001',
-        fileName: 'URA_Provider_Availability_Tracker_USER_ACTIVE.xlsx',
-        status: 'applied',
-        rows: 248,
-        rejected: 4,
-        issues: 2,
-      },
-    ],
   };
 }

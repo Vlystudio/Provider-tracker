@@ -59,8 +59,6 @@ export const verificationEventInputSchema = z.object({
   verifiedAt: z.coerce.date(),
   method: z.enum(['phone', 'fax', 'portal', 'website', 'email', 'internal_source', 'other']),
   confidence: z.enum(['direct', 'authoritative', 'secondary', 'unverified']).default('direct'),
-  contactPerson: z.string().trim().max(200).nullable().optional(),
-  contactChannel: z.string().trim().max(200).nullable().optional(),
   acceptingStatus: answerSchema.optional(),
   specialtyId: z.string().uuid().nullable().optional(),
   specialtyStatus: answerSchema.optional(),
@@ -88,21 +86,6 @@ export const verificationEventInputSchema = z.object({
   if (value.verifiedAt.valueOf() > Date.now() + 5 * 60_000) {
     context.addIssue({ code: 'custom', path: ['verifiedAt'], message: 'Verification time cannot be in the future.' });
   }
-});
-
-export const contactAttemptInputSchema = z.object({
-  attemptedAt: z.coerce.date(),
-  method: z.enum(['phone', 'fax', 'portal', 'website', 'email', 'internal_source', 'other']),
-  outcome: z.enum([
-    'verified', 'no_answer', 'voicemail_left', 'voicemail_not_left', 'disconnected', 'wrong_number',
-    'fax_only', 'callback_requested', 'unable_to_verify',
-  ]),
-  contactPerson: z.string().trim().max(200).nullable().optional(),
-  contactChannel: z.string().trim().max(200).nullable().optional(),
-  comments: z.string().trim().max(2000).nullable().optional(),
-  relatedCallId: z.string().uuid().nullable().optional(),
-}).strict().refine((value) => value.attemptedAt.valueOf() <= Date.now() + 5 * 60_000, {
-  path: ['attemptedAt'], message: 'Contact time cannot be in the future.',
 });
 
 export const facilityPatchSchema = z.object({
@@ -283,8 +266,6 @@ export async function createVerificationEvent(
       verifiedBy: principal.id,
       method: value.method,
       confidence: value.confidence,
-      contactPerson: value.contactPerson ?? null,
-      contactChannel: value.contactChannel ?? null,
       acceptingStatus: value.acceptingStatus,
       specialtyId: value.specialtyId ?? null,
       specialtyStatus: value.specialtyStatus,
@@ -316,68 +297,6 @@ export async function createVerificationEvent(
       }),
     );
     return { event, facility: updated };
-  });
-}
-
-export async function createContactAttempt(
-  principal: Principal,
-  facilityId: string,
-  input: z.infer<typeof contactAttemptInputSchema>,
-  request?: Request,
-) {
-  assertPermission(principal, 'operations:write');
-  const parsedId = facilityIdSchema.parse(facilityId);
-  const value = contactAttemptInputSchema.parse(input);
-  const db = requireDatabaseClient();
-  return db.transaction(async (tx) => {
-    const [facility] = await tx.select({ id: facilities.id }).from(facilities)
-      .where(and(eq(facilities.id, parsedId), eq(facilities.active, true))).limit(1);
-    if (!facility) throw new RecordNotFoundError('The active facility was not found.');
-    const signature = JSON.stringify([
-      facility.id,
-      principal.id,
-      value.attemptedAt.toISOString(),
-      value.method,
-      value.outcome,
-      value.contactPerson ?? null,
-      value.contactChannel ?? null,
-      value.comments ?? null,
-      value.relatedCallId ?? null,
-    ]);
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${signature}, 0))`);
-    const [existing] = await tx.select().from(facilityContactAttempts).where(and(
-      eq(facilityContactAttempts.facilityId, facility.id),
-      eq(facilityContactAttempts.attemptedBy, principal.id),
-      eq(facilityContactAttempts.attemptedAt, value.attemptedAt),
-      eq(facilityContactAttempts.method, value.method),
-      eq(facilityContactAttempts.outcome, value.outcome),
-      sql`${facilityContactAttempts.contactPerson} is not distinct from ${value.contactPerson ?? null}`,
-      sql`${facilityContactAttempts.contactChannel} is not distinct from ${value.contactChannel ?? null}`,
-      sql`${facilityContactAttempts.comments} is not distinct from ${value.comments ?? null}`,
-      sql`${facilityContactAttempts.relatedCallId} is not distinct from ${value.relatedCallId ?? null}`,
-    )).limit(1);
-    if (existing) return existing;
-    const [attempt] = await tx.insert(facilityContactAttempts).values({
-      facilityId: facility.id,
-      attemptedAt: value.attemptedAt,
-      attemptedBy: principal.id,
-      method: value.method,
-      outcome: value.outcome,
-      contactPerson: value.contactPerson ?? null,
-      contactChannel: value.contactChannel ?? null,
-      comments: value.comments ?? null,
-      relatedCallId: value.relatedCallId ?? null,
-    }).returning();
-    await tx.insert(auditEvents).values(buildAuditEvent({
-      actorId: principal.id,
-      action: 'facility.contact-attempt.create',
-      result: 'success',
-      entityType: 'facility',
-      entityId: facility.id,
-      request,
-      metadata: { attemptId: attempt.id, method: value.method, outcome: value.outcome },
-    }));
-    return attempt;
   });
 }
 
@@ -748,7 +667,6 @@ export async function getFacilityDetail(principal: Principal, facilityId: string
       actorName: sql<string | null>`coalesce(${users.displayName}, ${users.name})`,
       method: facilityVerificationEvents.method,
       confidence: facilityVerificationEvents.confidence,
-      contactPerson: facilityVerificationEvents.contactPerson,
       acceptingStatus: facilityVerificationEvents.acceptingStatus,
       specialtyStatus: facilityVerificationEvents.specialtyStatus,
       diagnosisStatus: facilityVerificationEvents.diagnosisStatus,
@@ -771,8 +689,6 @@ export async function getFacilityDetail(principal: Principal, facilityId: string
       actorName: sql<string | null>`coalesce(${users.displayName}, ${users.name})`,
       method: facilityContactAttempts.method,
       outcome: facilityContactAttempts.outcome,
-      contactPerson: facilityContactAttempts.contactPerson,
-      contactChannel: facilityContactAttempts.contactChannel,
       comments: facilityContactAttempts.comments,
       relatedCallId: facilityContactAttempts.relatedCallId,
     }).from(facilityContactAttempts).leftJoin(users, eq(facilityContactAttempts.attemptedBy, users.id))

@@ -26,7 +26,7 @@ The current HHS Security Rule protects ePHI created, received, maintained, or tr
 | Data at rest | Infrastructure-dependent | Secrets excluded from source/logs; password hashing | Disk/backup encryption, key management, token-encryption decision |
 | Person/entity authentication | Application implemented, enterprise pending | Better Auth sessions and recent-login checks | IdP MFA, lifecycle, conditional access |
 | Minimum necessary | Technical controls implemented; policy pending | Role/data matrix, field exposure, scoped APIs/exports | Approved purposes and workforce policy: privacy/operations |
-| Security incident procedures | Application tooling implemented | Security timeline, account report, holds, revocation, breach runbook | Incident team, counsel, notification procedure, evidence stores |
+| Security incident procedures | Application tooling implemented | Audit log, account report, holds, revocation, breach runbook | Incident team, counsel, notification procedure, evidence stores |
 | Contingency/availability | Application guidance present | Health/readiness endpoints, backup/restore scripts | Managed backup, DR target, restore exercise, downtime process |
 | Risk analysis/management | Not an application certification | Threat/security/privacy assessments in repository | Formal organization-wide risk assessment and treatment plan |
 | Workforce security/training | Not application-controlled | Access review/revocation support | Screening, training, sanctions, termination process |

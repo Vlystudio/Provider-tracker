@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   bulkAssignmentInputSchema,
-  contactAttemptInputSchema,
   duplicateDecisionInputSchema,
   facilityMergeInputSchema,
   facilityPatchSchema,
@@ -27,11 +26,6 @@ describe('provider intelligence mutation validation', () => {
     expect(() => verificationEventInputSchema.parse({ expectedVersion: 0, verifiedAt: new Date().toISOString(), method: 'phone' })).toThrow();
     expect(() => verificationEventInputSchema.parse({ expectedVersion: 0, verifiedAt: new Date(Date.now() + 86_400_000).toISOString(), method: 'phone', acceptingStatus: 'yes' })).toThrow();
     expect(() => verificationEventInputSchema.parse({ expectedVersion: 0, verifiedAt: new Date().toISOString(), method: 'phone', acceptingStatus: 'yes', verifiedBy: facilityA })).toThrow();
-  });
-
-  it('requires a controlled failed-contact outcome', () => {
-    expect(contactAttemptInputSchema.parse({ attemptedAt: new Date().toISOString(), method: 'phone', outcome: 'no_answer' }).outcome).toBe('no_answer');
-    expect(() => contactAttemptInputSchema.parse({ attemptedAt: new Date().toISOString(), method: 'phone', outcome: 'bad number' })).toThrow();
   });
 
   it('requires optimistic versions and explicit merge confirmation', () => {

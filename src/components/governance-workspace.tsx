@@ -42,16 +42,6 @@ type Hold = {
   releasedAt: string | null;
 };
 
-type TimelineEvent = {
-  id: string;
-  actorId: string | null;
-  action: string;
-  result: string;
-  entityType: string;
-  entityId: string | null;
-  createdAt: string;
-};
-
 type IncidentReport = {
   subject: { name: string; email: string; role: string; isActive: boolean };
   period: { start: string; end: string };
@@ -84,14 +74,12 @@ export function GovernanceWorkspace({
   initialAccounts,
   initialPolicies,
   initialHolds,
-  timeline,
   reviewPeriod,
   canManage,
 }: {
   initialAccounts: ReviewAccount[];
   initialPolicies: RetentionPolicy[];
   initialHolds: Hold[];
-  timeline: TimelineEvent[];
   reviewPeriod: string;
   canManage: boolean;
 }) {
@@ -295,8 +283,6 @@ export function GovernanceWorkspace({
         <form onSubmit={investigate} className="grid gap-3 md:grid-cols-4"><label className="form-label md:col-span-2">Account<select className="form-control" name="userId" required>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name} · {account.email}</option>)}</select></label><label className="form-label">Start<input className="form-control" name="start" type="datetime-local" required /></label><label className="form-label">End<input className="form-control" name="end" type="datetime-local" required /></label><div className="md:col-span-4"><button className="button button-primary" type="submit" disabled={pending !== null}>Build report</button></div></form>
         {incident ? <div className="mt-5"><h3 className="font-semibold text-slate-950">{incident.subject.name}</h3><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{Object.entries(incident.summary).map(([key, value]) => <div key={key} className="rounded border border-slate-200 p-3"><p className="text-xs text-slate-500">{humanizeKey(key)}</p><p className="mt-1 text-xl font-semibold text-slate-950">{value}</p></div>)}</div>{incident.truncated ? <InlineMessage tone="warning" title="Event limit reached">The report stopped at {incident.eventLimit} events. Narrow the time window.</InlineMessage> : null}<div className="mt-4 table-scroll max-h-96"><table className="data-table"><thead><tr><th scope="col">Time</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Result</th></tr></thead><tbody>{incident.events.map((item, index) => <tr key={`${item.createdAt}-${index}`}><td>{formatDateTime(item.createdAt)}</td><td>{humanizeKey(item.action)}</td><td>{humanizeKey(item.entityType)}{item.entityId ? ` · ${item.entityId}` : ''}</td><td>{humanizeKey(item.result)}</td></tr>)}</tbody></table></div><div className="mt-4 rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><h4 className="font-semibold">Evidence limits</h4><ul className="mt-2 list-disc space-y-1 pl-5">{incident.evidenceLimitations.map((item) => <li key={item}>{item}</li>)}</ul></div></div> : null}
       </section>
-
-      <section className="table-shell" aria-labelledby="security-timeline-heading"><div className="border-b border-slate-300 px-4 py-3"><h2 id="security-timeline-heading" className="section-title">Security timeline</h2><p className="mt-1 text-sm text-slate-600">Authentication, denied access, account changes, exports, migration, retention, and investigation activity.</p></div><div className="table-scroll max-h-[32rem]"><table className="data-table"><thead><tr><th scope="col">Time</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Result</th></tr></thead><tbody>{timeline.map((event) => <tr key={event.id}><td>{formatDateTime(event.createdAt)}</td><td>{humanizeKey(event.action)}</td><td>{humanizeKey(event.entityType)}{event.entityId ? ` · ${event.entityId}` : ''}</td><td>{humanizeKey(event.result)}</td></tr>)}</tbody></table></div></section>
     </div>
   );
 }

@@ -109,11 +109,8 @@ export type CallCandidate = {
   acceptingNewPatients: AvailabilityStatus;
   canTreatDiagnosis: TreatmentStatus;
   canScheduleWithinFourWeeks: ScheduleStatus;
-  bookingOut: string | null;
   notes: string | null;
   specialtyConfirmed: AvailabilityStatus;
-  useInFdm: boolean;
-  manualCallTimeOverride: string | null;
   weekStart: string;
   duplicateGroupKey: string;
   resultCode:

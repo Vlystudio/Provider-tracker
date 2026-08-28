@@ -265,7 +265,6 @@ function callFromRow(
   const diagnosisDescription = nullableText(pick(record, 'Diagnosis Description'));
   const phone = nullableText(pick(record, 'Phone Number'));
   const notes = nullableText(pick(record, 'Notes'));
-  const bookingOut = nullableText(pick(record, 'Booking Out'));
 
   const hasOperationalIdentity = [
     callerInitials,
@@ -275,7 +274,6 @@ function callFromRow(
     diagnosisCode,
     phone,
     notes,
-    bookingOut,
   ].some(Boolean);
   if (!hasOperationalIdentity) return { scaffold: true as const };
 
@@ -387,11 +385,8 @@ function callFromRow(
     acceptingNewPatients,
     canTreatDiagnosis,
     canScheduleWithinFourWeeks,
-    bookingOut,
     notes,
     specialtyConfirmed: toAvailabilityStatus(pick(record, 'Specialty Confirmed')),
-    useInFdm: toBoolean(pick(record, 'Use in FDM', 'Use in FDM?')),
-    manualCallTimeOverride: manualOverride?.toISOString() ?? null,
     weekStart,
     duplicateGroupKey: stableHash('weekly_duplicate', facilityIdentity.normalizedKey, normalizedDiagnosis, weekStart),
     ...result,

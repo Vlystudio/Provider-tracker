@@ -357,28 +357,6 @@ export const diagnoses = pgTable(
   (table) => [uniqueIndex('diagnoses_code_unique').on(table.code)],
 );
 
-export const bookingOutBuckets = pgTable(
-  'booking_out_buckets',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    code: text('code').notNull(),
-    label: text('label').notNull(),
-    lowerBoundDays: integer('lower_bound_days'),
-    upperBoundDays: integer('upper_bound_days'),
-    rank: integer('rank').notNull().default(0),
-    active: boolean('active').notNull().default(true),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex('booking_out_buckets_code_unique').on(table.code),
-    check(
-      'booking_out_buckets_bounds_check',
-      sql`${table.lowerBoundDays} is null or ${table.upperBoundDays} is null or ${table.lowerBoundDays} <= ${table.upperBoundDays}`,
-    ),
-  ],
-);
-
 export const postalCodeCentroids = pgTable(
   'postal_code_centroids',
   {
@@ -474,8 +452,6 @@ export const authorizations = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     authorizationNumber: text('authorization_number').notNull(),
     lobId: uuid('lob_id').references(() => linesOfBusiness.id, { onDelete: 'set null' }),
-    defaultDiagnosisId: uuid('default_diagnosis_id').references(() => diagnoses.id, { onDelete: 'set null' }),
-    defaultSpecialtyId: uuid('default_specialty_id').references(() => specialties.id, { onDelete: 'set null' }),
     memberZip: text('member_zip'),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     status: authorizationStatusEnum('status').notNull().default('open'),
@@ -700,15 +676,10 @@ export const calls = pgTable(
     acceptingNewPatients: availabilityStatusEnum('accepting_new_patients').notNull().default('unknown'),
     canTreatDiagnosis: treatmentStatusEnum('can_treat_diagnosis').notNull().default('unknown'),
     canScheduleWithinFourWeeks: scheduleStatusEnum('can_schedule_within_four_weeks').notNull().default('unknown'),
-    bookingOutRaw: text('booking_out_raw'),
-    bookingOutBucketId: uuid('booking_out_bucket_id').references(() => bookingOutBuckets.id, { onDelete: 'set null' }),
     notes: text('notes'),
     specialtyConfirmed: availabilityStatusEnum('specialty_confirmed').notNull().default('unknown'),
-    useInFdm: boolean('use_in_fdm').notNull().default(false),
-    manualCallTimeOverride: timestamp('manual_call_time_override', { withTimezone: true }),
     weekStart: date('week_start'),
     duplicateGroupKey: text('duplicate_group_key'),
-    repeatCallReason: text('repeat_call_reason'),
     resultCode: resultCodeEnum('result_code').notNull(),
     resultPhrase: text('result_phrase').notNull(),
     ruleVersion: text('rule_version').notNull().default('v1'),
@@ -726,12 +697,6 @@ export const calls = pgTable(
     index('calls_call_at_idx').on(table.callAt),
     index('calls_facility_call_at_idx').on(table.facilityId, table.callAt),
     index('calls_authorization_call_at_idx').on(table.authorizationId, table.callAt),
-    index('calls_fdm_latest_idx').on(
-      table.facilityId,
-      table.specialtySnapshot,
-      table.diagnosisCodeSnapshot,
-      table.callAt,
-    ),
     index('calls_weekly_duplicate_idx').on(table.facilityId, table.diagnosisCodeSnapshot, table.weekStart),
   ],
 );
@@ -796,8 +761,6 @@ export const facilityVerificationEvents = pgTable(
     legacyActorId: uuid('legacy_actor_id').references(() => legacyActors.id, { onDelete: 'set null' }),
     method: verificationMethodEnum('method').notNull(),
     confidence: sourceConfidenceEnum('confidence').notNull().default('direct'),
-    contactPerson: text('contact_person'),
-    contactChannel: text('contact_channel'),
     acceptingStatus: verificationAnswerEnum('accepting_status'),
     specialtyId: uuid('specialty_id').references(() => specialties.id, { onDelete: 'set null' }),
     specialtyStatus: verificationAnswerEnum('specialty_status'),
@@ -809,7 +772,6 @@ export const facilityVerificationEvents = pgTable(
     estimatedWaitDays: integer('estimated_wait_days'),
     comments: text('comments'),
     relatedCallId: uuid('related_call_id').references(() => calls.id, { onDelete: 'set null' }),
-    relatedContactAttemptId: uuid('related_contact_attempt_id'),
     importBatchId: uuid('import_batch_id').references(() => importBatches.id, { onDelete: 'set null' }),
     previousState: jsonb('previous_state').$type<Record<string, unknown>>().notNull().default({}),
     resultingState: jsonb('resulting_state').$type<Record<string, unknown>>().notNull().default({}),
@@ -839,8 +801,6 @@ export const facilityContactAttempts = pgTable(
     legacyActorId: uuid('legacy_actor_id').references(() => legacyActors.id, { onDelete: 'set null' }),
     method: verificationMethodEnum('method').notNull(),
     outcome: contactOutcomeEnum('outcome').notNull(),
-    contactPerson: text('contact_person'),
-    contactChannel: text('contact_channel'),
     comments: text('comments'),
     relatedCallId: uuid('related_call_id').references(() => calls.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

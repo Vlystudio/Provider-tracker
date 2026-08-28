@@ -55,7 +55,7 @@ The privacy static review examined 183 source files and found no persistent brow
 
 ## Incident readiness
 
-The application provides a 100-event security timeline and a bounded account report covering sign-ins, denials, searches, reports, exports, mutations, privileged actions, and current session ranges. Report output omits tokens, cookies, raw/HMAC network values, request bodies, comments, search values, and export contents. The 105-scenario drill verified emergency revocation, old-session rejection, incident reporting, export boundaries, and 24 required audit action types.
+The application provides a searchable audit log and a bounded account report covering sign-ins, denials, searches, reports, exports, mutations, privileged actions, and current session ranges. Report output omits tokens, cookies, raw/HMAC network values, request bodies, comments, search values, and export contents. The 105-scenario drill verified emergency revocation, old-session rejection, incident reporting, export boundaries, and 24 required audit action types.
 
 Audit integrity passed with zero missing actors for required successful events, invalid timestamps, unknown actions, or broken live actor references. One intentionally deleted synthetic account left one detached session actor and one historical user target; both remain reported instead of rewriting history.
 

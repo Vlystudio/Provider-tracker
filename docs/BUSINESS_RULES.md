@@ -27,7 +27,7 @@ The web app uses stable result codes instead of string comparisons. The presenta
 
 - Duplicate warning key: `facility + diagnosis + week_start`
 - A group with more than one call is a duplicate warning
-- Valid repeat calls remain allowed with a reason attached
+- Repeat calls remain visible; duplicate warnings do not delete valid records
 - Import duplicates are detected using initials/user, timestamp, authorization, facility, specialty, and diagnosis
 
 ## Review queue
@@ -66,16 +66,6 @@ Freshness thresholds are defined once in the server configuration. Failed contac
 - Name similarity alone cannot merge records.
 - Only an administrator can merge.
 - A merge archives the source record, copies current relationships, retains source history, and writes an audit event.
-
-## FDM logic
-
-Eligible FDM records require:
-
-- latest observation for facility + specialty + diagnosis
-- within 30 days
-- accepting = yes
-- can treat = yes
-- facility-specialty mapping confirmed = yes
 
 ## Authorization narrative stop rule
 
