@@ -1,6 +1,6 @@
 # Legacy data mapping
 
-This document is the field contract for `ura-workbook-v1`. Comparisons ignore case, repeated spaces, and harmless punctuation unless noted.
+This document is the field contract for `provider-workbook-v2`. Comparisons ignore case, repeated spaces, and harmless punctuation unless noted.
 
 ## Workbook sheets
 
@@ -50,7 +50,7 @@ An existing specialty confirmation with a newer `last_confirmed_at` is not overw
 | Specialty | specialty plus call snapshot | Uses the specialty mapping rules above. |
 | Accepting New Patients | status and legacy answer metadata | Preserve yes, no, unknown, blank, not asked, unable to verify, and not applicable. |
 | Can Treat Diagnosis | treatment status and legacy answer metadata | Preserve the source state; triage-only answers map to unable to verify for verification history. |
-| Can Schedule Within 4 Weeks | scheduling status and legacy answer metadata | Urgent referral remains distinct in the call rule result. |
+| Can Schedule Within 4 Weeks | scheduling status and legacy answer metadata | A provider's urgent-referral requirement remains distinct in the call result. The application does not issue or submit referrals. |
 | Specialty Confirmed | status and legacy answer metadata | Blank is not converted to no. |
 | Did Not Leave VM | contact outcome | Creates a contact attempt; it does not refresh verification freshness. |
 | Result phrase | source metadata | Stored for comparison only. The application recalculates the result from current rules. |

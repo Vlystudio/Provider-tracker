@@ -36,5 +36,6 @@ describe('call entry validation', () => {
     expect(() => callEntryInputSchema.parse({ ...validCall(), callAt: new Date(Date.now() + 86_400_000).toISOString() })).toThrow();
     expect(() => callEntryInputSchema.parse({ ...validCall(), facilityId: 'not-an-id' })).toThrow();
     expect(() => callEntryInputSchema.parse({ ...validCall(), callerUserId: facilityId })).toThrow();
+    expect(() => callEntryInputSchema.parse({ ...validCall(), referralType: 'External' })).toThrow();
   });
 });

@@ -111,8 +111,6 @@ export type CallCandidate = {
   canScheduleWithinFourWeeks: ScheduleStatus;
   bookingOut: string | null;
   notes: string | null;
-  referralType: string | null;
-  referralReason: string | null;
   specialtyConfirmed: AvailabilityStatus;
   useInFdm: boolean;
   manualCallTimeOverride: string | null;

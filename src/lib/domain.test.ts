@@ -43,7 +43,7 @@ describe('result phrase rules', () => {
   });
 
   it('urgent referral scheduling yields urgent success phrase', () => {
-    expect(getResultPhrase({ didNotLeaveVm: false, accepting: 'Yes', canTreat: 'Yes', schedule: 'Urgent referral required' })).toBe('meets availability guidelines - can schedule within 4 weeks with urgent referral');
+    expect(getResultPhrase({ didNotLeaveVm: false, accepting: 'Yes', canTreat: 'Yes', schedule: 'Urgent referral required' })).toBe('meets availability guidelines - urgent referral required for scheduling');
   });
 
   it('ordinary yes scheduling yields ordinary success', () => {
@@ -70,7 +70,6 @@ describe('authorization narrative stop-after-second-success', () => {
     const narrative = getAuthorizationNarrative({
       calls,
       authorizationNumber: 'A-100',
-      referralReason: 'Reason',
       diagnosis: 'J45',
       specialty: 'Pulmonology',
     });

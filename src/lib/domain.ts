@@ -76,7 +76,7 @@ export function getResultPhrase(input: ResultInput): string {
     case 'unable_to_contact':
       return 'unable to contact, did not leave voicemail';
     case 'meets_availability_guidelines_urgent':
-      return 'meets availability guidelines - can schedule within 4 weeks with urgent referral';
+      return 'meets availability guidelines - urgent referral required for scheduling';
     case 'meets_availability_guidelines':
       return 'meets availability guidelines';
     default:
@@ -124,13 +124,11 @@ export function getSevenDayRecommendation(input: {
 export function getAuthorizationNarrative({
   calls,
   authorizationNumber,
-  referralReason,
   diagnosis,
   specialty,
 }: {
   calls: Array<{ id: string; provider: string; phone: string; resultCode: string; success: boolean }>;
   authorizationNumber: string;
-  referralReason: string;
   diagnosis: string;
   specialty: string;
 }): string {
@@ -139,7 +137,6 @@ export function getAuthorizationNarrative({
 
   const lines = [
     `Authorization ${authorizationNumber}`,
-    `Referral reason: ${referralReason}`,
     `Diagnosis: ${diagnosis}`,
     `Specialty: ${specialty}`,
     `Provider list:`,

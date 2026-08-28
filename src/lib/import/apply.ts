@@ -15,7 +15,6 @@ import {
   legacyActors,
   linesOfBusiness,
   postalCodeCentroids,
-  referralReasons,
   specialties,
   users,
 } from '../../db/schema';
@@ -380,23 +379,11 @@ export async function applyImportPlan(
           });
       }
 
-      const reasonCandidates = new Map<string, string>();
-      for (const call of plan.calls) {
-        if (call.referralReason) reasonCandidates.set(normalizeKeyPart(call.referralReason), call.referralReason);
-      }
-      for (const batch of chunks([...reasonCandidates.entries()])) {
-        await tx
-          .insert(referralReasons)
-          .values(batch.map(([normalizedLabel, label]) => ({ normalizedLabel, label })))
-          .onConflictDoNothing({ target: referralReasons.normalizedLabel });
-      }
-
-      const [facilityRows, specialtyRows, diagnosisRows, lobRows, reasonRows, legacyActorRows] = await Promise.all([
+      const [facilityRows, specialtyRows, diagnosisRows, lobRows, legacyActorRows] = await Promise.all([
         tx.select({ id: facilities.id, normalizedName: facilities.normalizedName, normalizedCity: facilities.normalizedCity }).from(facilities),
         tx.select({ id: specialties.id, normalizedName: specialties.normalizedName }).from(specialties),
         tx.select({ id: diagnoses.id, code: diagnoses.code }).from(diagnoses),
         tx.select({ id: linesOfBusiness.id, code: linesOfBusiness.code }).from(linesOfBusiness),
-        tx.select({ id: referralReasons.id, normalizedLabel: referralReasons.normalizedLabel }).from(referralReasons),
         tx.select({ id: legacyActors.id, normalizedKey: legacyActors.normalizedKey, mappedUserId: legacyActors.mappedUserId }).from(legacyActors),
       ]);
       const facilityIdByKey = new Map(
@@ -405,7 +392,6 @@ export async function applyImportPlan(
       const specialtyIdByName = new Map(specialtyRows.map((specialty) => [specialty.normalizedName, specialty.id]));
       const diagnosisIdByCode = new Map(diagnosisRows.map((diagnosis) => [diagnosis.code, diagnosis.id]));
       const lobIdByCode = new Map(lobRows.map((lob) => [lob.code, lob.id]));
-      const reasonIdByLabel = new Map(reasonRows.map((reason) => [reason.normalizedLabel, reason.id]));
       const legacyActorByInitials = new Map(legacyActorRows.map((legacyActor) => [legacyActor.normalizedKey, legacyActor]));
 
       for (const batch of chunks(plan.facilitySpecialties)) {
@@ -460,10 +446,6 @@ export async function applyImportPlan(
               defaultSpecialtyId: call.normalizedSpecialty
                 ? specialtyIdByName.get(call.normalizedSpecialty) ?? null
                 : null,
-              referralReasonId: call.referralReason
-                ? reasonIdByLabel.get(normalizeKeyPart(call.referralReason)) ?? null
-                : null,
-              referralReasonDetail: call.referralReason,
             })),
           )
           .onConflictDoNothing({ target: authorizations.authorizationNumber });
@@ -505,8 +487,6 @@ export async function applyImportPlan(
               canScheduleWithinFourWeeks: call.canScheduleWithinFourWeeks,
               bookingOutRaw: call.bookingOut,
               notes: call.notes,
-              referralTypeSnapshot: call.referralType,
-              referralReasonSnapshot: call.referralReason,
               specialtyConfirmed: call.specialtyConfirmed,
               useInFdm: call.useInFdm,
               manualCallTimeOverride: call.manualCallTimeOverride

@@ -26,7 +26,7 @@ Ten sheets are present:
 | Scheduling Trend Tracker | A1:G44 | derived output; generate from calls |
 | _Config | A1:B1 | workbook configuration only |
 
-The weekly call log has 29 columns. Operational columns A:Q are caller, timestamp, LOB, authorization, facility, specialty, diagnosis code/description, phone, DNVM, accepting/treating/scheduling results, notes, referral type, OON reason, and output phrase. Columns R:AC are timing, FDM, duplicate, and recommendation helpers.
+The weekly call log has 29 columns. Supported operational columns record the caller, timestamp, LOB, authorization, facility, specialty, diagnosis code/description, phone, DNVM, accepting/treating/scheduling results, booking time, notes, and output phrase. Columns R:AC are timing, FDM, duplicate, and recommendation helpers. Unused legacy columns are ignored.
 
 The archive contains a paste-marker row and a later block whose cells are shifted left (date appears under initials and subsequent fields no longer match the header). The importer quarantines those rows instead of positionally importing corrupted values.
 
@@ -45,7 +45,7 @@ Eight sheets are present:
 | Facility-Specialty Map | A1:D338 | user copy of mappings |
 | Zip Coordinates | A1:C5714 | ZIP centroid reference |
 
-The user call log drifted from the admin schema: column N is `Booking Out`, O is `Notes`, P is `Reason for OON Referral`, and Q is `Output Phrase`. The admin log instead uses N for `Notes`, O for `Referral Type`, P for the reason, and Q for output. The importer maps normalized header names and never assumes these positions.
+The user and admin call logs place supported fields in different columns. The importer maps supported normalized header names and never assumes fixed positions.
 
 The Authorization Output formulas still reference old positional columns, so they can read Notes/Booking Out as a reason or outcome. The web narrative is generated from named canonical fields and stops after the second successful provider.
 

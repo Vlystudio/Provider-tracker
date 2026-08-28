@@ -179,8 +179,7 @@ export function rankSearchResult(
     reasons.push('Schedules within four weeks');
   }
   if (input.urgentReferralStatus === 'yes') {
-    score += 4;
-    reasons.push('Urgent referrals accepted');
+    reasons.push('Urgent referral required');
   }
   const freshness = classifyFreshness('accepting', input.acceptingVerifiedAt, now, policy);
   if (freshness.state === 'fresh') score += 12;

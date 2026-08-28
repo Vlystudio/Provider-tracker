@@ -31,7 +31,7 @@ function workbook(): ParsedWorkbook {
   const facilities = [facility(2), facility(3)];
   const stagedRows: StagedRow[] = facilities.map((item) => ({ entityType: 'facility', source: item.source, fingerprint: item.fingerprint, status: 'staged', rawData: {}, normalizedData: { normalizedKey: item.normalizedKey }, issues: item.issues }));
   return {
-    source: { workbookKind: 'admin', sourcePath: '[synthetic]', sourceFileName: 'synthetic-admin.xlsx', sourceHash: 'stable-source', sizeBytes: 1000, importerVersion: 'acceptance-v1', sheetsSeen: ['Facilities'], dateSystem: '1900', schemaVersion: 'ura-workbook-v1', sheetDetails: [], formulaCells: 0, hiddenRows: 0 },
+    source: { workbookKind: 'admin', sourcePath: '[synthetic]', sourceFileName: 'synthetic-admin.xlsx', sourceHash: 'stable-source', sizeBytes: 1000, importerVersion: 'acceptance-v1', sheetsSeen: ['Facilities'], dateSystem: '1900', schemaVersion: 'provider-workbook-v2', sheetDetails: [], formulaCells: 0, hiddenRows: 0 },
     counts: { rowsVisited: 2, scaffoldRowsSkipped: 0, rejectedRows: 0, facilities: 2, facilitySpecialties: 0, calls: 0, postalCodes: 0 },
     facilities, facilitySpecialties: [], calls: [], postalCodes: [], stagedRows, issues: [],
   };

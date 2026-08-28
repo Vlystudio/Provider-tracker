@@ -21,7 +21,7 @@ function call(index: number): CallCandidate {
     diagnosisCode: `D${index % 100}`, diagnosisDescription: 'Synthetic diagnosis', phone: '2075550100', didNotLeaveVm: false,
     acceptingNewPatients: index % 3 === 0 ? 'unknown' : index % 2 === 0 ? 'yes' : 'no',
     canTreatDiagnosis: 'yes', canScheduleWithinFourWeeks: 'yes', bookingOut: null, notes: null,
-    referralType: null, referralReason: null, specialtyConfirmed: 'yes', useInFdm: true,
+    specialtyConfirmed: 'yes', useInFdm: true,
     manualCallTimeOverride: null, weekStart: '2024-12-29', duplicateGroupKey: `weekly-${index}`,
     resultCode: 'meets_availability_guidelines', resultPhrase: 'Meets availability guidelines',
     importedResultPhrase: null,
@@ -40,7 +40,7 @@ function workbook(size: number): ParsedWorkbook {
     source: {
       workbookKind: 'user', sourcePath: '[synthetic]', sourceFileName: 'synthetic-user.xlsx', sourceHash: 'synthetic-performance',
       sizeBytes: size * 250, importerVersion: 'performance-v1', sheetsSeen: ['Facilities', 'Facility-Specialty Map', 'Weekly Call Log', 'Zip Coordinates'],
-      dateSystem: '1900', schemaVersion: 'ura-workbook-v1', sheetDetails: [], formulaCells: 0, hiddenRows: 0,
+      dateSystem: '1900', schemaVersion: 'provider-workbook-v2', sheetDetails: [], formulaCells: 0, hiddenRows: 0,
     },
     counts: { rowsVisited: size + 4, scaffoldRowsSkipped: 0, rejectedRows: 0, facilities: 0, facilitySpecialties: 0, calls: size, postalCodes: 0 },
     facilities: [], facilitySpecialties: [], calls, postalCodes: [], stagedRows: calls.map(staged), issues: [],

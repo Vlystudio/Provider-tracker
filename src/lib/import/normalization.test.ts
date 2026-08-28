@@ -66,7 +66,7 @@ describe('canonical import results', () => {
       }),
     ).toEqual({
       resultCode: 'meets_availability_guidelines_urgent',
-      resultPhrase: 'meets availability guidelines - can schedule within 4 weeks with urgent referral',
+      resultPhrase: 'meets availability guidelines - urgent referral required for scheduling',
     });
   });
 });

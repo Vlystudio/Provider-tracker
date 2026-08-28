@@ -46,7 +46,7 @@ export const providerResults = [
     phone: '(207) 729-1000',
     status: 'Accepting new patients',
     result: 'meets availability guidelines - urgent referral required',
-    nextStep: 'Urgent referral path',
+    nextStep: 'Urgent referral required',
   },
 ];
 
@@ -71,7 +71,7 @@ export const facilityRows = [
 
 export const reportMetrics = [
   { label: 'Calls completed', value: '148', change: '+12%' },
-  { label: 'Successful referrals', value: '76', change: '+4.3%' },
+  { label: 'Calls meeting criteria', value: '76', change: '+4.3%' },
   { label: 'Avg turnaround', value: '2.4d', change: '-0.6d' },
   { label: 'Import match rate', value: '96.8%', change: '+1.2%' },
 ];

@@ -9,7 +9,7 @@ The web app uses stable result codes instead of string comparisons. The presenta
 1. If `did_not_leave_vm` is true, the result phrase is `unable to contact, did not leave voicemail`.
 2. Else if `accepting_new_patients` is not `yes`, result is `does not meet availability guidelines`.
 3. Else if `can_treat_diagnosis` is not `yes`, result is `does not meet availability guidelines`.
-4. Else if scheduling requires urgent referral, result is `meets availability guidelines - can schedule within 4 weeks with urgent referral`.
+4. Else if the provider requires an urgent referral for scheduling, result is `meets availability guidelines - urgent referral required for scheduling`.
 5. Else if `can_schedule_within_four_weeks` is `yes`, result is `meets availability guidelines`.
 6. Else result is `does not meet availability guidelines`.
 

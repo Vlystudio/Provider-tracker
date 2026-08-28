@@ -47,7 +47,7 @@ Canonical facility master record.
 - coordinate_quality: exact | address | zip_centroid | manual | unknown
 - current_accepting_status / accepting_verified_at
 - current_scheduling_status / scheduling_verified_at
-- current_urgent_referral_status
+- current_urgent_referral_status: whether an urgent referral is required for this provider's availability
 - next_available_date / estimated_wait_days
 - last_verified_at
 - merged_into_facility_id / archived_at / archived_by
@@ -94,7 +94,7 @@ Append-only verification history. Fields are optional so one event can update on
 - specialty_id / specialty_status
 - diagnosis_id / diagnosis_status
 - scheduling_within_four_weeks
-- urgent_referral_status
+- urgent_referral_status: the verified provider requirement; Provider Tracker does not create or submit referrals
 - next_available_date / estimated_wait_days
 - comments
 - related_call_id / related_contact_attempt_id / import_batch_id
@@ -133,7 +133,6 @@ Authorization context reused across multiple call attempts.
 - lob_id
 - default_diagnosis_id
 - default_specialty_id
-- referral_reason_id
 - member_postal_code
 - created_by
 - status
@@ -157,7 +156,6 @@ Operational evidence record created from a facility contact attempt.
 - can_schedule_within_four_weeks
 - booking_out_bucket_id
 - notes
-- referral_reason_snapshot_id
 - result_code
 - result_phrase
 - rule_version
@@ -173,7 +171,6 @@ Operational evidence record created from a facility contact attempt.
 - lines_of_business
 - specialties
 - diagnoses
-- referral_reasons
 - booking_out_buckets
 - postal_code_centroids
 

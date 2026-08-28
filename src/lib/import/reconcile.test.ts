@@ -13,7 +13,7 @@ function parsedWorkbook(kind: WorkbookKind, facilities: FacilityCandidate[]): Pa
       importerVersion: 'test-v1',
       sheetsSeen: ['Facilities'],
       dateSystem: '1900',
-      schemaVersion: 'ura-workbook-v1',
+      schemaVersion: 'provider-workbook-v2',
       sheetDetails: [],
       formulaCells: 0,
       hiddenRows: 0,

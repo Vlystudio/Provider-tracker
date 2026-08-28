@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-22
 
-This document covers all 43 application tables in `src/db/schema.ts`. It describes what the application can hold. It does not decide whether the organization is a HIPAA covered entity or business associate.
+This document covers all 42 application tables in `src/db/schema.ts`. It describes what the application can hold. It does not decide whether the organization is a HIPAA covered entity or business associate.
 
 ## Classification labels
 
@@ -20,7 +20,7 @@ This document covers all 43 application tables in `src/db/schema.ts`. It describ
 
 Provider Tracker is PHI-capable.
 
-The current schema does not store a member name, date of birth, Social Security number, or medical record number. It does store authorization numbers, member ZIP codes, diagnosis selections, referral details, and operational free text. Those fields can become individually identifiable health information when an authorization number or another linked system can identify the member. Free text can also introduce names or medical details that the structured schema did not ask for.
+The current schema does not store a member name, date of birth, Social Security number, or medical record number. It does store authorization numbers, member ZIP codes, diagnosis selections, and operational free text. Those fields can become individually identifiable health information when an authorization number or another linked system can identify the member. Free text can also introduce names or medical details that the structured schema did not ask for.
 
 HHS defines PHI as individually identifiable health information held or transmitted by a covered entity or business associate. The organizational role and actual production data determine whether HIPAA applies. See the [HHS Privacy Rule summary](https://www.hhs.gov/hipaa/for-professionals/privacy/laws-regulations/index.html).
 
@@ -40,11 +40,10 @@ Working rule for this application: treat authorization records, member-location 
 | `lines_of_business` | Business-line reference list | Internal | Can add health-plan context when joined | Operational roles | Retained |
 | `specialties` | Provider specialty reference list | Internal | Health context, not patient data alone | Operational/report roles | Retained |
 | `diagnoses` | Diagnosis code reference list | Confidential operational | Not PHI alone; sensitive when tied to a member or authorization | Operational/report roles as scoped | Retained |
-| `referral_reasons` | Referral reason reference list | Confidential operational | Health context | Operational roles | Retained |
 | `booking_out_buckets` | Wait-time reference bands | Internal | No direct identifier | Operational/report roles | Retained |
 | `postal_code_centroids` | Distance-search reference data | Internal | Not member data; a searched member ZIP may be sensitive | Operational service | Retained |
 | `facilities` | Provider directory and current status | Confidential operational | Provider address/phone; no patient data by design | Admin and URA row access; reports aggregate | Retained; archive state enforced |
-| `authorizations` | Authorization workflow | Potential PHI | Authorization number, member ZIP, diagnosis/specialty links, referral detail | Creator and admin; no report-viewer row access | Retained pending approved policy |
+| `authorizations` | Authorization workflow | Potential PHI | Authorization number, member ZIP, diagnosis/specialty links | Creator and admin; no report-viewer row access | Retained pending approved policy |
 | `import_batches` | Workbook import summary | Confidential operational | File name/hash and summary may expose source context | Migration administrators | Retained pending migration policy |
 | `migration_runs` | Preview, approval, apply, reconcile, reverse | Confidential operational; audit | Reasons and diagnostics may contain sensitive context | Migration administrators | Retained |
 | `migration_sources` | Workbook provenance | Confidential operational | Source file name/hash, sheet metadata | Migration administrators | Retained |
@@ -52,7 +51,7 @@ Working rule for this application: treat authorization records, member-location 
 | `legacy_actors` | Attribution mapping from workbooks | Employee PII | Legacy staff names and user mapping | Migration administrators/auditors as needed | Retained |
 | `legacy_value_mappings` | Approved legacy-to-current value mapping | Confidential operational | Can include health/provider labels | Migration administrators | Retained |
 | `migration_reconciliations` | Source-versus-target counts and hashes | Confidential operational | Counts generally safe; details remain migration-restricted | Migration administrators | Retained |
-| `calls` | Imported call/authorization history | Potential PHI | Authorization, diagnosis, referral, location, provider, notes | Admin/URA within workflow | Retained pending approved policy |
+| `calls` | Imported call/authorization history | Potential PHI | Authorization, diagnosis, location, provider, notes | Admin/URA within workflow | Retained pending approved policy |
 | `facility_specialties` | Facility capability | Confidential operational | Notes are free text | Operational roles; report aggregates | Retained |
 | `facility_diagnosis_capabilities` | Facility capability by diagnosis | Confidential operational | Diagnosis data, notes; not member-linked by design | Operational roles; report aggregates | Retained |
 | `facility_verification_events` | Immutable verification history | Confidential operational | Contact person/channel and comments may contain PII/PHI | Operational roles; auditor sees audit metadata, not full comments | Retained |
@@ -78,7 +77,7 @@ Working rule for this application: treat authorization records, member-location 
 
 ## Free-text locations
 
-The following fields accept or preserve free text: authorization referral detail; facility capability notes; verification/contact comments; call notes and referral detail; migration approval/reversal reasons, diagnostic messages/resolution notes; duplicate/merge review reasons; work-item blocked/dismissal reasons; source metadata; imported raw rows; notification text; automation errors.
+The following fields accept or preserve free text: facility capability notes; verification/contact comments; call notes; migration approval/reversal reasons, diagnostic messages/resolution notes; duplicate/merge review reasons; work-item blocked/dismissal reasons; source metadata; imported raw rows; notification text; automation errors.
 
 UI guidance is simple: do not enter member names, dates of birth, credentials, or extra medical detail unless the approved workflow specifically requires it. The application does not use keyword censorship because it would be unreliable and would interfere with legitimate work.
 
@@ -91,7 +90,7 @@ Free text is not copied into metrics. Audit events store the fact that a reason 
 | Session raw IP and user agent were more data than the UI or session control needed. | New sessions store an HMAC-derived network identifier and force user agent to null. Audit correlation remains available. |
 | User image is not used by the current UI. | Keep the standard authentication column for compatibility, but do not request or display it. Review before corporate identity mapping. |
 | OAuth access/refresh/ID token columns are unused for local credentials. | Keep for the approved future identity integration. They are secrets, never exported, and require secret/encryption design before use. Better Auth does not encrypt provider tokens by default. |
-| Authorization number, member ZIP, diagnosis, specialty, and referral detail support the defined URA workflow. | Keep, but restrict row access to the creator/admin service rules. Report viewers receive aggregates rather than authorization rows. |
+| Authorization number, member ZIP, diagnosis, and specialty support the defined URA workflow. | Keep, but restrict row access to the creator/admin service rules. Report viewers receive aggregates rather than authorization rows. |
 | Provider coordinates, phone, address, and verification history support distance search and verification. | Keep. Exports omit exact coordinates, provenance internals, optimistic-lock versions, and audit metadata. |
 | Imported raw rows and migration diagnostics duplicate source content. | Keep while migration/cutover evidence is required. They remain migration-admin only; an approved retention decision is still needed. |
 | Audit before/after snapshots could become a shadow data copy. | Current write paths store safe state codes/counts or changed-field names. Full comments, request bodies, search values, and exported content are excluded. |

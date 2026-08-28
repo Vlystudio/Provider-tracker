@@ -12,7 +12,6 @@ export const authorizationPatchSchema = z
   .object({
     status: z.enum(['open', 'complete', 'cancelled']).optional(),
     memberZip: z.string().regex(/^\d{5}$/).nullable().optional(),
-    referralReasonDetail: z.string().trim().max(1000).nullable().optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, 'At least one supported field is required.');
@@ -28,7 +27,6 @@ const publicAuthorizationFields = {
   authorizationNumber: authorizations.authorizationNumber,
   memberZip: authorizations.memberZip,
   status: authorizations.status,
-  referralReasonDetail: authorizations.referralReasonDetail,
   createdBy: authorizations.createdBy,
   createdAt: authorizations.createdAt,
   updatedAt: authorizations.updatedAt,

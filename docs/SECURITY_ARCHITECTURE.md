@@ -89,7 +89,7 @@ Searches, report views, exports, access-review decisions, retention changes, leg
 
 ## Data governance boundary
 
-The application is treated as capable of holding regulated health information because authorization, diagnosis, referral, location, and free-text fields can become identifying when combined. That is a conservative engineering classification, not a legal conclusion that every deployment is subject to HIPAA.
+The application is treated as capable of holding regulated health information because authorization, diagnosis, location, and free-text fields can become identifying when combined. That is a conservative engineering classification, not a legal conclusion that every deployment is subject to HIPAA.
 
 The governance workspace provides access review, dormant-account visibility, retention configuration, holds, export controls, and bounded incident investigation. It does not approve retention periods, determine notification obligations, certify compliance, configure network isolation, or replace the organization's privacy, legal, records, identity, and security processes. See `DATA_GOVERNANCE.md`, `HIPAA_TECHNICAL_READINESS.md`, and `BREACH_RESPONSE.md`.
 

@@ -136,7 +136,6 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
                   authorizationNumber: selected.authorizationNumber,
                   memberZip: selected.memberZip,
                   status: selected.status,
-                  referralReasonDetail: selected.referralReasonDetail,
                   updatedAt: selected.updatedAt.toISOString(),
                 } satisfies AuthorizationView}
               />

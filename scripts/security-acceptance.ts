@@ -248,8 +248,8 @@ async function createTestSchema() {
     );
     CREATE TABLE authorizations (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), authorization_number text NOT NULL UNIQUE,
-      lob_id uuid, default_diagnosis_id uuid, default_specialty_id uuid, referral_reason_id uuid,
-      referral_reason_detail text, member_zip text, created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      lob_id uuid, default_diagnosis_id uuid, default_specialty_id uuid,
+      member_zip text, created_by uuid REFERENCES users(id) ON DELETE SET NULL,
       status authorization_status NOT NULL DEFAULT 'open', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX authorizations_status_updated_idx ON authorizations(status, updated_at);
@@ -782,7 +782,7 @@ async function main() {
   response = await mutation(`/api/authorizations/${authorizationA.id}`, userLogin.cookie, 'PATCH', { createdBy: userA.id, status: 'complete' });
   record('Unexpected ownership field / mass assignment', 'BLOCKED', `HTTP ${response.status}`, response.status === 400);
   response = await mutation(`/api/authorizations/${authorizationA.id}`, userLogin.cookie, 'PATCH', {
-    referralReasonDetail: 'x'.repeat(17 * 1024),
+    memberZip: '1'.repeat(17 * 1024),
   });
   record('Oversized mutation body', 'BLOCKED', `HTTP ${response.status}`, response.status === 413);
   response = await request('/api/authorizations/not-a-uuid', { cookie: userLogin.cookie, clientIp: '192.0.2.11' });

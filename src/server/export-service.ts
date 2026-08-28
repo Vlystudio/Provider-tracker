@@ -19,7 +19,7 @@ const exportColumns: Array<{ header: string; value: (row: ProviderSearchResult) 
   { header: 'Specialties', value: (row) => row.specialties },
   { header: 'Accepting', value: (row) => row.acceptingStatus },
   { header: 'Scheduling', value: (row) => row.schedulingStatus },
-  { header: 'Urgent referral', value: (row) => row.urgentReferralStatus },
+  { header: 'Urgent referral required', value: (row) => row.urgentReferralStatus },
   { header: 'Next available date', value: (row) => row.nextAvailableDate },
   { header: 'Estimated wait days', value: (row) => row.estimatedWaitDays },
   { header: 'Last verified', value: (row) => row.lastVerifiedAt },

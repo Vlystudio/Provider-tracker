@@ -61,7 +61,7 @@ export function getDemoProviderResults() {
       ? ['Specialty match', 'Treats diagnosis', 'Accepting new patients', 'Schedules within four weeks']
       : index === 1
         ? ['Specialty match', 'Stale · verified 81 days ago']
-        : ['Specialty match', 'Treats diagnosis', 'Urgent referrals accepted', 'Never verified'],
+        : ['Specialty match', 'Treats diagnosis', 'Urgent referral required', 'Never verified'],
     optimisticLockVersion: 0,
   }));
 }

@@ -84,8 +84,6 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
           canScheduleWithinFourWeeks: contactOutcome === 'reached' ? field('canScheduleWithinFourWeeks') : 'unknown',
           bookingOut: contactOutcome === 'reached' ? field('bookingOut') || null : null,
           specialtyConfirmed: contactOutcome === 'reached' ? field('specialtyConfirmed') : 'unknown',
-          referralType: field('referralType') || null,
-          referralReason: field('referralReason') || null,
           notes: field('notes') || null,
           useInFdm: form.get('useInFdm') === 'on',
         }),
@@ -230,10 +228,11 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
                   <option value="unknown">Unknown</option>
                   <option value="yes">Yes</option>
                   <option value="no">No</option>
-                  <option value="urgent_referral_required">Yes, with urgent referral</option>
+                  <option value="urgent_referral_required">Yes, urgent referral required</option>
                   <option value="unable_to_tell_without_triage">Needs triage</option>
                   <option value="not_applicable">Not applicable</option>
                 </select>
+                <span className="form-help">Records the provider requirement only. Provider Tracker does not create or submit referrals.</span>
               </label>
               <label className="form-label">
                 Booking out
@@ -245,17 +244,7 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
       </section>
 
       <section className="panel p-5" aria-labelledby="notes-heading">
-        <h2 id="notes-heading" className="section-title">Referral and notes</h2>
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <label className="form-label">
-            Referral type
-            <input className="form-control" name="referralType" maxLength={100} />
-          </label>
-          <label className="form-label">
-            Referral reason
-            <input className="form-control" name="referralReason" maxLength={500} />
-          </label>
-        </div>
+        <h2 id="notes-heading" className="section-title">Notes</h2>
         <label className="form-label mt-4">
           Notes
           <textarea className="form-control min-h-28" name="notes" maxLength={2000} />

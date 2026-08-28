@@ -241,7 +241,6 @@ async function runProviderSearch(principal: Principal, input: z.input<typeof pro
           CASE WHEN $4::text IS NOT NULL AND diagnosis_match THEN 35 ELSE 0 END +
           CASE WHEN current_accepting_status = 'yes' THEN 20 ELSE 0 END +
           CASE WHEN current_scheduling_status = 'yes' THEN 12 ELSE 0 END +
-          CASE WHEN current_urgent_referral_status = 'yes' THEN 4 ELSE 0 END +
           CASE
             WHEN accepting_verified_at IS NULL THEN -12
             WHEN accepting_verified_at >= now() - ($12::text || ' days')::interval THEN 12

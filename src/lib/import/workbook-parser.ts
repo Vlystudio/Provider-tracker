@@ -67,7 +67,13 @@ const ALLOWED_SHEETS: Record<WorkbookKind, ReadonlySet<string>> = {
   ]),
 };
 
-const IMPORT_SCHEMA_VERSION = 'ura-workbook-v1';
+const IMPORT_SCHEMA_VERSION = 'provider-workbook-v2';
+
+const ignoredReferralWorkflowHeaders = new Set([
+  'referraltype',
+  'referralreason',
+  'reasonforoonreferral',
+]);
 
 const REQUIRED_HEADER_GROUPS: Record<string, string[][]> = {
   Facilities: [['Facility', 'Facility Name', 'Facility Key']],
@@ -94,9 +100,11 @@ function rowRecord(headers: string[], cells: ScalarCell[]): RowRecord {
   const normalized = new Map<string, ScalarCell>();
   headers.forEach((header, index) => {
     if (!header) return;
+    const normalizedHeader = normalizeHeader(header);
+    if (ignoredReferralWorkflowHeaders.has(normalizedHeader)) return;
     const value = cells[index] ?? null;
     rawData[header] = value;
-    normalized.set(normalizeHeader(header), value);
+    normalized.set(normalizedHeader, value);
   });
   return { rawData, normalized };
 }
@@ -257,7 +265,6 @@ function callFromRow(
   const diagnosisDescription = nullableText(pick(record, 'Diagnosis Description'));
   const phone = nullableText(pick(record, 'Phone Number'));
   const notes = nullableText(pick(record, 'Notes'));
-  const referralReason = nullableText(pick(record, 'Reason for OON Referral'));
   const bookingOut = nullableText(pick(record, 'Booking Out'));
 
   const hasOperationalIdentity = [
@@ -268,7 +275,6 @@ function callFromRow(
     diagnosisCode,
     phone,
     notes,
-    referralReason,
     bookingOut,
   ].some(Boolean);
   if (!hasOperationalIdentity) return { scaffold: true as const };
@@ -312,9 +318,9 @@ function callFromRow(
   const didNotLeaveVm = isDidNotLeaveVm(pick(record, 'Did not leave VM', 'Unable to contact Did not leave VM'));
   const acceptingNewPatients = toAvailabilityStatus(pick(record, 'Accepting New Patients'));
   const canTreatDiagnosis = toTreatmentStatus(pick(record, 'Can Treat Diagnosis'));
-  const canScheduleWithinFourWeeks = toScheduleStatus(
-    pick(record, 'Can Schedule Within 4 Weeks', 'Can Schedule W/in 4 Weeks'),
-  );
+  const canScheduleWithinFourWeeks = toBoolean(pick(record, 'Urgent Referral Required'))
+    ? 'urgent_referral_required'
+    : toScheduleStatus(pick(record, 'Can Schedule Within 4 Weeks', 'Can Schedule W/in 4 Weeks'));
   const result = deriveResult({
     didNotLeaveVm,
     accepting: acceptingNewPatients,
@@ -383,8 +389,6 @@ function callFromRow(
     canScheduleWithinFourWeeks,
     bookingOut,
     notes,
-    referralType: nullableText(pick(record, 'Referral Type')),
-    referralReason,
     specialtyConfirmed: toAvailabilityStatus(pick(record, 'Specialty Confirmed')),
     useInFdm: toBoolean(pick(record, 'Use in FDM', 'Use in FDM?')),
     manualCallTimeOverride: manualOverride?.toISOString() ?? null,
@@ -413,7 +417,7 @@ function normalizedDataForStaging(candidate: object) {
 export async function parseWorkbook(
   sourcePath: string,
   workbookKind: WorkbookKind,
-  importerVersion = process.env.IMPORTER_VERSION ?? 'ura-workbook-v1',
+  importerVersion = process.env.IMPORTER_VERSION ?? 'provider-workbook-v2',
 ): Promise<ParsedWorkbook> {
   const sourceFileName = path.basename(sourcePath);
   const sourceHash = await hashFile(sourcePath);

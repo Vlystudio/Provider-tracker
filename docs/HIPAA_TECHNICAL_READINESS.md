@@ -4,7 +4,7 @@ Last reviewed: 2026-08-22
 
 ## Applicability statement
 
-Provider Tracker is PHI-capable because authorization identifiers, member ZIP, diagnosis/referral data, and free text can be linked to an individual. Whether the organization is a HIPAA covered entity or business associate, and whether a specific use contains ePHI, must be decided by authorized privacy/legal staff.
+Provider Tracker is PHI-capable because authorization identifiers, member ZIP, diagnosis data, and free text can be linked to an individual. Whether the organization is a HIPAA covered entity or business associate, and whether a specific use contains ePHI, must be decided by authorized privacy/legal staff.
 
 This is a technical mapping, not a claim of HIPAA compliance or certification.
 

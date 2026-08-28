@@ -24,7 +24,7 @@ function verifiedFacts(event: NonNullable<Awaited<ReturnType<typeof getFacilityD
   if (event.specialtyStatus) facts.push(`Specialty: ${humanizeKey(event.specialtyStatus)}`);
   if (event.diagnosisStatus) facts.push(`Diagnosis: ${humanizeKey(event.diagnosisStatus)}`);
   if (event.schedulingWithinFourWeeks) facts.push(`Within four weeks: ${humanizeKey(event.schedulingWithinFourWeeks)}`);
-  if (event.urgentReferralStatus) facts.push(`Urgent referral: ${humanizeKey(event.urgentReferralStatus)}`);
+  if (event.urgentReferralStatus) facts.push(`Urgent referral required: ${humanizeKey(event.urgentReferralStatus)}`);
   if (event.nextAvailableDate) facts.push(`Next date: ${formatDate(event.nextAvailableDate)}`);
   if (event.estimatedWaitDays !== null) facts.push(`Wait: ${event.estimatedWaitDays} days`);
   return facts;
@@ -71,7 +71,7 @@ export default async function FacilityDetailPage({ params }: { params: Promise<{
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Current facility status">
         <div className="panel p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Accepting</p><p className="mt-2"><StatusBadge tone={tone(facility.currentAcceptingStatus)}>{humanizeKey(facility.currentAcceptingStatus)}</StatusBadge></p><p className="mt-2 text-xs text-slate-600">{freshnessLabel(freshness)}</p></div>
         <div className="panel p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Scheduling</p><p className="mt-2"><StatusBadge tone={tone(facility.currentSchedulingStatus)}>{humanizeKey(facility.currentSchedulingStatus)}</StatusBadge></p><p className="mt-2 text-xs text-slate-600">{facility.estimatedWaitDays !== null ? `${facility.estimatedWaitDays} day estimated wait` : 'Wait not recorded'}</p></div>
-        <div className="panel p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Urgent referral</p><p className="mt-2"><StatusBadge tone={tone(facility.currentUrgentReferralStatus)}>{humanizeKey(facility.currentUrgentReferralStatus)}</StatusBadge></p><p className="mt-2 text-xs text-slate-600">{facility.nextAvailableDate ? `Next date ${formatDate(facility.nextAvailableDate)}` : 'Next date not recorded'}</p></div>
+        <div className="panel p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Urgent referral required</p><p className="mt-2"><StatusBadge tone={tone(facility.currentUrgentReferralStatus)}>{humanizeKey(facility.currentUrgentReferralStatus)}</StatusBadge></p><p className="mt-2 text-xs text-slate-600">{facility.nextAvailableDate ? `Next date ${formatDate(facility.nextAvailableDate)}` : 'Next date not recorded'}</p></div>
         <div className="panel p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</p><p className="mt-2 font-medium text-slate-950">{facility.phoneRaw || 'Phone not recorded'}</p><p className="mt-2 text-xs text-slate-600">{humanizeKey(facility.coordinateQuality)} coordinates</p></div>
       </section>
 

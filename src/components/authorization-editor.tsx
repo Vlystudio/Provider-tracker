@@ -8,7 +8,6 @@ export type AuthorizationView = {
   authorizationNumber: string;
   memberZip: string | null;
   status: 'open' | 'complete' | 'cancelled';
-  referralReasonDetail: string | null;
   updatedAt: string;
 };
 
@@ -42,7 +41,6 @@ export function AuthorizationEditor({ record, editable }: { record: Authorizatio
         body: JSON.stringify({
           status: String(form.get('status') ?? 'open'),
           memberZip: memberZip || null,
-          referralReasonDetail: String(form.get('referralReasonDetail') ?? '').trim() || null,
         }),
       });
       const body = await response.json().catch(() => ({})) as { authorization?: AuthorizationView; error?: string };
@@ -95,19 +93,6 @@ export function AuthorizationEditor({ record, editable }: { record: Authorizatio
           {zipError ? <span id="authorization-zip-error" className="form-error">{zipError}</span> : null}
         </label>
       </div>
-
-      <label className="form-label">
-        Referral notes
-        <textarea
-          className="form-control min-h-28"
-          name="referralReasonDetail"
-          maxLength={1000}
-          value={current.referralReasonDetail ?? ''}
-          disabled={!editable || pending}
-          onChange={(event) => setCurrent({ ...current, referralReasonDetail: event.target.value })}
-        />
-        <span className="form-help">Use operational notes only. Do not enter passwords or account credentials.</span>
-      </label>
 
       {editable ? (
         <button type="submit" className="button button-primary" disabled={pending}>

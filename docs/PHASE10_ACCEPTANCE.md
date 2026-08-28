@@ -10,10 +10,10 @@ The repository controls passed. This is not a regulatory certification. Producti
 
 ## Data classification
 
-- Reviewed all 43 application tables plus browser, request, log, metric, export, backup, identity, and vendor flows.
-- Potential PHI includes authorization number, member ZIP, diagnosis, specialty, referral reason/detail, facility selection, and operational notes when tied to a person.
+- Reviewed all 42 application tables plus browser, request, log, metric, export, backup, identity, and vendor flows.
+- Potential PHI includes authorization number, member ZIP, diagnosis, specialty, facility selection, and operational notes when tied to a person.
 - PII includes staff name, email, session activity, account status, role history, and audit attribution.
-- Free text exists in referral detail, verification/contact comments, migration notes/reasons, operational work, notification content, and hold policy references. These fields must not be used for credentials or unnecessary patient detail.
+- Free text exists in verification/contact comments, migration notes/reasons, operational work, notification content, and hold policy references. These fields must not be used for credentials or unnecessary patient detail.
 - Raw client addresses and browser user-agent strings were identified as unnecessary persistent session data. New sessions store an HMAC-derived address and no user agent. Audit/search/export metadata keeps filter names and counts, not values or returned content.
 - Better Auth account token columns are currently unused for local password login. If corporate identity uses them, IT must decide whether to encrypt tokens at the application layer and how keys rotate.
 
@@ -46,7 +46,7 @@ Provider rows are limited to administrators and URA users and capped by `EXPORT_
 - Notifications remain in-app, recipient-owned, and limited to operational summaries. IDOR checks passed.
 - Digest generation reevaluates recipient access and is deduplicated. No email or external notification vendor is configured.
 - Metric labels remain allowlisted and exclude user input, account identity, record IDs, and query values.
-- Structured logging redacts credentials, tokens, raw addresses, email-like values, member/diagnosis/referral fields, and other sensitive keys.
+- Structured logging redacts credentials, tokens, raw addresses, email-like values, member/diagnosis fields, urgent-referral requirements, and other sensitive keys.
 - Authenticated responses use no-store defaults. The client uses no local/session storage or IndexedDB for application data. Export blob URLs are revoked immediately after the browser starts the download.
 - Sensitive filters are accepted in server request bodies where possible. Existing report/search GET filters can appear in browser history, so real patient/member identifiers must not be placed in those fields.
 - Print, copy, endpoint DLP, managed browser, shared-device, and approved export-location policy remain IT responsibilities.
@@ -63,7 +63,7 @@ Normal facility/detail reads and row-level database reads cannot be perfectly re
 
 ## Healthcare and compliance readiness
 
-Provider Tracker is PHI-capable because authorization, location, diagnosis, referral, and free-text data can become identifying when combined. Whether a deployment is subject to HIPAA, which uses are permitted, and which fields are minimum necessary are legal/privacy decisions outside the application.
+Provider Tracker is PHI-capable because authorization, location, diagnosis, and free-text data can become identifying when combined. Whether a deployment is subject to HIPAA, which uses are permitted, and which fields are minimum necessary are legal/privacy decisions outside the application.
 
 [HIPAA_TECHNICAL_READINESS.md](HIPAA_TECHNICAL_READINESS.md) maps application controls and gaps without claiming compliance. [DATA_FLOW_SECURITY.md](DATA_FLOW_SECURITY.md) inventories hosting, PostgreSQL, identity, logging, backup, CI/registry, and endpoint dependencies. Vendor approval, BAAs or other contract terms, risk analysis, workforce training/sanctions, physical safeguards, retention schedules, and breach-notification decisions remain organizational work.
 

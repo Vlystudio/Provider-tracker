@@ -64,6 +64,18 @@ describe('deterministic priority and ranking', () => {
     expect(strong.score).toBeGreaterThan(weak.score);
     expect(strong.reasons).toContain('Treats diagnosis');
   });
+
+  it('shows an urgent-referral requirement without boosting the provider rank', () => {
+    const base = {
+      facilityId: 'a', specialtyMatch: true, diagnosisMatch: true, acceptingStatus: 'yes' as const,
+      schedulingStatus: 'yes' as const, acceptingVerifiedAt: daysAgo(2), distanceMiles: 10,
+      estimatedWaitDays: 14, completeness: 1,
+    };
+    const required = rankSearchResult({ ...base, urgentReferralStatus: 'yes' }, now);
+    const notRequired = rankSearchResult({ ...base, urgentReferralStatus: 'no' }, now);
+    expect(required.score).toBe(notRequired.score);
+    expect(required.reasons).toContain('Urgent referral required');
+  });
 });
 
 describe('data quality and duplicates', () => {

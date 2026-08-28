@@ -6,7 +6,7 @@ The migration screen is at `/migration`. Only administrators can open it or call
 
 The importer accepts macro-free `.xlsx` files only. Use the last approved Admin Master and User Active workbooks. Do not rename sheets, add export-only tabs, or change the header row after the final preview.
 
-The current schema identifier is `ura-workbook-v1`. Expected sheets are listed in [LEGACY_DATA_MAPPING.md](LEGACY_DATA_MAPPING.md).
+The current schema identifier is `provider-workbook-v2`. Expected sheets are listed in [LEGACY_DATA_MAPPING.md](LEGACY_DATA_MAPPING.md).
 
 ## Process
 

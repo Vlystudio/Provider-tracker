@@ -53,8 +53,6 @@ export const callEntryInputSchema = z.object({
   canScheduleWithinFourWeeks: z.enum(scheduleStatuses).default('unknown'),
   bookingOut: optionalText(250),
   notes: optionalText(2000),
-  referralType: optionalText(100),
-  referralReason: optionalText(500),
   specialtyConfirmed: z.enum(availabilityStatuses).default('unknown'),
   useInFdm: z.boolean().default(false),
 }).strict().superRefine((value, context) => {
@@ -220,7 +218,6 @@ export async function createCallRecord(
         lobId: lob?.id ?? null,
         defaultDiagnosisId: diagnosis?.id ?? null,
         defaultSpecialtyId: specialty?.id ?? null,
-        referralReasonDetail: value.referralReason,
         createdBy: principal.id,
       }).onConflictDoNothing({ target: authorizations.authorizationNumber }).returning({ id: authorizations.id });
       createdAuthorization = Boolean(inserted);
@@ -292,8 +289,6 @@ export async function createCallRecord(
       canScheduleWithinFourWeeks: value.canScheduleWithinFourWeeks,
       bookingOutRaw: value.bookingOut,
       notes: value.notes,
-      referralTypeSnapshot: value.referralType,
-      referralReasonSnapshot: value.referralReason,
       specialtyConfirmed: value.specialtyConfirmed,
       useInFdm: value.useInFdm,
       weekStart: weekStartForDate(value.callAt),

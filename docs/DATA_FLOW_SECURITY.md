@@ -34,13 +34,13 @@ Supporting flows:
 
 ## Sensitive propagation rules
 
-- Member ZIP, diagnosis, authorization, referral, comments, and workbook rows stay inside the protected application/database path unless an approved row-level export explicitly includes them.
+- Member ZIP, diagnosis, authorization, comments, and workbook rows stay inside the protected application/database path unless an approved row-level export explicitly includes them.
 - Provider directory CSV omits diagnosis values, comments, notes, coordinates, source provenance, version fields, staff identity, and audit metadata.
 - Migration diagnostics CSV can contain source-row context. It is limited to migration administrators and marked confidential.
 - Notifications say that work or a summary is ready. They do not repeat member, diagnosis, authorization, comment, or provider detail.
 - Digests contain counts by permitted category. They are generated per recipient and role.
 - Metrics accept a fixed, low-cardinality label list. Email, user ID, provider, diagnosis, comments, and filter values are rejected by design.
-- Logs redact secret keys, email, member, diagnosis, referral, phone, address, facility, comments, notes, cookies, tokens, and connection strings.
+- Logs redact secret keys, email, member, diagnosis, urgent-referral requirement, phone, address, facility, comments, notes, cookies, tokens, and connection strings.
 
 ## Workbook boundary
 

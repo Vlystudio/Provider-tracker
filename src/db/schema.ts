@@ -357,20 +357,6 @@ export const diagnoses = pgTable(
   (table) => [uniqueIndex('diagnoses_code_unique').on(table.code)],
 );
 
-export const referralReasons = pgTable(
-  'referral_reasons',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    label: text('label').notNull(),
-    normalizedLabel: text('normalized_label').notNull(),
-    active: boolean('active').notNull().default(true),
-    sortOrder: integer('sort_order').notNull().default(0),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [uniqueIndex('referral_reasons_normalized_label_unique').on(table.normalizedLabel)],
-);
-
 export const bookingOutBuckets = pgTable(
   'booking_out_buckets',
   {
@@ -490,8 +476,6 @@ export const authorizations = pgTable(
     lobId: uuid('lob_id').references(() => linesOfBusiness.id, { onDelete: 'set null' }),
     defaultDiagnosisId: uuid('default_diagnosis_id').references(() => diagnoses.id, { onDelete: 'set null' }),
     defaultSpecialtyId: uuid('default_specialty_id').references(() => specialties.id, { onDelete: 'set null' }),
-    referralReasonId: uuid('referral_reason_id').references(() => referralReasons.id, { onDelete: 'set null' }),
-    referralReasonDetail: text('referral_reason_detail'),
     memberZip: text('member_zip'),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     status: authorizationStatusEnum('status').notNull().default('open'),
@@ -719,8 +703,6 @@ export const calls = pgTable(
     bookingOutRaw: text('booking_out_raw'),
     bookingOutBucketId: uuid('booking_out_bucket_id').references(() => bookingOutBuckets.id, { onDelete: 'set null' }),
     notes: text('notes'),
-    referralTypeSnapshot: text('referral_type_snapshot'),
-    referralReasonSnapshot: text('referral_reason_snapshot'),
     specialtyConfirmed: availabilityStatusEnum('specialty_confirmed').notNull().default('unknown'),
     useInFdm: boolean('use_in_fdm').notNull().default(false),
     manualCallTimeOverride: timestamp('manual_call_time_override', { withTimezone: true }),

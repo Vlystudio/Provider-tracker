@@ -18,7 +18,9 @@ The main record types are:
 
 User-entered fields include facility corrections, verification facts, contact outcomes, comments, duplicate decisions, and assignments. Imported values retain the batch, source hash, sheet, and row. Local source paths are not stored in normal UI records.
 
-Current accepting, scheduling, urgent-referral, next-date, and wait fields are performance snapshots. A verification transaction writes history and updates only the fields supplied by the user. Yes, no, and not applicable refresh that field's verified timestamp. Unknown, not asked, and unable to verify remain distinct and do not make old facts look fresh.
+Current accepting, scheduling, urgent-referral requirement, next-date, and wait fields are performance snapshots. A verification transaction writes history and updates only the fields supplied by the user. Yes, no, and not applicable refresh that field's verified timestamp. Unknown, not asked, and unable to verify remain distinct and do not make old facts look fresh.
+
+The urgent-referral field records a provider availability requirement only. Provider Tracker does not create, issue, submit, or manage referrals.
 
 A failed contact writes `facility_contact_attempts` only. It never changes a verification timestamp.
 
@@ -49,10 +51,11 @@ Recommended order is deterministic:
 1. requested specialty and diagnosis match
 2. accepting status
 3. four-week scheduling
-4. urgent-referral capability
-5. verification freshness
-6. distance
-7. wait and record completeness
+4. verification freshness
+5. distance
+6. wait and record completeness
+
+An urgent-referral requirement is shown and can be filtered, but it does not increase the provider's rank.
 
 Users can also sort by distance, verification date, soonest availability, or name.
 
