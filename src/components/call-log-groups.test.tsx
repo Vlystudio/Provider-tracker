@@ -10,7 +10,7 @@ import { CallLogGroups } from './call-log-groups';
 const calls: CallLogRow[] = [
   {
     id: 'call-1',
-    number: 'AUTH-42',
+    trackingId: 'PT-42',
     provider: 'Alpha Clinic',
     outcome: 'Accepting',
     status: 'Complete',
@@ -20,7 +20,7 @@ const calls: CallLogRow[] = [
   },
   {
     id: 'call-2',
-    number: 'AUTH-42',
+    trackingId: 'PT-42',
     provider: 'Beta Center',
     outcome: 'No answer',
     status: 'Follow-up',
@@ -31,11 +31,11 @@ const calls: CallLogRow[] = [
 ];
 
 describe('call log groups', () => {
-  it('shows one collapsed authorization row with its call count and call details', () => {
-    const groups: CallLogGroup<CallLogRow>[] = [{ authorizationNumber: 'AUTH-42', calls }];
+  it('shows one collapsed Tracking ID row with its call count and call details', () => {
+    const groups: CallLogGroup<CallLogRow>[] = [{ trackingId: 'PT-42', calls }];
     const { container } = render(<CallLogGroups groups={groups} />);
 
-    expect(screen.getByText('AUTH-42')).toBeInTheDocument();
+    expect(screen.getByText('PT-42')).toBeInTheDocument();
     expect(screen.getByText('2 calls completed')).toBeInTheDocument();
     expect(screen.getByText('Alpha Clinic')).toBeInTheDocument();
     expect(screen.getByText('Beta Center')).toBeInTheDocument();
@@ -43,15 +43,15 @@ describe('call log groups', () => {
     expect(container.querySelector('details')).not.toHaveAttribute('open');
   });
 
-  it('uses a plain label when the authorization was not recorded', () => {
+  it('uses a plain label when the Tracking ID was not recorded', () => {
     const groups: CallLogGroup<CallLogRow>[] = [{
-      authorizationNumber: 'Not recorded',
-      calls: [{ ...calls[0], id: 'missing-auth', number: 'Not recorded' }],
+      trackingId: 'Not recorded',
+      calls: [{ ...calls[0], id: 'missing-tracking-id', trackingId: 'Not recorded' }],
     }];
 
     render(<CallLogGroups groups={groups} />);
 
-    expect(screen.getByText('No authorization recorded')).toBeInTheDocument();
+    expect(screen.getByText('No Tracking ID recorded')).toBeInTheDocument();
     expect(screen.getByText('1 call completed')).toBeInTheDocument();
   });
 });

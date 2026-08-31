@@ -75,6 +75,10 @@ const ignoredReferralWorkflowHeaders = new Set([
   'reasonforoonreferral',
 ]);
 
+export function isSensitiveIdentifierHeader(header: string) {
+  return /^(?:auth|authorization)(?:number|num|no)?$/.test(header);
+}
+
 const REQUIRED_HEADER_GROUPS: Record<string, string[][]> = {
   Facilities: [['Facility', 'Facility Name', 'Facility Key']],
   'Facility-Specialty Map': [['Facility Key', 'Facility Name'], ['Specialty']],
@@ -101,7 +105,7 @@ function rowRecord(headers: string[], cells: ScalarCell[]): RowRecord {
   headers.forEach((header, index) => {
     if (!header) return;
     const normalizedHeader = normalizeHeader(header);
-    if (ignoredReferralWorkflowHeaders.has(normalizedHeader)) return;
+    if (ignoredReferralWorkflowHeaders.has(normalizedHeader) || isSensitiveIdentifierHeader(normalizedHeader)) return;
     const value = cells[index] ?? null;
     rawData[header] = value;
     normalized.set(normalizedHeader, value);
@@ -258,7 +262,6 @@ function callFromRow(
   issues: ImportIssue[],
 ) {
   const callerInitials = nullableText(pick(record, 'Caller Initials', 'URA Initials'));
-  const authorizationNumber = nullableText(pick(record, 'Auth #', 'Authorization Number'));
   const facilityValue = scalarToText(pick(record, 'Facility Name', 'Facility Key'));
   const specialty = nullableText(pick(record, 'Specialty'));
   const diagnosisCode = nullableText(pick(record, 'ICD-10 Code', 'Diagnosis Code'));
@@ -268,7 +271,6 @@ function callFromRow(
 
   const hasOperationalIdentity = [
     callerInitials,
-    authorizationNumber,
     facilityValue,
     specialty,
     diagnosisCode,
@@ -346,12 +348,10 @@ function callFromRow(
   const normalizedSpecialty = specialty ? normalizeSpecialty(specialty) : null;
   const normalizedDiagnosis = diagnosisCode ? cleanText(diagnosisCode).toUpperCase() : null;
   const normalizedInitials = callerInitials ? cleanText(callerInitials).toUpperCase() : '';
-  const normalizedAuthorization = authorizationNumber ? cleanText(authorizationNumber).toUpperCase() : '';
   const fingerprint = stableHash(
     'call',
     normalizedInitials,
     callAtIso,
-    normalizedAuthorization,
     facilityIdentity.normalizedKey,
     normalizedSpecialty,
     normalizedDiagnosis,
@@ -360,7 +360,6 @@ function callFromRow(
     'call_logical',
     normalizedInitials,
     dateOnlyInZone(callAt),
-    normalizedAuthorization,
     facilityIdentity.normalizedKey,
     normalizedSpecialty,
     normalizedDiagnosis,
@@ -373,7 +372,6 @@ function callFromRow(
     callAt: callAtIso,
     callerInitials: callerInitials ? normalizedInitials : null,
     lob: nullableText(pick(record, 'LOB')),
-    authorizationNumber: authorizationNumber ? normalizedAuthorization : null,
     facilityDisplayKey: facilityIdentity.displayKey,
     normalizedFacilityKey: facilityIdentity.normalizedKey,
     specialty,

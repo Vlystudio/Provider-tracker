@@ -45,15 +45,15 @@ export const providerResults = [
 ];
 
 export const callLogRows = [
-  { number: 'A-10482', provider: 'Brunswick Clinic', outcome: 'meets availability guidelines', status: 'Review needed', date: '2026-05-04' },
-  { number: 'A-10497', provider: 'Topsham Specialty', outcome: 'unable to contact', status: 'Retry due', date: '2026-05-03' },
-  { number: 'A-10512', provider: 'MaineHealth Cancer Care', outcome: 'does not meet availability guidelines', status: 'Closed', date: '2026-05-02' },
+  { trackingId: 'PT-00000000-0000-4000-8000-000000000101', provider: 'Brunswick Clinic', outcome: 'meets availability guidelines', status: 'Review needed', date: '2026-05-04' },
+  { trackingId: 'PT-00000000-0000-4000-8000-000000000102', provider: 'Topsham Specialty', outcome: 'unable to contact', status: 'Retry due', date: '2026-05-03' },
+  { trackingId: 'PT-00000000-0000-4000-8000-000000000103', provider: 'MaineHealth Cancer Care', outcome: 'does not meet availability guidelines', status: 'Closed', date: '2026-05-02' },
 ];
 
 export const reviewQueue = [
-  { facility: 'Brunswick Clinic', caseId: 'A-10482', due: 'Due today', priority: 'warning', owner: 'DS' },
-  { facility: 'Topsham Specialty', caseId: 'A-10497', due: 'Due in 3 days', priority: 'info', owner: 'AB' },
-  { facility: 'Midcoast Center', caseId: 'A-10512', due: 'Overdue', priority: 'danger', owner: 'MR' },
+  { facility: 'Brunswick Clinic', caseId: 'PT-00000000-0000-4000-8000-000000000101', due: 'Due today', priority: 'warning', owner: 'DS' },
+  { facility: 'Topsham Specialty', caseId: 'PT-00000000-0000-4000-8000-000000000102', due: 'Due in 3 days', priority: 'info', owner: 'AB' },
+  { facility: 'Midcoast Center', caseId: 'PT-00000000-0000-4000-8000-000000000103', due: 'Overdue', priority: 'danger', owner: 'MR' },
 ];
 
 export const facilityRows = [

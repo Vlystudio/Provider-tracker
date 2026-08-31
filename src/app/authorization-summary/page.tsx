@@ -8,7 +8,7 @@ import { requirePagePermission } from '@/server/authorization';
 import { listAuthorizationsForPrincipal } from '@/server/authorization-service';
 import { getResolvedDataMode } from '@/server/data-layer';
 
-type AuthorizationSearchParams = { id?: string; number?: string; q?: string; status?: string };
+type AuthorizationSearchParams = { id?: string; trackingId?: string; q?: string; status?: string };
 
 function statusTone(status: string): StatusTone {
   if (status === 'complete') return 'positive';
@@ -35,11 +35,11 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
   }
 
   const filtered = records.filter((record) => {
-    const matchesQuery = !query || record.authorizationNumber.toLowerCase().includes(query) || record.memberZip?.includes(query);
+    const matchesQuery = !query || record.trackingId.toLowerCase().includes(query) || record.memberZip?.includes(query);
     return matchesQuery && (!status || record.status === status);
   });
   const selected = records.find((record) => record.id === params.id)
-    ?? records.find((record) => record.authorizationNumber === params.number)
+    ?? records.find((record) => record.trackingId === params.trackingId)
     ?? filtered[0]
     ?? null;
   const activeFilters = Number(Boolean(query)) + Number(Boolean(status));
@@ -57,7 +57,7 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem]">
           <label className="form-label">
             Search
-            <input className="form-control" name="q" defaultValue={query} placeholder="Authorization number or ZIP" />
+            <input className="form-control" name="q" defaultValue={query} placeholder="Tracking ID or ZIP" />
           </label>
           <label className="form-label">
             Status
@@ -89,7 +89,7 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th scope="col">Authorization</th>
+                      <th scope="col">Tracking ID</th>
                       <th scope="col">Member ZIP</th>
                       <th scope="col">Status</th>
                       <th scope="col"><span className="sr-only">Action</span></th>
@@ -99,7 +99,7 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
                     {filtered.map((record) => (
                       <tr key={record.id} className={selected?.id === record.id ? 'bg-blue-50' : undefined}>
                         <td>
-                          <span className="block font-semibold text-slate-950">{record.authorizationNumber}</span>
+                          <span className="block font-semibold text-slate-950">{record.trackingId}</span>
                           <span className="block text-xs text-slate-500">Updated {formatDateTime(record.updatedAt)}</span>
                         </td>
                         <td>{record.memberZip ?? 'Not recorded'}</td>
@@ -124,7 +124,7 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
               <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
                 <div>
                   <p className="page-kicker">Selected authorization</p>
-                  <h2 id="authorization-detail-heading" className="mt-1 text-xl font-semibold text-slate-950">{selected.authorizationNumber}</h2>
+                  <h2 id="authorization-detail-heading" className="mt-1 text-xl font-semibold text-slate-950">{selected.trackingId}</h2>
                 </div>
                 <StatusBadge tone={statusTone(selected.status)}>{statusLabel(selected.status)}</StatusBadge>
               </div>
@@ -133,7 +133,7 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
                 editable={editable}
                 record={{
                   id: selected.id,
-                  authorizationNumber: selected.authorizationNumber,
+                  trackingId: selected.trackingId,
                   memberZip: selected.memberZip,
                   status: selected.status,
                   updatedAt: selected.updatedAt.toISOString(),

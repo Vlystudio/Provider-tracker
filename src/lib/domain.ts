@@ -121,14 +121,14 @@ export function getSevenDayRecommendation(input: {
   return 'Call - provider availability not confirmed';
 }
 
-export function getAuthorizationNarrative({
+export function getTrackingNarrative({
   calls,
-  authorizationNumber,
+  trackingId,
   diagnosis,
   specialty,
 }: {
   calls: Array<{ id: string; provider: string; phone: string; resultCode: string; success: boolean }>;
-  authorizationNumber: string;
+  trackingId: string;
   diagnosis: string;
   specialty: string;
 }): string {
@@ -136,7 +136,7 @@ export function getAuthorizationNarrative({
   const included = successfulCalls.length > 1 ? successfulCalls.slice(0, 2) : calls;
 
   const lines = [
-    `Authorization ${authorizationNumber}`,
+    `Tracking ID: ${trackingId}`,
     `Diagnosis: ${diagnosis}`,
     `Specialty: ${specialty}`,
     `Provider list:`,

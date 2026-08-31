@@ -26,20 +26,21 @@ afterEach(() => {
 });
 
 describe('call entry form', () => {
-  it('keeps one authorization selected while multiple facility calls are entered', async () => {
+  it('generates and keeps one tracking ID while multiple facility calls are entered', async () => {
+    const authorizationId = '00000000-0000-4000-8000-000000000006';
+    const trackingId = `PT-${authorizationId}`;
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ call: { id: 'call-1' } }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ call: { id: 'call-2' } }) });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ call: { id: 'call-1', authorizationId, trackingId } }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ call: { id: 'call-2', authorizationId, trackingId } }) });
     vi.stubGlobal('fetch', fetchMock);
 
     render(<CallEntryForm {...options} />);
 
-    const authorization = screen.getByLabelText(/^Authorization number/);
+    const tracking = screen.getByLabelText(/^Tracking ID/);
     const facility = screen.getByLabelText(/^Facility name/);
     const phone = screen.getByLabelText('Phone used');
     const notes = screen.getByRole('textbox', { name: 'Notes' });
 
-    fireEvent.change(authorization, { target: { value: 'auth-42' } });
     fireEvent.change(screen.getByLabelText('Line of business'), { target: { value: lobId } });
     fireEvent.change(screen.getByLabelText('Specialty checked'), { target: { value: specialtyId } });
     fireEvent.change(screen.getByLabelText('Diagnosis checked'), { target: { value: diagnosisId } });
@@ -47,9 +48,9 @@ describe('call entry form', () => {
     fireEvent.change(notes, { target: { value: 'First call' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save call' }));
 
-    expect(await screen.findByText('Alpha Clinic - Albany was saved. The authorization is still selected.')).toBeInTheDocument();
-    expect(authorization).toHaveValue('AUTH-42');
-    expect(authorization).toBeDisabled();
+    expect(await screen.findByText(`Alpha Clinic - Albany was saved under Tracking ID ${trackingId}.`)).toBeInTheDocument();
+    expect(tracking).toHaveValue(trackingId);
+    expect(tracking).toHaveAttribute('readonly');
     expect(facility).toHaveValue('');
     expect(phone).toHaveValue('');
     expect(notes).toHaveValue('');
@@ -61,13 +62,13 @@ describe('call entry form', () => {
     fireEvent.change(facility, { target: { value: secondFacilityId } });
     fireEvent.click(screen.getByRole('button', { name: 'Save call' }));
 
-    expect(await screen.findByText('Beta Center - Buffalo was saved. The authorization is still selected.')).toBeInTheDocument();
+    expect(await screen.findByText(`Beta Center - Buffalo was saved under Tracking ID ${trackingId}.`)).toBeInTheDocument();
     expect(screen.getByText('2 calls saved this session')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
     await waitFor(() => {
       const payloads = fetchMock.mock.calls.map(([, request]) => JSON.parse(String(request?.body)));
-      expect(payloads.map((payload) => payload.authorizationNumber)).toEqual(['AUTH-42', 'AUTH-42']);
+      expect(payloads.map((payload) => payload.authorizationId)).toEqual([null, authorizationId]);
       expect(payloads.map((payload) => payload.lobId)).toEqual([lobId, lobId]);
       expect(payloads.map((payload) => payload.specialtyId)).toEqual([specialtyId, specialtyId]);
       expect(payloads.map((payload) => payload.diagnosisId)).toEqual([diagnosisId, diagnosisId]);

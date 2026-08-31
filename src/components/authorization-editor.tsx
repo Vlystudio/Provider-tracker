@@ -5,7 +5,7 @@ import { InlineMessage } from './ui';
 
 export type AuthorizationView = {
   id: string;
-  authorizationNumber: string;
+  trackingId: string;
   memberZip: string | null;
   status: 'open' | 'complete' | 'cancelled';
   updatedAt: string;
@@ -50,7 +50,7 @@ export function AuthorizationEditor({ record, editable }: { record: Authorizatio
       }
 
       setCurrent({ ...body.authorization, updatedAt: new Date(body.authorization.updatedAt).toISOString() });
-      setMessage({ tone: 'success', text: `${current.authorizationNumber} was saved.` });
+      setMessage({ tone: 'success', text: `${current.trackingId} was saved.` });
     } catch {
       setMessage({ tone: 'error', text: 'The authorization could not be saved. Check the connection and try again.' });
     } finally {

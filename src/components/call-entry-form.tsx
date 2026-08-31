@@ -28,10 +28,10 @@ const availabilityOptions = [
 
 export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusiness }: CallEntryFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
-  const authorizationInputRef = useRef<HTMLInputElement>(null);
   const facilitySearchRef = useRef<HTMLInputElement>(null);
   const [callAt, setCallAt] = useState(localDateTime);
-  const [authorizationNumber, setAuthorizationNumber] = useState('');
+  const [authorizationId, setAuthorizationId] = useState<string | null>(null);
+  const [trackingId, setTrackingId] = useState<string | null>(null);
   const [lobId, setLobId] = useState('');
   const [specialtyId, setSpecialtyId] = useState('');
   const [diagnosisId, setDiagnosisId] = useState('');
@@ -66,11 +66,12 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
     window.setTimeout(() => facilitySearchRef.current?.focus(), 0);
   }
 
-  function startDifferentAuthorization() {
+  function startNewTrackingRecord() {
     const form = formRef.current;
     if (form) form.reset();
     setCallAt(localDateTime());
-    setAuthorizationNumber('');
+    setAuthorizationId(null);
+    setTrackingId(null);
     setLobId('');
     setSpecialtyId('');
     setDiagnosisId('');
@@ -79,8 +80,8 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
     setPhone('');
     setContactOutcome('reached');
     setSavedCallCount(0);
-    setMessage({ tone: 'info', text: 'Ready for a different authorization.' });
-    window.setTimeout(() => authorizationInputRef.current?.focus(), 0);
+    setMessage({ tone: 'info', text: 'Ready for a new tracking record.' });
+    window.setTimeout(() => facilitySearchRef.current?.focus(), 0);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -108,7 +109,7 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
         body: JSON.stringify({
           callAt: callDate.toISOString(),
           facilityId,
-          authorizationNumber: authorizationNumber.trim().toUpperCase() || null,
+          authorizationId,
           lobId: lobId || null,
           specialtyId: specialtyId || null,
           diagnosisId: diagnosisId || null,
@@ -121,18 +122,22 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
           notes: field('notes') || null,
         }),
       });
-      const body = await response.json().catch(() => null) as { call?: { id: string; duplicate?: boolean }; error?: string } | null;
+      const body = await response.json().catch(() => null) as {
+        call?: { id: string; duplicate?: boolean; authorizationId: string; trackingId: string };
+        error?: string;
+      } | null;
       if (!response.ok || !body?.call) {
         setMessage({ tone: 'error', text: body?.error ?? 'The call could not be saved.' });
         return;
       }
       const selectedFacility = facilities.find((facility) => facility.id === facilityId)?.label ?? 'Facility call';
-      setAuthorizationNumber(authorizationNumber.trim().toUpperCase());
+      setAuthorizationId(body.call.authorizationId);
+      setTrackingId(body.call.trackingId);
       if (body.call.duplicate) {
-        setMessage({ tone: 'warning', text: `${selectedFacility} was already in the call log. The authorization is still selected.` });
+        setMessage({ tone: 'warning', text: `${selectedFacility} was already in the call log. Tracking ID ${body.call.trackingId} is still selected.` });
       } else {
         setSavedCallCount((count) => count + 1);
-        setMessage({ tone: 'success', text: `${selectedFacility} was saved. The authorization is still selected.` });
+        setMessage({ tone: 'success', text: `${selectedFacility} was saved under Tracking ID ${body.call.trackingId}.` });
       }
       resetCallFields(formElement);
     } catch {
@@ -149,16 +154,18 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
       <section className="panel p-5" aria-labelledby="call-details-heading">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 id="call-details-heading" className="section-title">Authorization and call time</h2>
-            <p className="mt-1 text-sm text-slate-600">Enter the authorization once. It stays selected while you record the facility calls.</p>
+            <h2 id="call-details-heading" className="section-title">Tracking and call time</h2>
+            <p className="mt-1 text-sm text-slate-600">A unique Tracking ID is created automatically and stays selected while you record facility calls.</p>
           </div>
-          {savedCallCount ? (
+          {trackingId ? (
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-sm font-semibold text-slate-700" role="status">
-                {savedCallCount} {savedCallCount === 1 ? 'call' : 'calls'} saved this session
-              </p>
-              <button className="button button-secondary" type="button" disabled={saving} onClick={startDifferentAuthorization}>
-                Start different authorization
+              {savedCallCount ? (
+                <p className="text-sm font-semibold text-slate-700" role="status">
+                  {savedCallCount} {savedCallCount === 1 ? 'call' : 'calls'} saved this session
+                </p>
+              ) : null}
+              <button className="button button-secondary" type="button" disabled={saving} onClick={startNewTrackingRecord}>
+                Start new tracking record
               </button>
             </div>
           ) : null}
@@ -169,19 +176,14 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
             <input className="form-control" name="callAt" type="datetime-local" value={callAt} onChange={(event) => setCallAt(event.target.value)} required />
           </label>
           <label className="form-label">
-            Authorization number
+            Tracking ID
             <input
-              ref={authorizationInputRef}
               className="form-control"
-              name="authorizationNumber"
-              value={authorizationNumber}
-              onChange={(event) => setAuthorizationNumber(event.target.value)}
-              maxLength={100}
-              autoComplete="off"
-              disabled={savedCallCount > 0}
+              value={trackingId ?? 'Generated after the first call is saved'}
+              readOnly
             />
             <span className="form-help">
-              {savedCallCount ? 'Finish this group before changing the authorization.' : 'This field stays filled after each call is saved.'}
+              {savedCallCount ? 'This ID groups the calls saved in the current session.' : 'No member or payer identifier is required.'}
             </span>
           </label>
           <label className="form-label">

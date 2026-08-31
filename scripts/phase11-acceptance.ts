@@ -426,7 +426,7 @@ async function main() {
   const failedCall = await callService.createCallRecord(ura1, {
     callAt: failedCallAt,
     facilityId: workflowFacility.id,
-    authorizationNumber: null,
+    authorizationId: null,
     lobId: null,
     specialtyId: null,
     diagnosisId: null,
@@ -520,7 +520,7 @@ async function main() {
   try {
     await callService.createCallRecord(reportViewer, {
       callAt: new Date(Date.now() - 120_000), facilityId: workflowFacility.id,
-      authorizationNumber: null, lobId: null, specialtyId: null, diagnosisId: null, phone: null,
+      authorizationId: null, lobId: null, specialtyId: null, diagnosisId: null, phone: null,
       contactOutcome: 'no_answer',
       acceptingNewPatients: 'unknown', canTreatDiagnosis: 'unknown', canScheduleWithinFourWeeks: 'unknown',
       specialtyConfirmed: 'unknown', notes: 'Permission boundary test.',

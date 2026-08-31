@@ -247,7 +247,7 @@ async function createTestSchema() {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), key text NOT NULL UNIQUE, count integer NOT NULL, last_request bigint NOT NULL
     );
     CREATE TABLE authorizations (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), authorization_number text NOT NULL UNIQUE,
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       lob_id uuid,
       member_zip text, created_by uuid REFERENCES users(id) ON DELETE SET NULL,
       status authorization_status NOT NULL DEFAULT 'open', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
@@ -302,7 +302,7 @@ async function createTestSchema() {
     CREATE TABLE calls (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), authorization_id uuid, facility_id uuid,
       caller_user_id uuid, legacy_actor_id uuid, import_batch_id uuid, call_at timestamptz NOT NULL,
-      caller_initials_snapshot text, lob_snapshot text, authorization_number_snapshot text,
+      caller_initials_snapshot text, lob_snapshot text,
       facility_snapshot text NOT NULL, diagnosis_code_snapshot text, diagnosis_description_snapshot text,
       specialty_snapshot text, phone_snapshot text, did_not_leave_vm boolean NOT NULL DEFAULT false,
       accepting_new_patients text NOT NULL DEFAULT 'unknown', can_treat_diagnosis text NOT NULL DEFAULT 'unknown',
@@ -513,9 +513,9 @@ async function main() {
   const [admin, userA, userB] = fixtureRows;
   if (!admin || !userA || !userB) throw new Error('Failed to create all acceptance-test users.');
   const insertedAuthorizations = await pool.query<{ id: string }>(
-    `INSERT INTO authorizations (authorization_number, created_by, member_zip)
-     VALUES ($1, $2, '04530'), ($3, $4, '04101') RETURNING id`,
-    [`A-${runId}`, userA.id, `B-${runId}`, userB.id],
+    `INSERT INTO authorizations (created_by, member_zip)
+     VALUES ($1, '04530'), ($2, '04101') RETURNING id`,
+    [userA.id, userB.id],
   );
   const [authorizationA, authorizationB] = insertedAuthorizations.rows;
   if (!authorizationA || !authorizationB) throw new Error('Failed to create acceptance-test authorizations.');

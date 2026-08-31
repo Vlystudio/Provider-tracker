@@ -3,6 +3,7 @@ import 'server-only';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { auditEvents, authorizations } from '@/db/schema';
+import { formatTrackingId } from '@/lib/tracking-id';
 import { assertPermission, type Principal } from './authorization';
 import { buildAuditEvent } from './audit';
 import { requireDatabaseClient } from './database';
@@ -24,13 +25,25 @@ function authorizationScope(principal: Principal, id: string) {
 
 const publicAuthorizationFields = {
   id: authorizations.id,
-  authorizationNumber: authorizations.authorizationNumber,
   memberZip: authorizations.memberZip,
   status: authorizations.status,
   createdBy: authorizations.createdBy,
   createdAt: authorizations.createdAt,
   updatedAt: authorizations.updatedAt,
 };
+
+type PublicAuthorizationRecord = {
+  id: string;
+  memberZip: string | null;
+  status: 'open' | 'complete' | 'cancelled';
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function toPublicAuthorization(record: PublicAuthorizationRecord) {
+  return { ...record, trackingId: formatTrackingId(record.id) };
+}
 
 export async function getAuthorizationForPrincipal(principal: Principal, id: string) {
   assertPermission(principal, 'operations:read');
@@ -39,7 +52,7 @@ export async function getAuthorizationForPrincipal(principal: Principal, id: str
     .from(authorizations)
     .where(authorizationScope(principal, id))
     .limit(1);
-  return record ?? null;
+  return record ? toPublicAuthorization(record) : null;
 }
 
 export async function listAuthorizationsForPrincipal(principal: Principal) {
@@ -48,12 +61,13 @@ export async function listAuthorizationsForPrincipal(principal: Principal) {
     .select(publicAuthorizationFields)
     .from(authorizations);
 
-  return principal.role === 'admin'
+  const records = principal.role === 'admin'
     ? query.orderBy(desc(authorizations.updatedAt)).limit(100)
     : query
         .where(eq(authorizations.createdBy, principal.id))
         .orderBy(desc(authorizations.updatedAt))
         .limit(100);
+  return (await records).map(toPublicAuthorization);
 }
 
 export async function updateAuthorizationForPrincipal(
@@ -84,7 +98,7 @@ export async function updateAuthorizationForPrincipal(
         metadata: { changedFieldCount: Object.keys(patch).length },
       }),
     );
-    return record;
+    return toPublicAuthorization(record);
   });
 }
 

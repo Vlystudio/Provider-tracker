@@ -17,6 +17,7 @@ import {
   users,
 } from '@/db/schema';
 import { deriveResult, stableHash, weekStartForDate } from '@/lib/import/normalization';
+import { formatTrackingId } from '@/lib/tracking-id';
 import { assertPermission, type Principal } from './authorization';
 import { buildAuditEvent } from './audit';
 import { requireDatabaseClient } from './database';
@@ -42,7 +43,7 @@ const optionalText = (maximum: number) => z.string().trim().max(maximum).nullabl
 export const callEntryInputSchema = z.object({
   callAt: z.coerce.date(),
   facilityId: z.string().uuid(),
-  authorizationNumber: optionalText(100).transform((value) => value?.toUpperCase() ?? null),
+  authorizationId: z.string().uuid().nullable().optional().transform((value) => value || null),
   lobId: z.string().uuid().nullable().optional().transform((value) => value || null),
   specialtyId: z.string().uuid().nullable().optional().transform((value) => value || null),
   diagnosisId: z.string().uuid().nullable().optional().transform((value) => value || null),
@@ -68,7 +69,7 @@ export type CallEntryOption = { id: string; label: string; phone?: string | null
 
 export type CallLogRow = {
   id: string;
-  number: string;
+  trackingId: string;
   provider: string;
   outcome: string;
   status: 'Complete' | 'Follow-up';
@@ -151,20 +152,21 @@ export async function listCallLog(principal: Principal): Promise<CallLogRow[]> {
   assertPermission(principal, 'operations:read');
   const rows = await requireDatabaseClient().select({
     id: calls.id,
-    authorizationNumber: calls.authorizationNumberSnapshot,
+    authorizationId: authorizations.id,
     facility: calls.facilitySnapshot,
     resultCode: calls.resultCode,
     resultPhrase: calls.resultPhrase,
     callAt: calls.callAt,
     callerName: sql<string>`coalesce(${users.displayName}, ${users.name}, ${calls.callerInitialsSnapshot}, 'Not recorded')`,
   }).from(calls)
+    .leftJoin(authorizations, eq(calls.authorizationId, authorizations.id))
     .leftJoin(users, eq(calls.callerUserId, users.id))
     .orderBy(desc(calls.callAt))
     .limit(500);
 
   return rows.map((row) => ({
     id: row.id,
-    number: row.authorizationNumber || 'Not recorded',
+    trackingId: row.authorizationId ? formatTrackingId(row.authorizationId) : 'Not recorded',
     provider: row.facility,
     outcome: row.resultPhrase,
     status: row.resultCode === 'unable_to_contact' ? 'Follow-up' : 'Complete',
@@ -208,22 +210,22 @@ export async function createCallRecord(
       : [];
     if (value.lobId && !lob) throw new CallRecordNotFoundError('The selected line of business was not found.');
 
-    let authorizationId: string | null = null;
+    let authorizationId = value.authorizationId;
     let createdAuthorization = false;
-    if (value.authorizationNumber) {
-      const [inserted] = await tx.insert(authorizations).values({
-        authorizationNumber: value.authorizationNumber,
+    if (authorizationId) {
+      const scope = principal.role === 'admin'
+        ? eq(authorizations.id, authorizationId)
+        : and(eq(authorizations.id, authorizationId), eq(authorizations.createdBy, principal.id));
+      const [existing] = await tx.select({ id: authorizations.id }).from(authorizations).where(scope).limit(1);
+      if (!existing) throw new CallRecordNotFoundError('The selected tracking record was not found.');
+    } else {
+      const [created] = await tx.insert(authorizations).values({
         lobId: lob?.id ?? null,
         createdBy: principal.id,
-      }).onConflictDoNothing({ target: authorizations.authorizationNumber }).returning({ id: authorizations.id });
-      createdAuthorization = Boolean(inserted);
-      if (inserted) {
-        authorizationId = inserted.id;
-      } else {
-        const [existing] = await tx.select({ id: authorizations.id }).from(authorizations)
-          .where(eq(authorizations.authorizationNumber, value.authorizationNumber)).limit(1);
-        authorizationId = existing?.id ?? null;
-      }
+      }).returning({ id: authorizations.id });
+      if (!created) throw new Error('The tracking record could not be created.');
+      authorizationId = created.id;
+      createdAuthorization = true;
     }
 
     const failedOutcome = value.contactOutcome === 'reached' ? null : value.contactOutcome;
@@ -250,21 +252,28 @@ export async function createCallRecord(
       principal.id,
       facility.id,
       value.callAt.toISOString(),
-      value.authorizationNumber,
+      authorizationId,
       specialty?.id ?? null,
       diagnosis?.id ?? null,
       value.contactOutcome,
     ]);
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${signature}, 0))`);
-    const [existingCall] = await tx.select({ id: calls.id }).from(calls).where(and(
+    const [existingCall] = await tx.select({ id: calls.id, authorizationId: calls.authorizationId }).from(calls).where(and(
       eq(calls.callerUserId, principal.id),
       eq(calls.facilityId, facility.id),
       eq(calls.callAt, value.callAt),
-      sql`${calls.authorizationNumberSnapshot} is not distinct from ${value.authorizationNumber}`,
+      eq(calls.authorizationId, authorizationId),
       sql`${calls.specialtySnapshot} is not distinct from ${specialty?.name ?? null}`,
       sql`${calls.diagnosisCodeSnapshot} is not distinct from ${diagnosis?.code ?? null}`,
     )).limit(1);
-    if (existingCall) return { id: existingCall.id, duplicate: true };
+    if (existingCall?.authorizationId) {
+      return {
+        id: existingCall.id,
+        duplicate: true,
+        authorizationId: existingCall.authorizationId,
+        trackingId: formatTrackingId(existingCall.authorizationId),
+      };
+    }
 
     const [call] = await tx.insert(calls).values({
       authorizationId,
@@ -273,7 +282,6 @@ export async function createCallRecord(
       callAt: value.callAt,
       callerInitialsSnapshot: caller?.initials ?? null,
       lobSnapshot: lob?.code ?? null,
-      authorizationNumberSnapshot: value.authorizationNumber,
       facilitySnapshot: facility.facilityName,
       diagnosisCodeSnapshot: diagnosis?.code ?? null,
       diagnosisDescriptionSnapshot: diagnosis?.description ?? null,
@@ -414,7 +422,12 @@ export async function createCallRecord(
       },
     }));
 
-    return { id: call.id, duplicate: false };
+    return {
+      id: call.id,
+      duplicate: false,
+      authorizationId,
+      trackingId: formatTrackingId(authorizationId),
+    };
   });
 }
 

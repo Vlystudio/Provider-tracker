@@ -16,7 +16,7 @@ function call(index: number): CallCandidate {
   return {
     source: source(row), fingerprint: `call-${index}`, logicalFingerprint: `logical-${index}`,
     callAt: new Date(Date.UTC(2025, 0, 1, 8, index % 60, 0)).toISOString(), callerInitials: 'PT',
-    lob: 'COMMERCIAL', authorizationNumber: `AUTH-${index}`, facilityDisplayKey: 'Performance Clinic | Portland',
+    lob: 'COMMERCIAL', facilityDisplayKey: 'Performance Clinic | Portland',
     normalizedFacilityKey: 'performance clinic|portland', specialty: 'Cardiology', normalizedSpecialty: 'cardiology',
     diagnosisCode: `D${index % 100}`, diagnosisDescription: 'Synthetic diagnosis', phone: '2075550100', didNotLeaveVm: false,
     acceptingNewPatients: index % 3 === 0 ? 'unknown' : index % 2 === 0 ? 'yes' : 'no',

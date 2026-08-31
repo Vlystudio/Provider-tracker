@@ -44,7 +44,7 @@ An existing specialty confirmation with a newer `last_confirmed_at` is not overw
 | Call Date/Time / Call Date | `calls.call_at` | Excel serial or explicit four-digit-year date. Two-digit years are invalid. |
 | Caller Initials | `legacy_actors` plus call snapshot | Link to a current active user only on one exact match. |
 | LOB | line of business plus call snapshot | Keep the source code. |
-| Authorization Number | authorization plus call snapshot | Blank remains null. |
+| Legacy payer identifier columns | Ignored | Values are neither parsed nor staged. Each imported call receives a new random Tracking ID. |
 | Facility Name / Facility Key | facility relationship plus snapshot | Unresolved facilities are blocking review items. |
 | Diagnosis Code / Description | diagnosis plus call snapshot | Exact code or alias maps. New codes are reviewed. |
 | Specialty | specialty plus call snapshot | Uses the specialty mapping rules above. |

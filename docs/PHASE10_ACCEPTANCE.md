@@ -11,7 +11,7 @@ The repository controls passed. This is not a regulatory certification. Producti
 ## Data classification
 
 - Reviewed all 42 application tables plus browser, request, log, metric, export, backup, identity, and vendor flows.
-- Potential PHI includes authorization number, member ZIP, diagnosis, specialty, facility selection, and operational notes when tied to a person.
+- Potential PHI includes member ZIP, diagnosis, specialty, facility selection, and operational notes when tied to a person. The former payer-issued identifier has been removed and replaced by a random Tracking ID.
 - PII includes staff name, email, session activity, account status, role history, and audit attribution.
 - Free text exists in verification/contact comments, migration notes/reasons, operational work, notification content, and hold policy references. These fields must not be used for credentials or unnecessary patient detail.
 - Raw client addresses and browser user-agent strings were identified as unnecessary persistent session data. New sessions store an HMAC-derived address and no user agent. Audit/search/export metadata keeps filter names and counts, not values or returned content.

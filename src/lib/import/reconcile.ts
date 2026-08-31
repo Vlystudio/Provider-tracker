@@ -114,7 +114,7 @@ export function buildImportPlan(parsedWorkbooks: ParsedWorkbook[]): ImportPlan {
             issues,
             call.source,
             'possible_cross_workbook_duplicate',
-            'Call has the same caller/date/authorization/facility/specialty/diagnosis as a row in the other workbook but a different timestamp.',
+            'Call has the same caller/date/facility/specialty/diagnosis as a row in the other workbook but a different timestamp.',
           );
         }
       }

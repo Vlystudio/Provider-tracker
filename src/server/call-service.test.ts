@@ -7,7 +7,7 @@ function validCall() {
   return {
     callAt: new Date().toISOString(),
     facilityId,
-    authorizationNumber: ' auth-123 ',
+    authorizationId: '00000000-0000-4000-8000-000000000002',
     contactOutcome: 'reached',
     acceptingNewPatients: 'yes',
     canTreatDiagnosis: 'yes',
@@ -17,9 +17,9 @@ function validCall() {
 }
 
 describe('call entry validation', () => {
-  it('normalizes the authorization number and applies safe defaults', () => {
+  it('accepts a server-generated authorization record ID and applies safe defaults', () => {
     const parsed = callEntryInputSchema.parse(validCall());
-    expect(parsed.authorizationNumber).toBe('AUTH-123');
+    expect(parsed.authorizationId).toBe('00000000-0000-4000-8000-000000000002');
   });
 
   it('accepts a controlled failed-contact outcome', () => {

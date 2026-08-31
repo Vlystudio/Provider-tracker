@@ -3,7 +3,7 @@ import { AppShell } from '@/components/app-shell';
 import { CallLogGroups } from '@/components/call-log-groups';
 import { EmptyState, InlineMessage, PageHeader } from '@/components/ui';
 import { can } from '@/lib/access-control';
-import { groupCallsByAuthorization } from '@/lib/call-log';
+import { groupCallsByTrackingId } from '@/lib/call-log';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
 import { requirePagePermission } from '@/server/authorization';
 
@@ -24,7 +24,7 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
   const statuses = [...new Set(sourceRows.map((row) => row.status))].sort();
   const rows = sourceRows
     .filter((row) => {
-      const searchable = `${row.number} ${row.provider} ${row.outcome}`.toLowerCase();
+      const searchable = `${row.trackingId} ${row.provider} ${row.outcome}`.toLowerCase();
       return (!query || searchable.includes(query))
         && (!status || row.status === status)
         && (!from || row.date >= from)
@@ -34,7 +34,7 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
       if (sort === 'provider') return left.provider.localeCompare(right.provider);
       return sort === 'date_asc' ? left.date.localeCompare(right.date) : right.date.localeCompare(left.date);
     });
-  const callGroups = groupCallsByAuthorization(rows);
+  const callGroups = groupCallsByTrackingId(rows);
   const activeFilters = [query, status, from, to, sort !== 'date_desc' ? sort : ''].filter(Boolean).length;
 
   return (
@@ -42,7 +42,7 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
       <PageHeader
         eyebrow="Operations"
         title="Call log"
-        summary="Calls are grouped by authorization. Open one to see its facility calls."
+        summary="Calls are grouped by their system-generated Tracking ID. Open one to see its facility calls."
         meta={can(principal.role, 'operations:write') ? <Link className="button button-primary" href="/new-call">Enter calls</Link> : null}
       />
       {params.saved === '1' ? <InlineMessage tone="success" role="status">Call saved.</InlineMessage> : null}
@@ -51,7 +51,7 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
         <div className="filter-grid xl:grid-cols-5">
           <label className="form-label">
             Search
-            <input className="form-control" name="q" defaultValue={query} placeholder="Authorization, provider, outcome" />
+            <input className="form-control" name="q" defaultValue={query} placeholder="Tracking ID, provider, outcome" />
           </label>
           <label className="form-label">
             Status
@@ -79,7 +79,7 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
         </div>
         <div className="filter-actions">
           <p className="text-sm text-slate-600" role="status">
-            {callGroups.length} {callGroups.length === 1 ? 'authorization group' : 'authorization groups'}, {rows.length} {rows.length === 1 ? 'call' : 'calls'}
+            {callGroups.length} {callGroups.length === 1 ? 'tracking group' : 'tracking groups'}, {rows.length} {rows.length === 1 ? 'call' : 'calls'}
             {activeFilters ? `, ${activeFilters} active ${activeFilters === 1 ? 'filter' : 'filters'}` : ''}
           </p>
           <div className="flex gap-2">
@@ -92,8 +92,8 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
       {rows.length ? (
         <section className="table-shell" aria-labelledby="call-log-results-heading">
           <div className="flex items-center justify-between gap-4 border-b border-slate-300 px-4 py-3">
-            <h2 id="call-log-results-heading" className="section-title">Calls by authorization</h2>
-            <p className="text-xs text-slate-500">Select an authorization to view its calls</p>
+            <h2 id="call-log-results-heading" className="section-title">Calls by Tracking ID</h2>
+            <p className="text-xs text-slate-500">Select a Tracking ID to view its calls</p>
           </div>
           <CallLogGroups groups={callGroups} />
         </section>

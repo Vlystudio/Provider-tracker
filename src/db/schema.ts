@@ -450,7 +450,6 @@ export const authorizations = pgTable(
   'authorizations',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    authorizationNumber: text('authorization_number').notNull(),
     lobId: uuid('lob_id').references(() => linesOfBusiness.id, { onDelete: 'set null' }),
     memberZip: text('member_zip'),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
@@ -459,7 +458,6 @@ export const authorizations = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex('authorizations_number_unique').on(table.authorizationNumber),
     index('authorizations_status_updated_idx').on(table.status, table.updatedAt),
   ],
 );
@@ -666,7 +664,6 @@ export const calls = pgTable(
     callAt: timestamp('call_at', { withTimezone: true }).notNull(),
     callerInitialsSnapshot: text('caller_initials_snapshot'),
     lobSnapshot: text('lob_snapshot'),
-    authorizationNumberSnapshot: text('authorization_number_snapshot'),
     facilitySnapshot: text('facility_snapshot').notNull(),
     diagnosisCodeSnapshot: text('diagnosis_code_snapshot'),
     diagnosisDescriptionSnapshot: text('diagnosis_description_snapshot'),

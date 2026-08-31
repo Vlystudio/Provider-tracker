@@ -27,7 +27,7 @@ Production is designed for VPN-only/private ingress. `NETWORK_ACCESS_MODE=privat
 
 ## Data and files
 
-Authorization numbers, provider data, diagnosis codes, notes, and reports are sensitive operational data. Protected migration routes and local commands accept workbooks without retaining the workbook bytes. ZIP/XML parsing has signature, entry, expanded-size, compression-ratio, row, column, cell and shared-string limits; traversal, macros, external references, encryption, DTDs and entities are rejected, and formulas are never executed. Source workbooks and exports are excluded from Git.
+Tracking IDs, provider data, diagnosis codes, notes, and reports are sensitive operational data. Payer-issued identifier columns are discarded before workbook rows are staged. Protected migration routes and local commands accept workbooks without retaining the workbook bytes. ZIP/XML parsing has signature, entry, expanded-size, compression-ratio, row, column, cell and shared-string limits; traversal, macros, external references, encryption, DTDs and entities are rejected, and formulas are never executed. Source workbooks and exports are excluded from Git.
 
 Database credentials stay in server environment variables. The production database account should have only the permissions needed by the app. Run migrations with a separate release identity when the hosting platform supports it.
 

@@ -4,7 +4,7 @@ import {
   getResultCode,
   getResultPhrase,
   getSevenDayRecommendation,
-  getAuthorizationNarrative,
+  getTrackingNarrative,
   normalizeAlias,
   providerSearchValidation,
 } from './domain';
@@ -59,7 +59,7 @@ describe('seven-day recommendation', () => {
   });
 });
 
-describe('authorization narrative stop-after-second-success', () => {
+describe('tracking narrative stop-after-second-success', () => {
   it('stops after the second successful call and includes the relevant calls', () => {
     const calls = [
       { id: '1', provider: 'Alpha', phone: '111', resultCode: 'meets_availability_guidelines', success: true },
@@ -67,9 +67,9 @@ describe('authorization narrative stop-after-second-success', () => {
       { id: '3', provider: 'Gamma', phone: '333', resultCode: 'meets_availability_guidelines', success: true },
     ];
 
-    const narrative = getAuthorizationNarrative({
+    const narrative = getTrackingNarrative({
       calls,
-      authorizationNumber: 'A-100',
+      trackingId: 'PT-00000000-0000-4000-8000-000000000001',
       diagnosis: 'J45',
       specialty: 'Pulmonology',
     });

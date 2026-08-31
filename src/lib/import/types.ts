@@ -97,7 +97,6 @@ export type CallCandidate = {
   callAt: string;
   callerInitials: string | null;
   lob: string | null;
-  authorizationNumber: string | null;
   facilityDisplayKey: string;
   normalizedFacilityKey: string;
   specialty: string | null;

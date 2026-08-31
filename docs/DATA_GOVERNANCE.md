@@ -49,7 +49,7 @@ Provider search is limited to operational roles and active, non-merged facilitie
 
 Aggregate specialty/coverage counts can reveal low provider availability, but they do not identify a member. No arbitrary small-count suppression was added. The privacy/compliance owner must decide whether production data or business context makes suppression necessary.
 
-Provider-search filters currently use URL query parameters so pages can be bookmarked and paginated. Those parameters can include ZIP, diagnosis, and specialty. The application does not include a member name or authorization number in the search URL, sends only the origin in cross-origin referrers, and does not log the query string. If operations later ties those filters to a named member in the same browser workflow, move sensitive search state to a POST-backed server record before production use.
+Provider-search filters currently use URL query parameters so pages can be bookmarked and paginated. Those parameters can include ZIP, diagnosis, and specialty. The application does not include a member name or payer-issued identifier in the search URL, sends only the origin in cross-origin referrers, and does not log the query string. If operations later ties those filters to a named member in the same browser workflow, move sensitive search state to a POST-backed server record before production use.
 
 Incident investigation and export filters use POST bodies, not URLs.
 

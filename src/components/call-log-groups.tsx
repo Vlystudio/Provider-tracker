@@ -23,11 +23,11 @@ export function CallLogGroups({ groups }: { groups: CallLogGroup<CallLogRow>[] }
         ), undefined);
 
         return (
-          <details className="group" key={group.authorizationNumber}>
+          <details className="group" key={group.trackingId}>
             <summary className="cursor-pointer px-4 py-4 text-sm hover:bg-slate-50">
               <span className="ml-2 inline-flex flex-wrap items-center gap-3">
                 <span className="font-semibold text-slate-950">
-                  {group.authorizationNumber === 'Not recorded' ? 'No authorization recorded' : group.authorizationNumber}
+                  {group.trackingId === 'Not recorded' ? 'No Tracking ID recorded' : group.trackingId}
                 </span>
                 <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
                   {callCountLabel(group.calls.length)}

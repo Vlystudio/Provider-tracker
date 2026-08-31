@@ -127,10 +127,9 @@ Candidate rows store ordered facility pairs, confidence, deterministic score, re
 
 Authorization context reused across multiple call attempts.
 
-- id
-- authorization_number
+- id (the database-generated UUID displayed as the Tracking ID)
 - lob_id
-- member_postal_code
+- member_zip
 - created_by
 - status
 - created_at / updated_at
@@ -144,6 +143,8 @@ Operational evidence record created from a facility contact attempt.
 - facility_id
 - caller_user_id
 - call_at
+- caller_initials_snapshot
+- lob_snapshot
 - diagnosis_snapshot_id
 - specialty_snapshot_id
 - phone_snapshot

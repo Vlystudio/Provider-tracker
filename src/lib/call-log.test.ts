@@ -1,47 +1,47 @@
 import { describe, expect, it } from 'vitest';
-import { groupCallsByAuthorization } from './call-log';
+import { groupCallsByTrackingId } from './call-log';
 
 describe('call log grouping', () => {
-  it('puts calls with the same authorization into one group', () => {
-    const groups = groupCallsByAuthorization([
-      { id: 'call-1', number: 'AUTH-42' },
-      { id: 'call-2', number: 'AUTH-42' },
-      { id: 'call-3', number: 'AUTH-99' },
+  it('puts calls with the same Tracking ID into one group', () => {
+    const groups = groupCallsByTrackingId([
+      { id: 'call-1', trackingId: 'PT-42' },
+      { id: 'call-2', trackingId: 'PT-42' },
+      { id: 'call-3', trackingId: 'PT-99' },
     ]);
 
     expect(groups).toHaveLength(2);
     expect(groups[0]).toEqual({
-      authorizationNumber: 'AUTH-42',
+      trackingId: 'PT-42',
       calls: [
-        { id: 'call-1', number: 'AUTH-42' },
-        { id: 'call-2', number: 'AUTH-42' },
+        { id: 'call-1', trackingId: 'PT-42' },
+        { id: 'call-2', trackingId: 'PT-42' },
       ],
     });
     expect(groups[1]?.calls).toHaveLength(1);
   });
 
-  it('keeps authorization groups in the order they first appear', () => {
-    const groups = groupCallsByAuthorization([
-      { id: 'newest', number: 'AUTH-NEW' },
-      { id: 'older', number: 'AUTH-OLD' },
-      { id: 'oldest', number: 'AUTH-NEW' },
+  it('keeps tracking groups in the order they first appear', () => {
+    const groups = groupCallsByTrackingId([
+      { id: 'newest', trackingId: 'PT-NEW' },
+      { id: 'older', trackingId: 'PT-OLD' },
+      { id: 'oldest', trackingId: 'PT-NEW' },
     ]);
 
-    expect(groups.map((group) => group.authorizationNumber)).toEqual(['AUTH-NEW', 'AUTH-OLD']);
+    expect(groups.map((group) => group.trackingId)).toEqual(['PT-NEW', 'PT-OLD']);
     expect(groups[0]?.calls.map((call) => call.id)).toEqual(['newest', 'oldest']);
   });
 
-  it('groups calls without an authorization under one clear label', () => {
-    const groups = groupCallsByAuthorization([
-      { id: 'call-1', number: '' },
-      { id: 'call-2', number: 'Not recorded' },
+  it('groups calls without a Tracking ID under one clear label', () => {
+    const groups = groupCallsByTrackingId([
+      { id: 'call-1', trackingId: '' },
+      { id: 'call-2', trackingId: 'Not recorded' },
     ]);
 
     expect(groups).toEqual([{
-      authorizationNumber: 'Not recorded',
+      trackingId: 'Not recorded',
       calls: [
-        { id: 'call-1', number: '' },
-        { id: 'call-2', number: 'Not recorded' },
+        { id: 'call-1', trackingId: '' },
+        { id: 'call-2', trackingId: 'Not recorded' },
       ],
     }]);
   });

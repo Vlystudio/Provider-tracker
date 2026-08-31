@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { createDatabase } from '../../db/client';
 import {
@@ -429,41 +430,19 @@ export async function applyImportPlan(
           });
       }
 
-      const authorizationCandidates = new Map<string, (typeof plan.calls)[number]>();
-      for (const call of plan.calls) {
-        if (call.authorizationNumber && !authorizationCandidates.has(call.authorizationNumber)) {
-          authorizationCandidates.set(call.authorizationNumber, call);
-        }
-      }
-      for (const batch of chunks([...authorizationCandidates.entries()])) {
-        await tx
-          .insert(authorizations)
-          .values(
-            batch.map(([authorizationNumber, call]) => ({
-              authorizationNumber,
-              lobId: call.lob ? lobIdByCode.get(call.lob) ?? null : null,
-            })),
-          )
-          .onConflictDoNothing({ target: authorizations.authorizationNumber });
-      }
-
-      const authorizationRows = await tx
-        .select({ id: authorizations.id, authorizationNumber: authorizations.authorizationNumber })
-        .from(authorizations);
-      const authorizationIdByNumber = new Map(
-        authorizationRows.map((authorization) => [authorization.authorizationNumber, authorization.id]),
-      );
-
       let insertedCalls = 0;
       const callByFingerprint = new Map(plan.calls.map((call) => [call.fingerprint, call]));
       for (const batch of chunks(plan.calls)) {
+        const trackingRecordIds = batch.map(() => randomUUID());
+        await tx.insert(authorizations).values(batch.map((call, index) => ({
+          id: trackingRecordIds[index],
+          lobId: call.lob ? lobIdByCode.get(call.lob) ?? null : null,
+        })));
         const inserted = await tx
           .insert(calls)
           .values(
-            batch.map((call) => ({
-              authorizationId: call.authorizationNumber
-                ? authorizationIdByNumber.get(call.authorizationNumber) ?? null
-                : null,
+            batch.map((call, index) => ({
+              authorizationId: trackingRecordIds[index],
               facilityId: facilityIdByKey.get(call.normalizedFacilityKey) ?? null,
               callerUserId: call.callerInitials ? legacyActorByInitials.get(normalizeKeyPart(call.callerInitials))?.mappedUserId ?? null : null,
               legacyActorId: call.callerInitials ? legacyActorByInitials.get(normalizeKeyPart(call.callerInitials))?.id ?? null : null,
@@ -471,7 +450,6 @@ export async function applyImportPlan(
               callAt: new Date(call.callAt),
               callerInitialsSnapshot: call.callerInitials,
               lobSnapshot: call.lob,
-              authorizationNumberSnapshot: call.authorizationNumber,
               facilitySnapshot: call.facilityDisplayKey,
               diagnosisCodeSnapshot: call.diagnosisCode,
               diagnosisDescriptionSnapshot: call.diagnosisDescription,
@@ -503,6 +481,11 @@ export async function applyImportPlan(
           )
           .onConflictDoNothing({ target: calls.importFingerprint })
           .returning({ id: calls.id, fingerprint: calls.importFingerprint });
+        const insertedFingerprints = new Set(inserted.flatMap((record) => record.fingerprint ? [record.fingerprint] : []));
+        const unusedTrackingRecordIds = trackingRecordIds.filter((_, index) => !insertedFingerprints.has(batch[index]!.fingerprint));
+        if (unusedTrackingRecordIds.length) {
+          await tx.delete(authorizations).where(inArray(authorizations.id, unusedTrackingRecordIds));
+        }
         insertedCalls += inserted.length;
         for (const record of inserted) {
           const call = record.fingerprint ? callByFingerprint.get(record.fingerprint) : undefined;

@@ -12,11 +12,13 @@ const files = [...sourceFiles('src'), 'next.config.ts'];
 const findings = [];
 const clientStorage = /\b(localStorage|sessionStorage|indexedDB|serviceWorker|caches\.)\b/;
 const riskyConsole = /console\.(?:log|info|debug)\s*\([^\n]*(?:request|headers|cookies|body|email|member|diagnos|comment|notes?)/i;
+const retiredSensitiveIdentifier = /\b(?:authorizationNumber|authorization_number(?:_snapshot)?|authNumber|auth_number)\b/i;
 
 for (const file of files) {
   const source = readFileSync(file, 'utf8');
   if (clientStorage.test(source)) findings.push({ file, rule: 'persistent-browser-storage' });
   if (riskyConsole.test(source)) findings.push({ file, rule: 'sensitive-console-payload' });
+  if (retiredSensitiveIdentifier.test(source)) findings.push({ file, rule: 'retired-sensitive-identifier' });
   if (source.startsWith("'use client'") && /from ['"]@\/(?:db|server)\//.test(source)) {
     findings.push({ file, rule: 'server-data-imported-into-client' });
   }
@@ -49,6 +51,7 @@ process.stdout.write(`${JSON.stringify({
     persistentBrowserStorage: true,
     clientServerBoundary: true,
     structuredLogRedaction: true,
+    retiredSensitiveIdentifier: true,
     metricLabelAllowlist: true,
     authenticatedNoStoreDefault: true,
     browserSourceMapsDisabled: true,
