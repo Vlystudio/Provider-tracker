@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
+import { DashboardViewToggle } from '@/components/dashboard-view-toggle';
 import { EmptyState, PageHeader, StatusBadge } from '@/components/ui';
 import { formatDateTime, humanizeKey } from '@/lib/format';
 import { requirePagePermission } from '@/server/authorization';
 import { listAuditEvents } from '@/server/audit-log';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
-import { listOperationalChanges, listOperationalWork } from '@/server/operational-service';
+import { getUiPreferences } from '@/server/ui-preferences';
 
 function reportRange(dataMode: 'database' | 'demo') {
   if (dataMode === 'demo') return { from: '2026-05-01', to: '2026-05-31' };
@@ -89,20 +90,12 @@ export default async function HomePage() {
     );
   }
 
-  const state = await adapter.getDashboard(principal);
-  let activeWork = 0;
-  let importantChanges = 0;
-  if (dataMode === 'database') {
-    try {
-      [activeWork, importantChanges] = await Promise.all([
-        listOperationalWork(principal, { assigned: principal.role === 'admin' ? 'all' : 'mine', limit: 100 }).then((rows) => rows.length),
-        listOperationalChanges(principal, { severity: 'important', limit: 100 }).then((rows) => rows.length),
-      ]);
-    } catch {
-      // The main dashboard still works when the optional automation summary is unavailable.
-    }
-  }
+  const [state, preferences] = await Promise.all([
+    adapter.getDashboard(principal),
+    getUiPreferences(),
+  ]);
   const statCards = state.data?.cards ?? [];
+  const reliability = state.data?.reliability;
   const actions = principal.role === 'admin'
     ? [
         { label: 'Open work inbox', href: '/work' },
@@ -124,7 +117,7 @@ export default async function HomePage() {
         eyebrow="Workspace"
         title={principal.role === 'admin' ? 'Operations overview' : 'My work'}
         summary={principal.role === 'admin' ? 'Provider activity, follow-up, and system access for the current week.' : 'Provider calls and follow-up assigned to your workspace.'}
-        meta="Current week"
+        meta={<div className="flex items-center gap-3"><span className="hidden sm:inline">Current week</span><DashboardViewToggle initialMode={preferences.dashboardMode} /></div>}
       />
 
       {statCards.length ? (
@@ -138,18 +131,36 @@ export default async function HomePage() {
         </section>
       ) : null}
 
-      {dataMode === 'database' ? (
+      {preferences.dashboardMode === 'detailed' && reliability ? (
         <section className="grid gap-4 md:grid-cols-2" aria-label="Operational attention">
           <Link href="/work" className="panel block p-4 hover:border-slate-500">
             <p className="text-sm font-medium text-slate-700">{principal.role === 'admin' ? 'Active work' : 'My active work'}</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-950">{activeWork}</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-950">{reliability.activeWork}</p>
             <p className="mt-2 text-sm text-slate-600">Open the work inbox</p>
           </Link>
           <Link href="/changes?severity=important" className="panel block p-4 hover:border-slate-500">
             <p className="text-sm font-medium text-slate-700">Recent important changes</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-950">{importantChanges}</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-950">{reliability.importantChanges}</p>
             <p className="mt-2 text-sm text-slate-600">Open the change feed</p>
           </Link>
+        </section>
+      ) : null}
+
+      {preferences.dashboardMode === 'detailed' && reliability ? (
+        <section className="panel p-5" aria-labelledby="reliability-heading">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 id="reliability-heading" className="section-title">Availability reliability</h2>
+              <p className="mt-1 text-sm text-slate-600">Unknown availability is reviewed every 30 days. Confirmed future booking dates remain excluded until their review date.</p>
+            </div>
+            <Link className="button-link" href="/review-queue">Open review queue</Link>
+          </div>
+          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div><dt className="text-sm text-slate-600">Active facilities</dt><dd className="mt-1 text-2xl font-semibold text-slate-950">{reliability.activeFacilities}</dd></div>
+            <div><dt className="text-sm text-slate-600">Confirmed unavailable</dt><dd className="mt-1 text-2xl font-semibold text-slate-950">{reliability.confirmedUnavailable}</dd></div>
+            <div><dt className="text-sm text-slate-600">Availability not confirmed</dt><dd className="mt-1 text-2xl font-semibold text-slate-950">{reliability.unconfirmedAvailability}</dd></div>
+            <div><dt className="text-sm text-slate-600">Checks due now</dt><dd className="mt-1 text-2xl font-semibold text-slate-950">{reliability.availabilityDue}</dd></div>
+          </dl>
         </section>
       ) : null}
 

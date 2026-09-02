@@ -40,12 +40,14 @@ describe('call entry form', () => {
     const facility = screen.getByLabelText(/^Facility name/);
     const phone = screen.getByLabelText('Phone used');
     const notes = screen.getByRole('textbox', { name: 'Notes' });
+    const estimatedWait = screen.getByLabelText(/Estimated booking wait/);
 
     fireEvent.change(screen.getByLabelText('Line of business'), { target: { value: lobId } });
     fireEvent.change(screen.getByLabelText('Specialty checked'), { target: { value: specialtyId } });
     fireEvent.change(screen.getByLabelText('Diagnosis checked'), { target: { value: diagnosisId } });
     fireEvent.change(facility, { target: { value: firstFacilityId } });
     fireEvent.change(notes, { target: { value: 'First call' } });
+    fireEvent.change(estimatedWait, { target: { value: '180' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save call' }));
 
     expect(await screen.findByText(`Alpha Clinic - Albany was saved under Tracking ID ${trackingId}.`)).toBeInTheDocument();
@@ -72,6 +74,7 @@ describe('call entry form', () => {
       expect(payloads.map((payload) => payload.lobId)).toEqual([lobId, lobId]);
       expect(payloads.map((payload) => payload.specialtyId)).toEqual([specialtyId, specialtyId]);
       expect(payloads.map((payload) => payload.diagnosisId)).toEqual([diagnosisId, diagnosisId]);
+      expect(payloads.map((payload) => payload.estimatedWaitDays)).toEqual([180, null]);
     });
   });
 });

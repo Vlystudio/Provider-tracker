@@ -17,6 +17,7 @@ type ProviderSearchParams = {
   scheduling?: string;
   urgentReferral?: string;
   freshness?: string;
+  availability?: string;
   facilityName?: string;
   verifiedFrom?: string;
   verifiedTo?: string;
@@ -28,6 +29,7 @@ const answerValues = ['yes', 'no', 'unknown', 'not_asked', 'unable_to_verify', '
 type AnswerValue = (typeof answerValues)[number];
 const freshnessValues = ['fresh', 'aging', 'stale', 'never_verified'] as const;
 const sortValues = ['recommended', 'distance', 'recently_verified', 'soonest_availability', 'name'] as const;
+const availabilityValues = ['available_or_review', 'confirmed_unavailable', 'all'] as const;
 
 function answer(value: string | undefined): AnswerValue | undefined {
   return answerValues.find((item) => item === value);
@@ -68,6 +70,7 @@ export default async function ProviderSearchPage({ searchParams }: { searchParam
   const scheduling = answer(params.scheduling);
   const urgentReferral = answer(params.urgentReferral);
   const freshness = freshnessValues.find((item) => item === params.freshness);
+  const availability = availabilityValues.find((item) => item === params.availability) ?? 'available_or_review';
   const sort = sortValues.find((item) => item === params.sort) ?? 'recommended';
   const page = Math.max(1, Number.parseInt(params.page ?? '1', 10) || 1);
   const adapter = getAppDataAdapter();
@@ -81,6 +84,7 @@ export default async function ProviderSearchPage({ searchParams }: { searchParam
     scheduling,
     urgentReferral,
     freshness,
+    availability,
     facilityName: params.facilityName?.trim(),
     verifiedFrom: params.verifiedFrom || undefined,
     verifiedTo: params.verifiedTo || undefined,
@@ -90,12 +94,12 @@ export default async function ProviderSearchPage({ searchParams }: { searchParam
   });
   const resultPage = state.data;
   const results = resultPage?.rows ?? [];
-  const activeFilters = [diagnosis, specialty, accepting, scheduling, urgentReferral, freshness, params.facilityName, params.verifiedFrom, params.verifiedTo].filter(Boolean).length;
+  const activeFilters = [diagnosis, specialty, accepting, scheduling, urgentReferral, freshness, availability === 'available_or_review' ? undefined : availability, params.facilityName, params.verifiedFrom, params.verifiedTo].filter(Boolean).length;
   const totalPages = resultPage ? Math.max(1, Math.ceil(resultPage.total / resultPage.pageSize)) : 1;
 
   return (
     <AppShell user={principal} dataMode={dataMode} statusMessage={!state.ok ? state.message : null}>
-      <PageHeader eyebrow="Operations" title="Provider search" summary="Find facilities by location and current verified capability. Distance and status are calculated from server records." />
+      <PageHeader eyebrow="Operations" title="Provider search" summary="Find facilities by location and current verified capability. Confirmed long-term unavailability is filtered out until its review date by default." />
 
       <form method="get" action="/provider-search" className="filter-bar" aria-label="Provider search filters">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -108,6 +112,7 @@ export default async function ProviderSearchPage({ searchParams }: { searchParam
           <label className="form-label">Scheduling within four weeks<select name="scheduling" defaultValue={scheduling ?? ''} className="form-control"><option value="">Any status</option><option value="yes">Yes</option><option value="no">No</option><option value="unknown">Unknown</option><option value="unable_to_verify">Unable to verify</option><option value="not_applicable">Not applicable</option></select></label>
           <label className="form-label">Urgent referral required<select name="urgentReferral" defaultValue={urgentReferral ?? ''} className="form-control"><option value="">Any status</option><option value="yes">Required</option><option value="no">Not required</option><option value="unknown">Unknown</option></select></label>
           <label className="form-label">Verification freshness<select name="freshness" defaultValue={freshness ?? ''} className="form-control"><option value="">Any age</option><option value="fresh">Fresh</option><option value="aging">Aging</option><option value="stale">Stale</option><option value="never_verified">Never verified</option></select></label>
+          <label className="form-label">Availability window<select name="availability" defaultValue={availability} className="form-control"><option value="available_or_review">Available or due for review</option><option value="confirmed_unavailable">Confirmed unavailable</option><option value="all">All facilities</option></select></label>
           <label className="form-label">Verified from<input name="verifiedFrom" type="date" defaultValue={params.verifiedFrom} className="form-control" /></label>
           <label className="form-label">Verified through<input name="verifiedTo" type="date" defaultValue={params.verifiedTo} className="form-control" /></label>
           <label className="form-label">Sort by<select name="sort" defaultValue={sort} className="form-control"><option value="recommended">Recommended</option><option value="distance">Distance</option><option value="recently_verified">Recently verified</option><option value="soonest_availability">Soonest availability</option><option value="name">Name</option></select></label>
@@ -126,6 +131,7 @@ export default async function ProviderSearchPage({ searchParams }: { searchParam
           scheduling,
           urgentReferral,
           freshness,
+          availability,
           facilityName: params.facilityName?.trim() || undefined,
           verifiedFrom: params.verifiedFrom || undefined,
           verifiedTo: params.verifiedTo || undefined,
@@ -146,7 +152,7 @@ export default async function ProviderSearchPage({ searchParams }: { searchParam
                 <td>{dataMode === 'database' ? <Link className="font-semibold text-slate-950 underline-offset-2 hover:underline" href={`/facilities/${result.facilityId}`}>{result.facilityName}</Link> : <span className="font-semibold text-slate-950">{result.facilityName}</span>}<span className="block text-xs text-slate-500">{result.city}{result.stateCode ? `, ${result.stateCode}` : ''} · {result.specialties}</span></td>
                 <td><ul className="space-y-1 text-sm">{result.matchReasons.slice(0, 4).map((reason) => <li key={reason}>· {reason}</li>)}</ul></td>
                 <td><StatusBadge tone={statusTone(result.acceptingStatus)}>Accepting: {humanizeKey(result.acceptingStatus)}</StatusBadge><span className="mt-2 block text-xs text-slate-600">Scheduling: {humanizeKey(result.schedulingStatus)}</span><span className="mt-1 block text-xs text-slate-600">Urgent referral required: {humanizeKey(result.urgentReferralStatus)}</span></td>
-                <td><StatusBadge tone={statusTone(result.freshness)}>{humanizeKey(result.freshness)}</StatusBadge><span className="mt-2 block text-xs text-slate-600">{result.freshnessLabel}</span>{result.nextAvailableDate ? <span className="mt-1 block text-xs text-slate-600">Next date: {formatDate(result.nextAvailableDate)}</span> : null}{result.estimatedWaitDays !== null ? <span className="mt-1 block text-xs text-slate-600">Wait: {result.estimatedWaitDays} days</span> : null}</td>
+                <td><StatusBadge tone={statusTone(result.freshness)}>{humanizeKey(result.freshness)}</StatusBadge><span className="mt-2 block text-xs text-slate-600">{result.freshnessLabel}</span>{result.nextAvailableDate ? <span className="mt-1 block text-xs text-slate-600">Next date: {formatDate(result.nextAvailableDate)}</span> : null}{result.estimatedWaitDays !== null ? <span className="mt-1 block text-xs text-slate-600">Wait: {result.estimatedWaitDays} days</span> : null}{result.availabilityReviewDueAt ? <span className="mt-1 block text-xs text-slate-600">Availability review: {formatDate(result.availabilityReviewDueAt)}</span> : null}</td>
                 <td className="whitespace-nowrap"><span className="font-medium">{result.distanceMiles.toFixed(1)} mi</span><span className="mt-1 block text-xs text-slate-500">{qualityLabel(result.coordinateQuality)}</span></td>
                 <td className="whitespace-nowrap">{result.phone || 'Not recorded'}</td>
               </tr>

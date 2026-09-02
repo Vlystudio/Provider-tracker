@@ -18,6 +18,12 @@ describe('provider search input', () => {
     });
     expect(result.radius).toBe(50);
     expect(result.page).toBe(2);
+    expect(result.availability).toBe('available_or_review');
+  });
+
+  it('supports the confirmed-unavailable and all-facilities views', () => {
+    expect(providerSearchInputSchema.parse({ memberZip: '04103', availability: 'confirmed_unavailable' }).availability).toBe('confirmed_unavailable');
+    expect(providerSearchInputSchema.parse({ memberZip: '04103', availability: 'all' }).availability).toBe('all');
   });
 
   it('rejects unsupported filters, invalid ZIPs, and unbounded pages', () => {

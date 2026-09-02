@@ -1,4 +1,4 @@
-import { formatDateTime } from '@/lib/format';
+import { formatDate, formatDateTime } from '@/lib/format';
 import type { CallLogGroup } from '@/lib/call-log';
 import type { CallLogRow } from '@/server/call-service';
 import { StatusBadge, type StatusTone } from './ui';
@@ -46,6 +46,7 @@ export function CallLogGroups({ groups }: { groups: CallLogGroup<CallLogRow>[] }
                     <th scope="col">Provider</th>
                     <th scope="col">Outcome</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Availability recorded</th>
                     <th scope="col">Entered by</th>
                     <th scope="col">Call date</th>
                   </tr>
@@ -56,6 +57,9 @@ export function CallLogGroups({ groups }: { groups: CallLogGroup<CallLogRow>[] }
                       <td className="font-semibold text-slate-950">{call.provider}</td>
                       <td>{call.outcome}</td>
                       <td><StatusBadge tone={statusTone(call.status)}>{call.status}</StatusBadge></td>
+                      <td>{call.nextAvailableDate || call.estimatedWaitDays !== null && call.estimatedWaitDays !== undefined
+                        ? <span>{call.nextAvailableDate ? `Next date ${formatDate(call.nextAvailableDate)}` : ''}{call.nextAvailableDate && call.estimatedWaitDays !== null && call.estimatedWaitDays !== undefined ? ' · ' : ''}{call.estimatedWaitDays !== null && call.estimatedWaitDays !== undefined ? `${call.estimatedWaitDays} day wait` : ''}</span>
+                        : <span className="text-slate-500">Not recorded</span>}</td>
                       <td>{call.caller}</td>
                       <td className="whitespace-nowrap">{formatDateTime(call.calledAt)}</td>
                     </tr>

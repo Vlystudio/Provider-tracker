@@ -16,6 +16,24 @@ describe('automation rules', () => {
     expect(decideReverificationWork({ lastVerifiedAt: new Date('2026-08-01T12:00:00Z'), now, staleDays: 90, upcomingDays: 7 })).toBeNull();
   });
 
+  it('uses an explicit availability review date instead of a generic stale interval', () => {
+    const futureDueAt = new Date('2026-12-01T12:00:00Z');
+    expect(decideReverificationWork({
+      lastVerifiedAt: new Date('2026-01-01T12:00:00Z'),
+      dueAt: futureDueAt,
+      now,
+      staleDays: 30,
+      upcomingDays: 7,
+    })).toBeNull();
+    expect(decideReverificationWork({
+      lastVerifiedAt: new Date('2026-01-01T12:00:00Z'),
+      dueAt: new Date('2026-08-20T12:00:00Z'),
+      now,
+      staleDays: 30,
+      upcomingDays: 7,
+    })?.reasonCodes).toEqual(['stale']);
+  });
+
   it('uses contact-specific follow-up rules', () => {
     expect(decideFailedContactWork({ attemptedAt: now, outcome: 'voicemail_left' })?.dueAt.toISOString()).toBe('2026-08-23T12:00:00.000Z');
     expect(decideFailedContactWork({ attemptedAt: now, outcome: 'disconnected' })?.workType).toBe('data_quality');

@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   assessFacilityQuality,
+  availabilityHoldUntil,
+  availabilityReviewDueAt,
   calculateReverificationPriority,
   classifyFreshness,
   duplicateSignals,
   freshnessLabel,
   haversineMiles,
   isPositiveVerification,
+  isConfirmedUnavailableHold,
   parseFreshnessPolicy,
   parseReportPeriod,
   percentage,
@@ -20,8 +23,34 @@ describe('verification freshness', () => {
   it('distinguishes fresh, aging, stale, and never verified values', () => {
     expect(classifyFreshness('accepting', null, now).state).toBe('never_verified');
     expect(classifyFreshness('accepting', daysAgo(30), now).state).toBe('fresh');
-    expect(classifyFreshness('accepting', daysAgo(31), now).state).toBe('aging');
+    expect(classifyFreshness('accepting', daysAgo(31), now).state).toBe('stale');
     expect(classifyFreshness('accepting', daysAgo(46), now).state).toBe('stale');
+  });
+
+  it('keeps confirmed long-term unavailability until its known review date', () => {
+    const exact = {
+      acceptingStatus: 'no' as const,
+      acceptingVerifiedAt: daysAgo(1),
+      nextAvailableDate: '2027-01-15',
+    };
+    expect(availabilityHoldUntil(exact)?.toISOString()).toBe('2027-01-15T00:00:00.000Z');
+    expect(isConfirmedUnavailableHold(exact, now)).toBe(true);
+
+    const estimated = {
+      acceptingStatus: 'yes' as const,
+      schedulingStatus: 'no' as const,
+      acceptingVerifiedAt: daysAgo(2),
+      schedulingVerifiedAt: daysAgo(1),
+      estimatedWaitDays: 180,
+    };
+    expect(availabilityHoldUntil(estimated)?.toISOString()).toBe('2027-02-16T12:00:00.000Z');
+  });
+
+  it('rechecks an unavailable facility after 30 days when the booking horizon is unknown', () => {
+    const input = { acceptingStatus: 'no' as const, acceptingVerifiedAt: daysAgo(5) };
+    expect(availabilityReviewDueAt(input)?.toISOString()).toBe('2026-09-15T12:00:00.000Z');
+    expect(isConfirmedUnavailableHold(input, now)).toBe(true);
+    expect(isConfirmedUnavailableHold(input, new Date('2026-09-16T12:00:00.000Z'))).toBe(false);
   });
 
   it('supports validated category-specific thresholds', () => {
@@ -75,6 +104,23 @@ describe('deterministic priority and ranking', () => {
     const notRequired = rankSearchResult({ ...base, urgentReferralStatus: 'no' }, now);
     expect(required.score).toBe(notRequired.score);
     expect(required.reasons).toContain('Urgent referral required');
+  });
+
+  it('suppresses availability review while a future hold is active and restores it when due', () => {
+    const input = {
+      acceptingVerifiedAt: daysAgo(60),
+      schedulingVerifiedAt: daysAgo(60),
+      acceptingStatus: 'no' as const,
+      schedulingStatus: 'no' as const,
+      nextAvailableDate: '2026-12-01',
+      unresolvedUnknowns: 0,
+      recentCallCount: 0,
+      recentFailedContacts: 0,
+      hasConflict: false,
+    };
+    expect(calculateReverificationPriority(input, now).reasons).toEqual([]);
+    expect(calculateReverificationPriority(input, new Date('2026-12-02T12:00:00.000Z')).reasons)
+      .toContain('Confirmed availability date reached');
   });
 });
 

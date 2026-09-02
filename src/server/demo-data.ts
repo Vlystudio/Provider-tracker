@@ -1,8 +1,5 @@
 import { providerResults, reviewQueue, callLogRows, facilityRows, statCards } from '@/lib/mock-data';
-
-export type DashboardSummary = {
-  cards: typeof statCards;
-};
+import type { DashboardSummary } from '@/lib/dashboard';
 
 export type ProviderSearchResult = {
   facilityId: string;
@@ -23,6 +20,16 @@ export type ProviderSearchResult = {
 export function getDemoDashboard(): DashboardSummary {
   return {
     cards: statCards,
+    reliability: {
+      activeFacilities: 4,
+      callsThisWeek: 12,
+      activeWork: 3,
+      availabilityDue: 2,
+      freshAccepting: 1,
+      confirmedUnavailable: 1,
+      unconfirmedAvailability: 1,
+      importantChanges: 1,
+    },
   };
 }
 export function getDemoProviderResults() {
@@ -40,9 +47,10 @@ export function getDemoProviderResults() {
     acceptingStatus: result.status.includes('Accepting') ? ('yes' as const) : ('no' as const),
     schedulingStatus: index === 1 ? ('no' as const) : ('yes' as const),
     urgentReferralStatus: index === 2 ? ('yes' as const) : ('no' as const),
-    nextAvailableDate: index === 0 ? '2026-08-28' : null,
+    nextAvailableDate: index === 0 ? '2026-08-28' : index === 1 ? '2027-01-01' : null,
     estimatedWaitDays: index === 0 ? 7 : index === 2 ? 18 : 60,
     acceptingVerifiedAt: index === 0 ? '2026-08-19T14:00:00.000Z' : index === 1 ? '2026-06-01T14:00:00.000Z' : null,
+    availabilityReviewDueAt: index === 0 ? '2026-09-18T14:00:00.000Z' : index === 1 ? '2027-01-01T00:00:00.000Z' : null,
     lastVerifiedAt: index === 0 ? '2026-08-19T14:00:00.000Z' : index === 1 ? '2026-06-01T14:00:00.000Z' : null,
     freshness: index === 0 ? ('fresh' as const) : index === 1 ? ('stale' as const) : ('never_verified' as const),
     freshnessLabel: index === 0 ? 'Verified 2 days ago' : index === 1 ? 'Stale · verified 81 days ago' : 'Never verified',

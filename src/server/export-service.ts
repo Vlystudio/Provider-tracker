@@ -22,6 +22,7 @@ const exportColumns: Array<{ header: string; value: (row: ProviderSearchResult) 
   { header: 'Urgent referral required', value: (row) => row.urgentReferralStatus },
   { header: 'Next available date', value: (row) => row.nextAvailableDate },
   { header: 'Estimated wait days', value: (row) => row.estimatedWaitDays },
+  { header: 'Availability review due', value: (row) => row.availabilityReviewDueAt },
   { header: 'Last verified', value: (row) => row.lastVerifiedAt },
   { header: 'Freshness', value: (row) => row.freshness },
 ];

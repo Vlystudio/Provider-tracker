@@ -18,6 +18,7 @@ import {
   users,
 } from '@/db/schema';
 import {
+  availabilityReviewDueAt,
   calculateReverificationPriority,
   classifyFreshness,
   duplicateSignals,
@@ -86,6 +87,14 @@ export const verificationEventInputSchema = z.object({
   if (value.verifiedAt.valueOf() > Date.now() + 5 * 60_000) {
     context.addIssue({ code: 'custom', path: ['verifiedAt'], message: 'Verification time cannot be in the future.' });
   }
+  if (value.nextAvailableDate && value.nextAvailableDate < value.verifiedAt.toISOString().slice(0, 10)) {
+    context.addIssue({ code: 'custom', path: ['nextAvailableDate'], message: 'The next available date cannot be before the verification date.' });
+  }
+  const moreThanFourWeeks = (value.estimatedWaitDays ?? 0) > 28
+    || Boolean(value.nextAvailableDate && new Date(`${value.nextAvailableDate}T00:00:00.000Z`).valueOf() > value.verifiedAt.valueOf() + 28 * 86_400_000);
+  if (value.schedulingWithinFourWeeks === 'yes' && moreThanFourWeeks) {
+    context.addIssue({ code: 'custom', path: ['schedulingWithinFourWeeks'], message: 'A wait beyond four weeks cannot be marked as scheduling within four weeks.' });
+  }
 });
 
 export const facilityPatchSchema = z.object({
@@ -138,6 +147,15 @@ function shouldRefreshTimestamp(value: VerificationAnswer | undefined): boolean 
   return value === 'yes' || value === 'no' || value === 'not_applicable';
 }
 
+function inferredVerificationScheduling(
+  value: z.infer<typeof verificationEventInputSchema>,
+): VerificationAnswer | undefined {
+  if (value.schedulingWithinFourWeeks !== undefined) return value.schedulingWithinFourWeeks;
+  const dateIsBeyondFourWeeks = Boolean(value.nextAvailableDate
+    && new Date(`${value.nextAvailableDate}T00:00:00.000Z`).valueOf() > value.verifiedAt.valueOf() + 28 * 86_400_000);
+  return (value.estimatedWaitDays ?? 0) > 28 || dateIsBeyondFourWeeks ? 'no' : undefined;
+}
+
 export async function createVerificationEvent(
   principal: Principal,
   facilityId: string,
@@ -147,6 +165,7 @@ export async function createVerificationEvent(
   assertPermission(principal, 'operations:write');
   const parsedId = facilityIdSchema.parse(facilityId);
   const value = verificationEventInputSchema.parse(input);
+  const schedulingWithinFourWeeks = inferredVerificationScheduling(value);
   const db = requireDatabaseClient();
 
   return db.transaction(async (tx) => {
@@ -184,9 +203,9 @@ export async function createVerificationEvent(
         refreshedAField = true;
       }
     }
-    if (value.schedulingWithinFourWeeks !== undefined && value.schedulingWithinFourWeeks !== 'not_asked') {
-      facilityPatch.currentSchedulingStatus = value.schedulingWithinFourWeeks;
-      if (shouldRefreshTimestamp(value.schedulingWithinFourWeeks)) {
+    if (schedulingWithinFourWeeks !== undefined && schedulingWithinFourWeeks !== 'not_asked') {
+      facilityPatch.currentSchedulingStatus = schedulingWithinFourWeeks;
+      if (shouldRefreshTimestamp(schedulingWithinFourWeeks)) {
         facilityPatch.schedulingVerifiedAt = value.verifiedAt;
         refreshedAField = true;
       }
@@ -271,7 +290,7 @@ export async function createVerificationEvent(
       specialtyStatus: value.specialtyStatus,
       diagnosisId: value.diagnosisId ?? null,
       diagnosisStatus: value.diagnosisStatus,
-      schedulingWithinFourWeeks: value.schedulingWithinFourWeeks,
+      schedulingWithinFourWeeks,
       urgentReferralStatus: value.urgentReferralStatus,
       nextAvailableDate: value.nextAvailableDate,
       estimatedWaitDays: value.estimatedWaitDays,
@@ -292,7 +311,8 @@ export async function createVerificationEvent(
         metadata: {
           eventId: event.id,
           method: value.method,
-          changedFieldCount: verifiedFactFields.filter((field) => value[field] !== undefined).length,
+          changedFieldCount: verifiedFactFields.filter((field) => value[field] !== undefined).length
+            + Number(value.schedulingWithinFourWeeks === undefined && schedulingWithinFourWeeks !== undefined),
         },
       }),
     );
@@ -356,8 +376,11 @@ async function runReverificationQueue(principal: Principal, input: Reverificatio
     city: facilities.city,
     phoneNormalized: facilities.phoneNormalized,
     currentAcceptingStatus: facilities.currentAcceptingStatus,
+    currentSchedulingStatus: facilities.currentSchedulingStatus,
     acceptingVerifiedAt: facilities.acceptingVerifiedAt,
     schedulingVerifiedAt: facilities.schedulingVerifiedAt,
+    nextAvailableDate: facilities.nextAvailableDate,
+    estimatedWaitDays: facilities.estimatedWaitDays,
     lastVerifiedAt: facilities.lastVerifiedAt,
   }).from(facilities).where(eq(facilities.active, true));
   const ids = activeFacilities.map((facility) => facility.id);
@@ -406,6 +429,9 @@ async function runReverificationQueue(principal: Principal, input: Reverificatio
       specialtyVerifiedAt: specialtyById.has(facility.id) ? specialtyById.get(facility.id) : undefined,
       diagnosisVerifiedAt: diagnosisById.has(facility.id) ? diagnosisById.get(facility.id) : undefined,
       schedulingVerifiedAt: facility.schedulingVerifiedAt,
+      schedulingStatus: facility.currentSchedulingStatus,
+      nextAvailableDate: facility.nextAvailableDate,
+      estimatedWaitDays: facility.estimatedWaitDays,
       acceptingStatus: facility.currentAcceptingStatus,
       unresolvedUnknowns,
       recentCallCount: callsById.get(facility.id) ?? 0,
@@ -413,7 +439,21 @@ async function runReverificationQueue(principal: Principal, input: Reverificatio
       hasConflict: conflictIds.has(facility.id),
     }, now, policy);
     if (!priority.reasons.length) return [];
-    return [{ ...facility, facilityId: facility.id, acceptingFreshness, priority, assignment: assignment ?? null }];
+    return [{
+      ...facility,
+      facilityId: facility.id,
+      acceptingFreshness,
+      availabilityReviewDueAt: availabilityReviewDueAt({
+        acceptingStatus: facility.currentAcceptingStatus,
+        schedulingStatus: facility.currentSchedulingStatus,
+        acceptingVerifiedAt: facility.acceptingVerifiedAt,
+        schedulingVerifiedAt: facility.schedulingVerifiedAt,
+        nextAvailableDate: facility.nextAvailableDate,
+        estimatedWaitDays: facility.estimatedWaitDays,
+      }),
+      priority,
+      assignment: assignment ?? null,
+    }];
   }).sort((left, right) => right.priority.score - left.priority.score || left.facilityName.localeCompare(right.facilityName));
   const offset = (page - 1) * pageSize;
   return { rows: queue.slice(offset, offset + pageSize), total: queue.length, page, pageSize };

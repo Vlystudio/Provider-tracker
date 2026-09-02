@@ -50,18 +50,23 @@ export function FacilityActions({
     const field = (name: string) => String(form.get(name) ?? '').trim();
     const specialtyId = field('specialtyId');
     const diagnosisId = field('diagnosisId');
+    const acceptingStatus = field('acceptingStatus');
+    const schedulingWithinFourWeeks = field('schedulingWithinFourWeeks');
+    const bookingAvailabilityChecked = Boolean(
+      acceptingStatus || schedulingWithinFourWeeks || field('nextAvailableDate') || field('estimatedWaitDays'),
+    );
     const body = {
       expectedVersion: version,
       verifiedAt: new Date(field('verifiedAt')).toISOString(),
       method: field('method'),
       confidence: field('confidence'),
-      ...(field('acceptingStatus') ? { acceptingStatus: field('acceptingStatus') } : {}),
+      ...(acceptingStatus ? { acceptingStatus } : {}),
       ...(specialtyId && field('specialtyStatus') ? { specialtyId, specialtyStatus: field('specialtyStatus') } : {}),
       ...(diagnosisId && field('diagnosisStatus') ? { diagnosisId, diagnosisStatus: field('diagnosisStatus') } : {}),
-      ...(field('schedulingWithinFourWeeks') ? { schedulingWithinFourWeeks: field('schedulingWithinFourWeeks') } : {}),
+      ...(schedulingWithinFourWeeks ? { schedulingWithinFourWeeks } : {}),
       ...(field('urgentReferralStatus') ? { urgentReferralStatus: field('urgentReferralStatus') } : {}),
-      ...(field('nextAvailableDate') ? { nextAvailableDate: field('nextAvailableDate') } : {}),
-      ...(field('estimatedWaitDays') ? { estimatedWaitDays: Number(field('estimatedWaitDays')) } : {}),
+      ...(bookingAvailabilityChecked ? { nextAvailableDate: field('nextAvailableDate') || null } : {}),
+      ...(bookingAvailabilityChecked ? { estimatedWaitDays: field('estimatedWaitDays') ? Number(field('estimatedWaitDays')) : null } : {}),
       comments: field('comments') || null,
     };
     try {
@@ -94,8 +99,8 @@ export function FacilityActions({
             <label className="form-label">Accepting<select className="form-control" name="acceptingStatus" defaultValue="">{answers.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <label className="form-label">Scheduling within four weeks<select className="form-control" name="schedulingWithinFourWeeks" defaultValue="">{answers.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <label className="form-label">Urgent referral required<select className="form-control" name="urgentReferralStatus" defaultValue="">{answers.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-            <label className="form-label">Next available date<input className="form-control" name="nextAvailableDate" type="date" /></label>
-            <label className="form-label">Estimated wait (days)<input className="form-control" name="estimatedWaitDays" type="number" min={0} max={3650} /></label>
+            <label className="form-label">Next available date<input className="form-control" name="nextAvailableDate" type="date" /><span className="form-help">A specific date keeps the facility out of current availability results until that date.</span></label>
+            <label className="form-label">Estimated wait (days)<input className="form-control" name="estimatedWaitDays" type="number" min={0} max={3650} list="verification-wait-presets" placeholder="90, 180, or 365" /><datalist id="verification-wait-presets"><option value="30">About 1 month</option><option value="90">About 3 months</option><option value="180">About 6 months</option><option value="365">About 1 year</option></datalist><span className="form-help">If no date or wait is known, the facility becomes due for another call after 30 days.</span></label>
             <label className="form-label">Specialty<select className="form-control" name="specialtyId" defaultValue=""><option value="">Not checked</option>{specialties.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
             <label className="form-label">Specialty result<select className="form-control" name="specialtyStatus" defaultValue="">{answers.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <label className="form-label">Diagnosis<select className="form-control" name="diagnosisId" defaultValue=""><option value="">Not checked</option>{diagnoses.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>

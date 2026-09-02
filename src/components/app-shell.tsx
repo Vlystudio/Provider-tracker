@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { can, type Permission, type UserRole } from '@/lib/access-control';
 import { SignOutButton } from './sign-out-button';
 import { NotificationIndicator } from './notification-indicator';
+import { ThemeToggle } from './theme-toggle';
 
 const navItems = [
   { label: 'Dashboard', href: '/', permission: 'app:access', section: 'Workspace' },
@@ -116,6 +117,7 @@ export function AppShell({
             </Link>
           </div>
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <span className="hidden text-right text-sm text-slate-600 sm:block">
               <span className="block font-medium text-slate-800">{user.name}</span>
               <span className="block text-xs">{roleLabels[user.role]}</span>

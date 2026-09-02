@@ -52,6 +52,8 @@ export const callEntryInputSchema = z.object({
   acceptingNewPatients: z.enum(availabilityStatuses).default('unknown'),
   canTreatDiagnosis: z.enum(treatmentStatuses).default('unknown'),
   canScheduleWithinFourWeeks: z.enum(scheduleStatuses).default('unknown'),
+  nextAvailableDate: z.string().date().nullable().optional(),
+  estimatedWaitDays: z.number().int().min(0).max(3650).nullable().optional(),
   notes: optionalText(2000),
   specialtyConfirmed: z.enum(availabilityStatuses).default('unknown'),
 }).strict().superRefine((value, context) => {
@@ -60,6 +62,20 @@ export const callEntryInputSchema = z.object({
   }
   if (value.callAt.getUTCFullYear() < 2000) {
     context.addIssue({ code: 'custom', path: ['callAt'], message: 'Call time is outside the supported range.' });
+  }
+  if (value.contactOutcome !== 'reached' && (
+    value.nextAvailableDate
+    || (value.estimatedWaitDays !== null && value.estimatedWaitDays !== undefined)
+  )) {
+    context.addIssue({ code: 'custom', path: ['contactOutcome'], message: 'Booking availability can only be recorded after reaching the facility.' });
+  }
+  if (value.nextAvailableDate && value.nextAvailableDate < value.callAt.toISOString().slice(0, 10)) {
+    context.addIssue({ code: 'custom', path: ['nextAvailableDate'], message: 'The next available date cannot be before the call date.' });
+  }
+  const moreThanFourWeeks = (value.estimatedWaitDays ?? 0) > 28
+    || Boolean(value.nextAvailableDate && new Date(`${value.nextAvailableDate}T00:00:00.000Z`).valueOf() > value.callAt.valueOf() + 28 * 86_400_000);
+  if (value.canScheduleWithinFourWeeks === 'yes' && moreThanFourWeeks) {
+    context.addIssue({ code: 'custom', path: ['canScheduleWithinFourWeeks'], message: 'A wait beyond four weeks cannot be marked as scheduling within four weeks.' });
   }
 });
 
@@ -77,6 +93,8 @@ export type CallLogRow = {
   date: string;
   calledAt: string;
   caller: string;
+  nextAvailableDate?: string | null;
+  estimatedWaitDays?: number | null;
 };
 
 export const callLogStatuses = ['Complete', 'Follow-up'] as const;
@@ -119,6 +137,13 @@ function verificationAnswer(value: string): 'yes' | 'no' | 'unknown' | 'not_appl
 
 function schedulingAnswer(value: string) {
   return value === 'urgent_referral_required' ? ('yes' as const) : verificationAnswer(value);
+}
+
+function inferredSchedulingStatus(value: CallEntryInput): CallEntryInput['canScheduleWithinFourWeeks'] {
+  if (value.canScheduleWithinFourWeeks !== 'unknown') return value.canScheduleWithinFourWeeks;
+  const dateIsBeyondFourWeeks = Boolean(value.nextAvailableDate
+    && new Date(`${value.nextAvailableDate}T00:00:00.000Z`).valueOf() > value.callAt.valueOf() + 28 * 86_400_000);
+  return (value.estimatedWaitDays ?? 0) > 28 || dateIsBeyondFourWeeks ? 'no' : value.canScheduleWithinFourWeeks;
 }
 
 function isConfirmed(value: string) {
@@ -183,6 +208,8 @@ type CallLogDatabaseRow = {
   result_phrase: string;
   call_at: Date;
   caller_name: string;
+  next_available_date: string | Date | null;
+  estimated_wait_days: number | null;
 };
 
 type CallLogCountRow = {
@@ -294,9 +321,18 @@ export async function listCallLog(
         fc.result_code,
         fc.result_phrase,
         fc.call_at,
-        fc.caller_name
+        fc.caller_name,
+        verification.next_available_date,
+        verification.estimated_wait_days
       FROM paged_groups pg
       JOIN base_calls fc ON fc.tracking_group_key = pg.tracking_group_key
+      LEFT JOIN LATERAL (
+        SELECT e.next_available_date, e.estimated_wait_days
+        FROM facility_verification_events e
+        WHERE e.related_call_id = fc.id
+        ORDER BY e.verified_at DESC, e.id DESC
+        LIMIT 1
+      ) verification ON true
       ORDER BY pg.group_position, ${callOrderSql}`, [
       ...parameters,
       value.pageSize,
@@ -316,6 +352,10 @@ export async function listCallLog(
       date: row.call_at.toISOString().slice(0, 10),
       calledAt: row.call_at.toISOString(),
       caller: row.caller_name,
+      nextAvailableDate: row.next_available_date
+        ? new Date(row.next_available_date).toISOString().slice(0, 10)
+        : null,
+      estimatedWaitDays: row.estimated_wait_days ?? null,
     })),
     totalCalls: Number(counts?.total_calls ?? 0),
     totalGroups: Number(counts?.total_groups ?? 0),
@@ -378,13 +418,14 @@ export async function createCallRecord(
 
     const failedOutcome = value.contactOutcome === 'reached' ? null : value.contactOutcome;
     const reached = failedOutcome === null;
+    const effectiveSchedulingStatus = inferredSchedulingStatus(value);
     const didNotLeaveVm = value.contactOutcome === 'voicemail_not_left';
     const derived = reached
       ? deriveResult({
           didNotLeaveVm,
           accepting: value.acceptingNewPatients,
           canTreat: value.canTreatDiagnosis,
-          schedule: value.canScheduleWithinFourWeeks,
+          schedule: effectiveSchedulingStatus,
         })
       : {
           resultCode: 'unable_to_contact' as const,
@@ -438,7 +479,7 @@ export async function createCallRecord(
       didNotLeaveVm,
       acceptingNewPatients: value.acceptingNewPatients,
       canTreatDiagnosis: value.canTreatDiagnosis,
-      canScheduleWithinFourWeeks: value.canScheduleWithinFourWeeks,
+      canScheduleWithinFourWeeks: effectiveSchedulingStatus,
       notes: value.notes,
       specialtyConfirmed: value.specialtyConfirmed,
       weekStart: weekStartForDate(value.callAt),
@@ -462,11 +503,13 @@ export async function createCallRecord(
       const acceptingStatus = verificationAnswer(value.acceptingNewPatients);
       const specialtyStatus = verificationAnswer(value.specialtyConfirmed);
       const diagnosisStatus = verificationAnswer(value.canTreatDiagnosis);
-      const schedulingStatus = schedulingAnswer(value.canScheduleWithinFourWeeks);
-      const urgentReferralStatus = value.canScheduleWithinFourWeeks === 'urgent_referral_required'
+      const schedulingStatus = schedulingAnswer(effectiveSchedulingStatus);
+      const urgentReferralStatus = effectiveSchedulingStatus === 'urgent_referral_required'
         ? ('yes' as const)
         : isConfirmed(schedulingStatus) ? ('no' as const) : null;
-      const hasConfirmedFact = [acceptingStatus, specialtyStatus, diagnosisStatus, schedulingStatus].some(isConfirmed);
+      const hasBookingTiming = Boolean(value.nextAvailableDate)
+        || (value.estimatedWaitDays !== null && value.estimatedWaitDays !== undefined);
+      const hasConfirmedFact = [acceptingStatus, specialtyStatus, diagnosisStatus, schedulingStatus].some(isConfirmed) || hasBookingTiming;
       let resultingFacility = facility;
 
       if (hasConfirmedFact) {
@@ -477,8 +520,12 @@ export async function createCallRecord(
           } : {}),
           ...(isConfirmed(schedulingStatus) ? {
             currentSchedulingStatus: sql`case when ${facilities.schedulingVerifiedAt} is null or ${facilities.schedulingVerifiedAt} <= ${value.callAt} then ${schedulingStatus}::verification_answer else ${facilities.currentSchedulingStatus} end`,
-            currentUrgentReferralStatus: sql`case when ${facilities.schedulingVerifiedAt} is null or ${facilities.schedulingVerifiedAt} <= ${value.callAt} then ${value.canScheduleWithinFourWeeks === 'urgent_referral_required' ? 'yes' : 'no'}::verification_answer else ${facilities.currentUrgentReferralStatus} end`,
+            currentUrgentReferralStatus: sql`case when ${facilities.schedulingVerifiedAt} is null or ${facilities.schedulingVerifiedAt} <= ${value.callAt} then ${effectiveSchedulingStatus === 'urgent_referral_required' ? 'yes' : 'no'}::verification_answer else ${facilities.currentUrgentReferralStatus} end`,
             schedulingVerifiedAt: sql`greatest(${facilities.schedulingVerifiedAt}, ${value.callAt})`,
+          } : {}),
+          ...(isConfirmed(acceptingStatus) || isConfirmed(schedulingStatus) || hasBookingTiming ? {
+            nextAvailableDate: sql`case when greatest(${facilities.acceptingVerifiedAt}, ${facilities.schedulingVerifiedAt}) is null or greatest(${facilities.acceptingVerifiedAt}, ${facilities.schedulingVerifiedAt}) <= ${value.callAt} then ${value.nextAvailableDate}::date else ${facilities.nextAvailableDate} end`,
+            estimatedWaitDays: sql`case when greatest(${facilities.acceptingVerifiedAt}, ${facilities.schedulingVerifiedAt}) is null or greatest(${facilities.acceptingVerifiedAt}, ${facilities.schedulingVerifiedAt}) <= ${value.callAt} then ${value.estimatedWaitDays}::integer else ${facilities.estimatedWaitDays} end`,
           } : {}),
           lastVerifiedAt: sql`greatest(${facilities.lastVerifiedAt}, ${value.callAt})`,
           optimisticLockVersion: sql`${facilities.optimisticLockVersion} + 1`,
@@ -538,18 +585,24 @@ export async function createCallRecord(
         diagnosisStatus,
         schedulingWithinFourWeeks: schedulingStatus,
         urgentReferralStatus,
+        nextAvailableDate: value.nextAvailableDate,
+        estimatedWaitDays: value.estimatedWaitDays,
         comments: value.notes,
         relatedCallId: call.id,
         previousState: {
           acceptingStatus: facility.currentAcceptingStatus,
           schedulingWithinFourWeeks: facility.currentSchedulingStatus,
           urgentReferralStatus: facility.currentUrgentReferralStatus,
+          nextAvailableDate: facility.nextAvailableDate,
+          estimatedWaitDays: facility.estimatedWaitDays,
           lastVerifiedAt: facility.lastVerifiedAt?.toISOString() ?? null,
         },
         resultingState: {
           acceptingStatus: resultingFacility.currentAcceptingStatus,
           schedulingWithinFourWeeks: resultingFacility.currentSchedulingStatus,
           urgentReferralStatus: resultingFacility.currentUrgentReferralStatus,
+          nextAvailableDate: resultingFacility.nextAvailableDate,
+          estimatedWaitDays: resultingFacility.estimatedWaitDays,
           lastVerifiedAt: resultingFacility.lastVerifiedAt?.toISOString() ?? null,
         },
         sourceMetadata: { source: 'manual_call' },

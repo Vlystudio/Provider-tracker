@@ -55,6 +55,18 @@ describe('call entry validation', () => {
     expect(parsed.contactOutcome).toBe('voicemail_left');
   });
 
+  it('captures a known booking horizon and rejects contradictory or unreachable timing', () => {
+    const parsed = callEntryInputSchema.parse({
+      ...validCall(),
+      canScheduleWithinFourWeeks: 'unknown',
+      estimatedWaitDays: 180,
+      nextAvailableDate: '2027-03-01',
+    });
+    expect(parsed.estimatedWaitDays).toBe(180);
+    expect(() => callEntryInputSchema.parse({ ...validCall(), estimatedWaitDays: 90 })).toThrow();
+    expect(() => callEntryInputSchema.parse({ ...validCall(), contactOutcome: 'no_answer', estimatedWaitDays: 90 })).toThrow();
+  });
+
   it('rejects future calls, bad identifiers, and unsupported fields', () => {
     expect(() => callEntryInputSchema.parse({ ...validCall(), callAt: new Date(Date.now() + 86_400_000).toISOString() })).toThrow();
     expect(() => callEntryInputSchema.parse({ ...validCall(), facilityId: 'not-an-id' })).toThrow();

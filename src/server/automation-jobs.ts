@@ -11,7 +11,7 @@ import {
   type NotificationSeverity,
 } from '@/lib/automation';
 import { dailyDigestPeriod, formatLocalDate, weeklyDigestPeriod } from '@/lib/automation-time';
-import { DEFAULT_FRESHNESS_POLICY } from '@/lib/provider-intelligence';
+import { AVAILABILITY_REVIEW_DAYS, availabilityReviewDueAt, DEFAULT_FRESHNESS_POLICY } from '@/lib/provider-intelligence';
 import type { UserRole } from '@/lib/access-control';
 import { automationSettingsSchema, defaultAutomationSettings, type AutomationSettings } from '@/lib/automation-config';
 import { incrementMetric, setMetricGauge } from './metrics';
@@ -216,7 +216,12 @@ async function runReverificationScan(context: JobContext): Promise<HandlerResult
     const result = await context.client.query<{
       id: string;
       last_verified_at: Date | null;
+      accepting_verified_at: Date | null;
+      scheduling_verified_at: Date | null;
       current_accepting_status: string;
+      current_scheduling_status: string;
+      next_available_date: string | Date | null;
+      estimated_wait_days: number | null;
       data_quality_status: string;
       assigned_to: string | null;
       contact_id: string | null;
@@ -225,7 +230,9 @@ async function runReverificationScan(context: JobContext): Promise<HandlerResult
       migration_baseline_at: Date | null;
       updated_at: Date;
     }>(`
-      SELECT f.id, f.last_verified_at, f.current_accepting_status, f.data_quality_status,
+      SELECT f.id, f.last_verified_at, f.accepting_verified_at, f.scheduling_verified_at,
+        f.current_accepting_status, f.current_scheduling_status, f.next_available_date,
+        f.estimated_wait_days, f.data_quality_status,
         f.migration_baseline_at, f.updated_at,
         assignment.assigned_to, contact.id AS contact_id, contact.attempted_at, contact.outcome
       FROM facilities f
@@ -248,11 +255,19 @@ async function runReverificationScan(context: JobContext): Promise<HandlerResult
         : undefined;
       const recipient = assignedRecipient ?? admins[0];
       const reverification = decideReverificationWork({
-        lastVerifiedAt: facility.last_verified_at,
+        lastVerifiedAt: facility.accepting_verified_at ?? facility.scheduling_verified_at,
         now: context.scheduledFor,
         staleDays: DEFAULT_FRESHNESS_POLICY.accepting.staleDays,
         upcomingDays: settings.upcomingStaleDays,
         highPriority: facility.current_accepting_status === 'yes' || facility.data_quality_status === 'needs_review',
+        dueAt: availabilityReviewDueAt({
+          acceptingStatus: facility.current_accepting_status as Parameters<typeof availabilityReviewDueAt>[0]['acceptingStatus'],
+          schedulingStatus: facility.current_scheduling_status as Parameters<typeof availabilityReviewDueAt>[0]['schedulingStatus'],
+          acceptingVerifiedAt: facility.accepting_verified_at,
+          schedulingVerifiedAt: facility.scheduling_verified_at,
+          nextAvailableDate: facility.next_available_date,
+          estimatedWaitDays: facility.estimated_wait_days,
+        }, DEFAULT_FRESHNESS_POLICY.accepting.staleDays),
       });
       if (reverification) {
         if (context.dryRun) counts.created += 1;
@@ -321,14 +336,31 @@ async function runReverificationScan(context: JobContext): Promise<HandlerResult
   }
   if (!context.dryRun) {
     const resolved = await context.client.query<{ target_id: string; id: string; cycle: number }>(`
+      WITH facility_due AS (
+        SELECT f.id,
+          CASE
+            WHEN f.current_accepting_status = 'no' OR f.current_scheduling_status = 'no' THEN
+              COALESCE(
+                f.next_available_date::timestamptz,
+                CASE WHEN GREATEST(f.accepting_verified_at, f.scheduling_verified_at) IS NOT NULL
+                  THEN GREATEST(f.accepting_verified_at, f.scheduling_verified_at)
+                    + (COALESCE(f.estimated_wait_days, $1::int) * interval '1 day')
+                END
+              )
+            WHEN GREATEST(f.accepting_verified_at, f.scheduling_verified_at) IS NOT NULL THEN
+              GREATEST(f.accepting_verified_at, f.scheduling_verified_at) + ($1::int * interval '1 day')
+            ELSE NULL
+          END AS due_at
+        FROM facilities f
+        WHERE f.active AND f.merged_into_facility_id IS NULL
+      )
       UPDATE operational_work_items w SET status = 'completed', completed_at = now(), completed_by = NULL,
         optimistic_lock_version = w.optimistic_lock_version + 1, updated_at = now()
-      FROM facilities f
+      FROM facility_due f
       WHERE w.target_type = 'facility' AND w.target_id = f.id AND w.source = 'reverification_scan'
         AND w.status IN ('open','assigned','in_progress','blocked')
-        AND f.last_verified_at IS NOT NULL
-        AND f.last_verified_at + ($1::int * interval '1 day') > $2::timestamptz + ($3::int * interval '1 day')
-      RETURNING w.target_id, w.id, w.cycle`, [DEFAULT_FRESHNESS_POLICY.accepting.staleDays, context.scheduledFor, settings.upcomingStaleDays]);
+        AND f.due_at > $2::timestamptz + ($3::int * interval '1 day')
+      RETURNING w.target_id, w.id, w.cycle`, [AVAILABILITY_REVIEW_DAYS, context.scheduledFor, settings.upcomingStaleDays]);
     for (const work of resolved.rows) {
       counts.created += Number(await recordDerivedChange(context.client, {
         facilityId: work.target_id,

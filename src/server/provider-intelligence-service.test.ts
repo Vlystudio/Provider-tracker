@@ -28,6 +28,23 @@ describe('provider intelligence mutation validation', () => {
     expect(() => verificationEventInputSchema.parse({ expectedVersion: 0, verifiedAt: new Date().toISOString(), method: 'phone', acceptingStatus: 'yes', verifiedBy: facilityA })).toThrow();
   });
 
+  it('accepts a booking horizon and rejects a contradictory four-week answer', () => {
+    const parsed = verificationEventInputSchema.parse({
+      expectedVersion: 0,
+      verifiedAt: new Date().toISOString(),
+      method: 'phone',
+      estimatedWaitDays: 180,
+    });
+    expect(parsed.estimatedWaitDays).toBe(180);
+    expect(() => verificationEventInputSchema.parse({
+      expectedVersion: 0,
+      verifiedAt: new Date().toISOString(),
+      method: 'phone',
+      schedulingWithinFourWeeks: 'yes',
+      estimatedWaitDays: 90,
+    })).toThrow();
+  });
+
   it('requires optimistic versions and explicit merge confirmation', () => {
     expect(facilityMergeInputSchema.parse({
       survivorFacilityId: facilityA,

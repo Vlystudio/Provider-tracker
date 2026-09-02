@@ -6,7 +6,7 @@ Provider Tracker automation prepares work and reports changes. It does not chang
 
 | Workflow | Treatment | Result |
 | --- | --- | --- |
-| Stale, soon-to-expire, and never-verified records | automatic | creates or updates work |
+| Stale, soon-to-expire, and never-verified availability | automatic | creates or updates work using the 30-day review date |
 | Failed contacts | automatic preparation | creates follow-up or phone-data work using the contact outcome |
 | Data quality | automatic detection | creates and resolves derived work; does not edit the provider record |
 | Duplicate matching | automatic detection | creates candidate evidence and review work; never merges |
@@ -54,9 +54,13 @@ The organization time zone, daily hour, and weekly day are stored in Automation 
 
 The external scheduler should call `jobs:daily` after the configured daily hour and `jobs:weekly` after that hour on the configured weekday. Running the wrapper more than once is safe.
 
+The Vercel deployment also invokes `/api/cron/reverification` every day at 12:00 UTC. Vercel supplies the production `CRON_SECRET` as a bearer token, and the route refuses to run when that secret is missing or invalid. Its date-based execution key makes a repeated request on the same UTC date safe.
+
 ## Rules
 
-- Accepting-status freshness uses the existing provider freshness policy. The upcoming warning window is configurable from 0 to 30 days.
+- Accepting and scheduling availability are current for 30 days when no more precise booking horizon is known.
+- A confirmed next-available date takes precedence over the 30-day rule. A confirmed wait estimate is measured from the latest acceptance or scheduling verification. The facility stays out of default candidate results until that date is reached.
+- When a facility is unavailable but the booking horizon cannot be confirmed, it is held for 30 days and then returned to the review queue for another call. Verification and call history are retained; the system never deletes data to refresh status.
 - A wait increase is meaningful only when it meets both configured tests: absolute days and percentage. Defaults are 14 days and 50 percent.
 - `callback_requested`, `no_answer`, and voicemail outcomes create follow-up work on different schedules. Disconnected and wrong numbers create data-quality work instead of another routine call.
 - A coverage watch counts active, accepting facilities verified within its freshness limit and matching its specialty or diagnosis. Radius choices are limited to 10, 25, 50, or 100 miles.

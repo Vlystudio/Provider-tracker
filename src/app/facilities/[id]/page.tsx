@@ -4,7 +4,7 @@ import { AppShell } from '@/components/app-shell';
 import { FacilityActions } from '@/components/facility-actions';
 import { InlineMessage, PageHeader, StatusBadge, type StatusTone } from '@/components/ui';
 import { can } from '@/lib/access-control';
-import { assessFacilityQuality, classifyFreshness, freshnessLabel } from '@/lib/provider-intelligence';
+import { assessFacilityQuality, availabilityReviewDueAt, classifyFreshness, freshnessLabel, isConfirmedUnavailableHold } from '@/lib/provider-intelligence';
 import { formatDate, formatDateTime, humanizeKey } from '@/lib/format';
 import { requirePagePermission } from '@/server/authorization';
 import { getResolvedDataMode } from '@/server/data-layer';
@@ -40,6 +40,16 @@ export default async function FacilityDetailPage({ params }: { params: Promise<{
     : { specialties: [], diagnoses: [] };
   const facility = detail.facility;
   const freshness = classifyFreshness('accepting', facility.acceptingVerifiedAt, new Date(), getFreshnessPolicy());
+  const availabilityInput = {
+    acceptingStatus: facility.currentAcceptingStatus,
+    schedulingStatus: facility.currentSchedulingStatus,
+    acceptingVerifiedAt: facility.acceptingVerifiedAt,
+    schedulingVerifiedAt: facility.schedulingVerifiedAt,
+    nextAvailableDate: facility.nextAvailableDate,
+    estimatedWaitDays: facility.estimatedWaitDays,
+  };
+  const availabilityDueAt = availabilityReviewDueAt(availabilityInput);
+  const unavailableHold = isConfirmedUnavailableHold(availabilityInput, new Date());
   const recentAnswers = detail.verifications
     .filter((event) => event.acceptingStatus === 'yes' || event.acceptingStatus === 'no')
     .slice(0, 2)
@@ -66,6 +76,7 @@ export default async function FacilityDetailPage({ params }: { params: Promise<{
       <PageHeader eyebrow="Facility record" title={facility.facilityName} summary={`${facility.city}${facility.stateCode ? `, ${facility.stateCode}` : ''}${facility.postalCode ? ` ${facility.postalCode}` : ''}`} meta={<StatusBadge tone={facility.active ? 'positive' : 'neutral'}>{facility.active ? 'Active' : 'Archived'}</StatusBadge>} />
 
       {!facility.active && facility.mergedIntoFacilityId ? <InlineMessage tone="info" title="Merged record">This record is archived. Current work continues on the surviving facility record.</InlineMessage> : null}
+      {unavailableHold && availabilityDueAt ? <InlineMessage tone="info" title="Confirmed unavailable">This facility is excluded from default provider-search results until {formatDate(availabilityDueAt)}. It will return for review automatically on that date.</InlineMessage> : null}
       {issues.length ? <InlineMessage tone={issues.some((issue) => issue.severity === 'error') ? 'error' : 'warning'} title="Data needs attention"><ul className="mt-1 list-disc pl-5">{issues.map((issue) => <li key={issue.code}>{issue.label}</li>)}</ul></InlineMessage> : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Current facility status">

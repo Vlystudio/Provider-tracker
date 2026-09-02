@@ -95,6 +95,7 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const field = (name: string) => String(form.get(name) ?? '').trim();
+    const estimatedWaitDays = field('estimatedWaitDays');
     const callDate = new Date(callAt);
     if (Number.isNaN(callDate.valueOf())) {
       setMessage({ tone: 'error', text: 'Enter a valid call date and time.' });
@@ -118,6 +119,8 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
           acceptingNewPatients: contactOutcome === 'reached' ? field('acceptingNewPatients') : 'unknown',
           canTreatDiagnosis: contactOutcome === 'reached' ? field('canTreatDiagnosis') : 'unknown',
           canScheduleWithinFourWeeks: contactOutcome === 'reached' ? field('canScheduleWithinFourWeeks') : 'unknown',
+          nextAvailableDate: contactOutcome === 'reached' ? field('nextAvailableDate') || null : null,
+          estimatedWaitDays: contactOutcome === 'reached' && estimatedWaitDays ? Number(estimatedWaitDays) : null,
           specialtyConfirmed: contactOutcome === 'reached' ? field('specialtyConfirmed') : 'unknown',
           notes: field('notes') || null,
         }),
@@ -303,6 +306,22 @@ export function CallEntryForm({ facilities, specialties, diagnoses, linesOfBusin
                   <option value="not_applicable">Not applicable</option>
                 </select>
                 <span className="form-help">Records the provider requirement only. Provider Tracker does not create or submit referrals.</span>
+              </label>
+              <label className="form-label">
+                Estimated booking wait (days)
+                <input className="form-control" name="estimatedWaitDays" type="number" min={0} max={3650} list="booking-wait-presets" placeholder="For example, 90 or 180" />
+                <datalist id="booking-wait-presets">
+                  <option value="30">About 1 month</option>
+                  <option value="90">About 3 months</option>
+                  <option value="180">About 6 months</option>
+                  <option value="365">About 1 year</option>
+                </datalist>
+                <span className="form-help">A wait over four weeks automatically records scheduling as unavailable.</span>
+              </label>
+              <label className="form-label">
+                Next available date
+                <input className="form-control" name="nextAvailableDate" type="date" />
+                <span className="form-help">Use this when the facility gives a specific date. It takes priority over the estimated wait.</span>
               </label>
             </>
           ) : null}

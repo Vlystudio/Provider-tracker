@@ -8,6 +8,7 @@ import { callLogInputSchema, listCallLog, type CallLogInput, type CallLogPage, t
 import { providerSearchInputSchema, searchProviders, type ProviderSearchPage } from './provider-search-service';
 import { facilityDirectoryInputSchema, listFacilities, type FacilityDirectoryPage } from './facility-directory-service';
 import { getOperationalReport, reportingInputSchema, type OperationalReport } from './provider-reporting-service';
+import { getDashboardSummary } from './dashboard-service';
 
 export type ReportRange = z.input<typeof reportingInputSchema>;
 
@@ -55,6 +56,13 @@ class DemoDataAdapter implements AppDataAdapter {
       && (!parsed.data.scheduling || result.schedulingStatus === parsed.data.scheduling)
       && (!parsed.data.urgentReferral || result.urgentReferralStatus === parsed.data.urgentReferral)
       && (!parsed.data.freshness || result.freshness === parsed.data.freshness)
+      && (() => {
+        const unavailable = result.acceptingStatus === 'no' || result.schedulingStatus === 'no';
+        const held = unavailable && Boolean(result.availabilityReviewDueAt && new Date(result.availabilityReviewDueAt) > new Date());
+        if (parsed.data.availability === 'all') return true;
+        if (parsed.data.availability === 'confirmed_unavailable') return held;
+        return !held;
+      })()
       && (!parsed.data.facilityName || result.facilityName.toLowerCase().includes(parsed.data.facilityName.toLowerCase())),
     );
     results = [...results].sort((left, right) => {
@@ -179,6 +187,16 @@ class DatabaseDataAdapter implements AppDataAdapter {
   private emptyDashboard() {
     return {
       cards: [],
+      reliability: {
+        activeFacilities: 0,
+        callsThisWeek: 0,
+        activeWork: 0,
+        availabilityDue: 0,
+        freshAccepting: 0,
+        confirmedUnavailable: 0,
+        unconfirmedAvailability: 0,
+        importantChanges: 0,
+      },
     };
   }
 
@@ -188,19 +206,8 @@ class DatabaseDataAdapter implements AppDataAdapter {
 
   async getDashboard(principal: Principal): Promise<DashboardPageState> {
     assertPermission(principal, 'app:access');
-    const health = await getDatabaseHealth();
-    if (!health.ok) {
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: this.emptyDashboard() };
-    }
-
-    const db = getDatabaseClient();
-    if (!db) {
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message: 'Database configuration is missing.', data: this.emptyDashboard() };
-    }
-
     try {
-      await db.execute(`SELECT 1 as ok`);
-      return { ok: true, dataMode: 'database', databaseAvailable: true, data: this.emptyDashboard() };
+      return { ok: true, dataMode: 'database', databaseAvailable: true, data: await getDashboardSummary(principal) };
     } catch {
       return { ok: false, dataMode: 'database', databaseAvailable: false, message: 'The dashboard data could not be loaded.', data: this.emptyDashboard() };
     }

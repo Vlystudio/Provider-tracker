@@ -2,6 +2,7 @@ import 'server-only';
 
 import { z } from 'zod';
 import {
+  availabilityReviewDueAt,
   classifyFreshness,
   freshnessLabel,
   rankSearchResult,
@@ -27,6 +28,7 @@ export const providerSearchInputSchema = z.object({
   scheduling: z.enum(verificationAnswers).optional(),
   urgentReferral: z.enum(verificationAnswers).optional(),
   freshness: z.enum(['fresh', 'aging', 'stale', 'never_verified']).optional(),
+  availability: z.enum(['available_or_review', 'confirmed_unavailable', 'all']).default('available_or_review'),
   facilityName: optionalText,
   verifiedFrom: z.string().date().optional(),
   verifiedTo: z.string().date().optional(),
@@ -56,6 +58,7 @@ export type ProviderSearchResult = {
   nextAvailableDate: string | null;
   estimatedWaitDays: number | null;
   acceptingVerifiedAt: string | null;
+  availabilityReviewDueAt: string | null;
   lastVerifiedAt: string | null;
   freshness: FreshnessState;
   freshnessLabel: string;
@@ -93,6 +96,7 @@ type QueryRow = {
   next_available_date: string | Date | null;
   estimated_wait_days: number | null;
   accepting_verified_at: Date | null;
+  scheduling_verified_at: Date | null;
   last_verified_at: Date | null;
   coordinate_quality: string;
   coordinate_provenance: string | null;
@@ -154,6 +158,7 @@ async function runProviderSearch(principal: Principal, input: z.input<typeof pro
     verifiedToExclusive,
     policy.accepting.freshDays,
     policy.accepting.staleDays,
+    value.availability,
     value.pageSize,
     (value.page - 1) * value.pageSize,
   ];
@@ -194,11 +199,25 @@ async function runProviderSearch(principal: Principal, input: z.input<typeof pro
         f.next_available_date,
         f.estimated_wait_days,
         f.accepting_verified_at,
+        f.scheduling_verified_at,
         f.last_verified_at,
         f.coordinate_quality,
         f.coordinate_provenance,
         f.data_quality_status,
         f.optimistic_lock_version,
+        CASE
+          WHEN f.current_accepting_status = 'no' OR f.current_scheduling_status = 'no' THEN
+            COALESCE(
+              f.next_available_date::timestamptz,
+              CASE WHEN GREATEST(f.accepting_verified_at, f.scheduling_verified_at) IS NOT NULL
+                THEN GREATEST(f.accepting_verified_at, f.scheduling_verified_at)
+                  + (COALESCE(f.estimated_wait_days, 30) * interval '1 day')
+              END
+            )
+          WHEN GREATEST(f.accepting_verified_at, f.scheduling_verified_at) IS NOT NULL THEN
+            GREATEST(f.accepting_verified_at, f.scheduling_verified_at) + interval '30 days'
+          ELSE NULL
+        END AS availability_review_due_at,
         (
           (CASE WHEN f.phone_normalized IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN f.postal_code IS NOT NULL THEN 1 ELSE 0 END) +
@@ -234,8 +253,20 @@ async function runProviderSearch(principal: Principal, input: z.input<typeof pro
         AND ($9::text IS NULL OR f.facility_name ILIKE $9)
         AND ($10::timestamptz IS NULL OR f.last_verified_at >= $10)
         AND ($11::timestamptz IS NULL OR f.last_verified_at < $11)
+    ), filtered AS (
+      SELECT candidate.* FROM candidate
+      WHERE $14::text = 'all'
+        OR ($14::text = 'confirmed_unavailable'
+          AND (current_accepting_status = 'no' OR current_scheduling_status = 'no')
+          AND availability_review_due_at > now())
+        OR ($14::text = 'available_or_review'
+          AND (
+            (current_accepting_status <> 'no' AND current_scheduling_status <> 'no')
+            OR availability_review_due_at IS NULL
+            OR availability_review_due_at <= now()
+          ))
     ), ranked AS (
-      SELECT candidate.*,
+      SELECT filtered.*,
         (
           CASE WHEN $3::text IS NOT NULL AND specialty_match THEN 30 ELSE 0 END +
           CASE WHEN $4::text IS NOT NULL AND diagnosis_match THEN 35 ELSE 0 END +
@@ -251,12 +282,12 @@ async function runProviderSearch(principal: Principal, input: z.input<typeof pro
           CASE WHEN estimated_wait_days <= 28 THEN 6 ELSE 0 END +
           completeness * 5
         ) AS ranking_score
-      FROM candidate
+      FROM filtered
     )
     SELECT ranked.*, count(*) OVER() AS total_count
     FROM ranked
     ORDER BY ${orderBy[value.sort]}
-    LIMIT $14 OFFSET $15`;
+    LIMIT $15 OFFSET $16`;
 
   const [result, missing] = await Promise.all([
     pool.query<QueryRow>(query, parameters),
@@ -279,6 +310,14 @@ async function runProviderSearch(principal: Principal, input: z.input<typeof pro
       completeness,
     }, now, policy);
     const freshness = classifyFreshness('accepting', row.accepting_verified_at, now, policy);
+    const reviewDueAt = availabilityReviewDueAt({
+      acceptingStatus: row.current_accepting_status,
+      schedulingStatus: row.current_scheduling_status,
+      acceptingVerifiedAt: row.accepting_verified_at,
+      schedulingVerifiedAt: row.scheduling_verified_at,
+      nextAvailableDate: row.next_available_date,
+      estimatedWaitDays: row.estimated_wait_days,
+    });
     return {
       facilityId: row.facility_id,
       facilityName: row.facility_name,
@@ -296,6 +335,7 @@ async function runProviderSearch(principal: Principal, input: z.input<typeof pro
       nextAvailableDate: calendarDate(row.next_available_date),
       estimatedWaitDays: row.estimated_wait_days,
       acceptingVerifiedAt: isoDate(row.accepting_verified_at),
+      availabilityReviewDueAt: isoDate(reviewDueAt),
       lastVerifiedAt: isoDate(row.last_verified_at),
       freshness: freshness.state,
       freshnessLabel: freshnessLabel(freshness),

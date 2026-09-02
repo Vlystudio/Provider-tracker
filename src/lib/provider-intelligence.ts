@@ -15,14 +15,63 @@ export type FreshnessThreshold = { freshDays: number; staleDays: number };
 export type FreshnessPolicy = Record<VerificationCategory, FreshnessThreshold>;
 
 export const DEFAULT_FRESHNESS_POLICY: FreshnessPolicy = {
-  accepting: { freshDays: 30, staleDays: 45 },
-  scheduling: { freshDays: 30, staleDays: 45 },
+  accepting: { freshDays: 30, staleDays: 30 },
+  scheduling: { freshDays: 30, staleDays: 30 },
   diagnosis: { freshDays: 90, staleDays: 120 },
   specialty: { freshDays: 180, staleDays: 240 },
   contact: { freshDays: 180, staleDays: 365 },
 };
 
 const DAY_MS = 86_400_000;
+export const AVAILABILITY_REVIEW_DAYS = 30;
+
+type AvailabilityTimingInput = {
+  acceptingStatus: VerificationAnswer;
+  schedulingStatus?: VerificationAnswer;
+  acceptingVerifiedAt: Date | string | null;
+  schedulingVerifiedAt?: Date | string | null;
+  nextAvailableDate?: Date | string | null;
+  estimatedWaitDays?: number | null;
+};
+
+function validDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date
+    ? value
+    : new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00.000Z` : value);
+  return Number.isNaN(date.valueOf()) ? null : date;
+}
+
+function latestDate(...values: Array<Date | string | null | undefined>): Date | null {
+  const dates = values.map(validDate).filter((value): value is Date => value !== null);
+  return dates.length ? new Date(Math.max(...dates.map((value) => value.valueOf()))) : null;
+}
+
+export function availabilityHoldUntil(input: AvailabilityTimingInput): Date | null {
+  const unavailable = input.acceptingStatus === 'no' || input.schedulingStatus === 'no';
+  if (!unavailable) return null;
+  const exactDate = validDate(input.nextAvailableDate);
+  if (exactDate) return exactDate;
+  const verifiedAt = latestDate(input.acceptingVerifiedAt, input.schedulingVerifiedAt);
+  if (!verifiedAt || input.estimatedWaitDays === null || input.estimatedWaitDays === undefined) return null;
+  return new Date(verifiedAt.valueOf() + input.estimatedWaitDays * DAY_MS);
+}
+
+export function availabilityReviewDueAt(
+  input: AvailabilityTimingInput,
+  staleDays = AVAILABILITY_REVIEW_DAYS,
+): Date | null {
+  const holdUntil = availabilityHoldUntil(input);
+  if (holdUntil) return holdUntil;
+  const verifiedAt = latestDate(input.acceptingVerifiedAt, input.schedulingVerifiedAt);
+  return verifiedAt ? new Date(verifiedAt.valueOf() + staleDays * DAY_MS) : null;
+}
+
+export function isConfirmedUnavailableHold(input: AvailabilityTimingInput, now = new Date()): boolean {
+  if (input.acceptingStatus !== 'no' && input.schedulingStatus !== 'no') return false;
+  const reviewDueAt = availabilityReviewDueAt(input);
+  return Boolean(reviewDueAt && reviewDueAt.valueOf() > now.valueOf());
+}
 
 export function parseFreshnessPolicy(
   values: Partial<Record<`${Uppercase<VerificationCategory>}_FRESH_DAYS` | `${Uppercase<VerificationCategory>}_STALE_DAYS`, string | number | undefined>>,
@@ -80,6 +129,9 @@ export type PriorityInput = {
   specialtyVerifiedAt?: Date | string | null;
   diagnosisVerifiedAt?: Date | string | null;
   schedulingVerifiedAt?: Date | string | null;
+  schedulingStatus?: VerificationAnswer;
+  nextAvailableDate?: Date | string | null;
+  estimatedWaitDays?: number | null;
   acceptingStatus: VerificationAnswer;
   unresolvedUnknowns: number;
   recentCallCount: number;
@@ -94,16 +146,33 @@ export function calculateReverificationPriority(
 ): { score: number; reasons: string[] } {
   let score = 0;
   const reasons: string[] = [];
+  const holdUntil = availabilityHoldUntil(input);
+  const reviewDueAt = availabilityReviewDueAt(input);
+  const unavailable = input.acceptingStatus === 'no' || input.schedulingStatus === 'no';
+  const availabilityHeld = isConfirmedUnavailableHold(input, now);
   const accepting = classifyFreshness('accepting', input.acceptingVerifiedAt, now, policy);
-  if (accepting.state === 'never_verified') {
+  if (!availabilityHeld && accepting.state === 'never_verified') {
     score += 50;
     reasons.push('Never verified');
-  } else if (accepting.state === 'stale') {
+  } else if (!availabilityHeld && accepting.state === 'stale') {
     score += 35;
     reasons.push('Accepting status stale');
-  } else if (accepting.state === 'aging') {
+  } else if (!availabilityHeld && accepting.state === 'aging') {
     score += 15;
     reasons.push('Accepting status aging');
+  }
+
+  if (unavailable && !availabilityHeld && reviewDueAt && reviewDueAt.valueOf() <= now.valueOf()) {
+    if (holdUntil) {
+      score += 25;
+      reasons.push('Confirmed availability date reached');
+    } else {
+      score += 15;
+      reasons.push('Booking horizon needs confirmation');
+    }
+  } else if (!unavailable && reviewDueAt && reviewDueAt.valueOf() <= now.valueOf() && accepting.state === 'fresh') {
+    score += 15;
+    reasons.push('Availability review due');
   }
 
   const categoryChecks: Array<[VerificationCategory, Date | string | null | undefined, string]> = [
@@ -113,6 +182,7 @@ export function calculateReverificationPriority(
   ];
   for (const [category, date, reason] of categoryChecks) {
     if (date === undefined) continue;
+    if (availabilityHeld) continue;
     const state = classifyFreshness(category, date ?? null, now, policy).state;
     if (state === 'stale' || state === 'never_verified') {
       score += 12;
@@ -124,14 +194,14 @@ export function calculateReverificationPriority(
     score += 25;
     reasons.push('Conflicting status');
   }
-  if (input.recentCallCount >= 10) {
+  if (!availabilityHeld && input.recentCallCount >= 10) {
     score += 15;
     reasons.push('High usage');
-  } else if (input.recentCallCount >= 3) {
+  } else if (!availabilityHeld && input.recentCallCount >= 3) {
     score += 7;
     reasons.push('Regularly used');
   }
-  if (input.unresolvedUnknowns > 0) {
+  if (!availabilityHeld && input.unresolvedUnknowns > 0) {
     score += Math.min(15, input.unresolvedUnknowns * 5);
     reasons.push(`${input.unresolvedUnknowns} ${input.unresolvedUnknowns === 1 ? 'field needs' : 'fields need'} verification`);
   }

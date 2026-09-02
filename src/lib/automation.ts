@@ -80,8 +80,9 @@ export function decideReverificationWork(input: {
   staleDays: number;
   upcomingDays: number;
   highPriority?: boolean;
+  dueAt?: Date | null;
 }): FacilityWorkDecision {
-  if (!input.lastVerifiedAt) {
+  if (!input.lastVerifiedAt && !input.dueAt) {
     return {
       workType: 'reverification',
       priority: input.highPriority ? 'important' : 'attention',
@@ -90,7 +91,7 @@ export function decideReverificationWork(input: {
     };
   }
 
-  const dueAt = addUtcDays(input.lastVerifiedAt, input.staleDays);
+  const dueAt = input.dueAt ?? addUtcDays(input.lastVerifiedAt!, input.staleDays);
   const daysUntilDue = Math.ceil((dueAt.getTime() - input.now.getTime()) / dayMs);
   if (daysUntilDue > input.upcomingDays) return null;
   if (daysUntilDue <= 0) {
