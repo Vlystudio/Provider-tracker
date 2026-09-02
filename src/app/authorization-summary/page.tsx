@@ -31,7 +31,7 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
   try {
     records = await listAuthorizationsForPrincipal(principal);
   } catch {
-    loadError = 'Authorizations could not be loaded. Try again or ask IT to check the database service.';
+    loadError = 'Tracking records could not be loaded. Try again or ask IT to check the database service.';
   }
 
   const filtered = records.filter((record) => {
@@ -49,11 +49,11 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
     <AppShell user={principal} dataMode={getResolvedDataMode()} statusMessage={loadError}>
       <PageHeader
         eyebrow="Operations"
-        title="Authorizations"
-        summary={principal.role === 'admin' ? 'Review and update authorization records across the team.' : 'Review and update the authorization records assigned to you.'}
+        title="Tracking Records"
+        summary={principal.role === 'admin' ? 'Review and update tracking records across the team.' : 'Review and update the tracking records assigned to you.'}
       />
 
-      <form className="filter-bar" method="get" action="/authorization-summary" aria-label="Authorization filters">
+      <form className="filter-bar" method="get" action="/tracking-records" aria-label="Tracking record filters">
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem]">
           <label className="form-label">
             Search
@@ -70,9 +70,9 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
           </label>
         </div>
         <div className="filter-actions">
-          <ResultsSummary count={filtered.length} noun="authorization" activeFilters={activeFilters} />
+          <ResultsSummary count={filtered.length} noun="tracking record" activeFilters={activeFilters} />
           <div className="flex gap-2">
-            {activeFilters ? <Link className="button button-secondary" href="/authorization-summary">Clear</Link> : null}
+            {activeFilters ? <Link className="button button-secondary" href="/tracking-records">Clear</Link> : null}
             <button className="button button-primary" type="submit">Apply</button>
           </div>
         </div>
@@ -105,7 +105,7 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
                         <td>{record.memberZip ?? 'Not recorded'}</td>
                         <td><StatusBadge tone={statusTone(record.status)}>{statusLabel(record.status)}</StatusBadge></td>
                         <td className="text-right">
-                          <Link className="button-link" href={`/authorization-summary?id=${record.id}`}>Open</Link>
+                          <Link className="button-link" href={`/tracking-records?id=${record.id}`}>Open</Link>
                         </td>
                       </tr>
                     ))}
@@ -114,7 +114,7 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
               </div>
             ) : (
               <div className="p-5">
-                <EmptyState title="No matching authorizations" description="Clear one or more filters and try again." action={<Link className="button button-secondary" href="/authorization-summary">Clear filters</Link>} />
+                <EmptyState title="No matching tracking records" description="Clear one or more filters and try again." action={<Link className="button button-secondary" href="/tracking-records">Clear filters</Link>} />
               </div>
             )}
           </section>
@@ -123,7 +123,7 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
             <section className="panel p-5" aria-labelledby="authorization-detail-heading">
               <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
                 <div>
-                  <p className="page-kicker">Selected authorization</p>
+                  <p className="page-kicker">Selected tracking record</p>
                   <h2 id="authorization-detail-heading" className="mt-1 text-xl font-semibold text-slate-950">{selected.trackingId}</h2>
                 </div>
                 <StatusBadge tone={statusTone(selected.status)}>{statusLabel(selected.status)}</StatusBadge>
@@ -144,8 +144,8 @@ export default async function AuthorizationSummaryPage({ searchParams }: { searc
         </div>
       ) : !loadError ? (
         <EmptyState
-          title="No authorizations assigned"
-          description={principal.role === 'admin' ? 'Authorization records will appear after data is imported or entered.' : 'You do not have any authorization records assigned to you.'}
+          title="No tracking records assigned"
+          description={principal.role === 'admin' ? 'Tracking records will appear after data is imported or entered.' : 'You do not have any tracking records assigned to you.'}
           action={<Link className="button button-secondary" href="/provider-search">Search providers</Link>}
         />
       ) : null}

@@ -6,7 +6,7 @@ export const statCards = [
 ];
 
 export const quickActions = [
-  { label: 'Start authorization', href: '/authorization-summary', accent: 'bg-slate-900 text-white' },
+  { label: 'Open tracking records', href: '/tracking-records', accent: 'bg-slate-900 text-white' },
   { label: 'Provider search', href: '/provider-search', accent: 'bg-sky-100 text-sky-900' },
   { label: 'Review queue', href: '/review-queue', accent: 'bg-amber-100 text-amber-900' },
 ];

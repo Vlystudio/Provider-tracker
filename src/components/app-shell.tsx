@@ -12,7 +12,7 @@ import { NotificationIndicator } from './notification-indicator';
 const navItems = [
   { label: 'Dashboard', href: '/', permission: 'app:access', section: 'Workspace' },
   { label: 'Provider Search', href: '/provider-search', permission: 'operations:read', section: 'Operations' },
-  { label: 'Authorizations', href: '/authorization-summary', permission: 'operations:read', section: 'Operations' },
+  { label: 'Tracking Records', href: '/tracking-records', permission: 'operations:read', section: 'Operations' },
   { label: 'Enter Calls', href: '/new-call', permission: 'operations:write', section: 'Operations' },
   { label: 'Call Log', href: '/call-log', permission: 'operations:read', section: 'Operations' },
   { label: 'Review Queue', href: '/review-queue', permission: 'operations:read', section: 'Operations' },

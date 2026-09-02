@@ -28,6 +28,7 @@ describe('access control policy', () => {
     expect(permissionForPage('/reports/weekly')).toBe('reports:read');
     expect(permissionForPage('/audit')).toBe('audit:read');
     expect(permissionForPage('/provider-search')).toBe('operations:read');
+    expect(permissionForPage('/tracking-records')).toBe('operations:read');
     expect(permissionForPage('/notifications')).toBe('notifications:read');
     expect(permissionForPage('/work')).toBe('work:read');
     expect(permissionForPage('/changes')).toBe('changes:read');

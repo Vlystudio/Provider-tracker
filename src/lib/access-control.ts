@@ -64,6 +64,7 @@ export function permissionForPage(pathname: string): Permission | null {
   if (
     pathname.startsWith('/call-log') ||
     pathname.startsWith('/provider-search') ||
+    pathname.startsWith('/tracking-records') ||
     pathname.startsWith('/authorization-summary') ||
     pathname.startsWith('/review-queue') ||
     pathname.startsWith('/facilities')

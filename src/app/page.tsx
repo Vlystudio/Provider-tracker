@@ -113,7 +113,7 @@ export default async function HomePage() {
       ]
     : [
         { label: 'Open work inbox', href: '/work' },
-        { label: 'Open authorizations', href: '/authorization-summary' },
+        { label: 'Open tracking records', href: '/tracking-records' },
         { label: 'Search providers', href: '/provider-search' },
         { label: 'Open review queue', href: '/review-queue' },
       ];

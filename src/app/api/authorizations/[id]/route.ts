@@ -31,7 +31,7 @@ export async function GET(request: Request, context: AuthorizationRouteContext) 
     const record = await getAuthorizationForPrincipal(principal, id);
     return record
       ? Response.json({ authorization: record })
-      : Response.json({ error: 'Authorization was not found.' }, { status: 404 });
+      : Response.json({ error: 'Tracking record was not found.' }, { status: 404 });
   } catch (error) {
     return authorizationErrorResponse(error) ??
       (error instanceof ZodError ? invalidInput(error) : Response.json({ error: 'Request failed.' }, { status: 500 }));
@@ -48,7 +48,7 @@ export async function PATCH(request: Request, context: AuthorizationRouteContext
     const record = await updateAuthorizationForPrincipal(principal, id, patch, request);
     return record
       ? Response.json({ authorization: record })
-      : Response.json({ error: 'Authorization was not found.' }, { status: 404 });
+      : Response.json({ error: 'Tracking record was not found.' }, { status: 404 });
   } catch (error) {
     return authorizationErrorResponse(error) ??
       requestSecurityErrorResponse(error) ??
@@ -66,7 +66,7 @@ export async function DELETE(request: Request, context: AuthorizationRouteContex
     const deleted = await deleteAuthorizationForPrincipal(principal, id, request);
     return deleted
       ? new Response(null, { status: 204 })
-      : Response.json({ error: 'Authorization was not found.' }, { status: 404 });
+      : Response.json({ error: 'Tracking record was not found.' }, { status: 404 });
   } catch (error) {
     return authorizationErrorResponse(error) ??
       requestSecurityErrorResponse(error) ??

@@ -45,14 +45,14 @@ export function AuthorizationEditor({ record, editable }: { record: Authorizatio
       });
       const body = await response.json().catch(() => ({})) as { authorization?: AuthorizationView; error?: string };
       if (!response.ok || !body.authorization) {
-        setMessage({ tone: 'error', text: body.error ?? 'The authorization could not be saved.' });
+        setMessage({ tone: 'error', text: body.error ?? 'The tracking record could not be saved.' });
         return;
       }
 
       setCurrent({ ...body.authorization, updatedAt: new Date(body.authorization.updatedAt).toISOString() });
       setMessage({ tone: 'success', text: `${current.trackingId} was saved.` });
     } catch {
-      setMessage({ tone: 'error', text: 'The authorization could not be saved. Check the connection and try again.' });
+      setMessage({ tone: 'error', text: 'The tracking record could not be saved. Check the connection and try again.' });
     } finally {
       setPending(false);
     }
@@ -99,7 +99,7 @@ export function AuthorizationEditor({ record, editable }: { record: Authorizatio
           {pending ? 'Saving…' : 'Save changes'}
         </button>
       ) : (
-        <p className="text-sm text-slate-600">This role can view authorization details but cannot change them.</p>
+        <p className="text-sm text-slate-600">This role can view tracking record details but cannot change them.</p>
       )}
     </form>
   );
