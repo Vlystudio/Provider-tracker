@@ -10,6 +10,7 @@ import { CallLogGroups } from './call-log-groups';
 const calls: CallLogRow[] = [
   {
     id: 'call-1',
+    trackingGroupKey: 'tracking:42',
     trackingId: 'PT-42',
     provider: 'Alpha Clinic',
     outcome: 'Accepting',
@@ -20,6 +21,7 @@ const calls: CallLogRow[] = [
   },
   {
     id: 'call-2',
+    trackingGroupKey: 'tracking:42',
     trackingId: 'PT-42',
     provider: 'Beta Center',
     outcome: 'No answer',
@@ -36,7 +38,7 @@ describe('call log groups', () => {
     const { container } = render(<CallLogGroups groups={groups} />);
 
     expect(screen.getByText('PT-42')).toBeInTheDocument();
-    expect(screen.getByText('2 calls completed')).toBeInTheDocument();
+    expect(screen.getByText('2 calls recorded')).toBeInTheDocument();
     expect(screen.getByText('Alpha Clinic')).toBeInTheDocument();
     expect(screen.getByText('Beta Center')).toBeInTheDocument();
     expect(container.querySelectorAll('details')).toHaveLength(1);
@@ -52,6 +54,6 @@ describe('call log groups', () => {
     render(<CallLogGroups groups={groups} />);
 
     expect(screen.getByText('No Tracking ID recorded')).toBeInTheDocument();
-    expect(screen.getByText('1 call completed')).toBeInTheDocument();
+    expect(screen.getByText('1 call recorded')).toBeInTheDocument();
   });
 });

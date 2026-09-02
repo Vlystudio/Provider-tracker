@@ -45,4 +45,14 @@ describe('call log grouping', () => {
       ],
     }]);
   });
+
+  it('keeps unrelated legacy calls without Tracking IDs in separate groups when a stable group key is supplied', () => {
+    const groups = groupCallsByTrackingId([
+      { id: 'call-1', trackingId: 'Not recorded', trackingGroupKey: 'call:call-1' },
+      { id: 'call-2', trackingId: 'Not recorded', trackingGroupKey: 'call:call-2' },
+    ]);
+
+    expect(groups).toHaveLength(2);
+    expect(groups.map((group) => group.calls[0]?.id)).toEqual(['call-1', 'call-2']);
+  });
 });

@@ -11,7 +11,7 @@ function statusTone(status: string): StatusTone {
 }
 
 function callCountLabel(count: number) {
-  return `${count} ${count === 1 ? 'call' : 'calls'} completed`;
+  return `${count} ${count === 1 ? 'call' : 'calls'} recorded`;
 }
 
 export function CallLogGroups({ groups }: { groups: CallLogGroup<CallLogRow>[] }) {

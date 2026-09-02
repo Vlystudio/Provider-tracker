@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   auditEvents,
@@ -20,7 +20,7 @@ import { deriveResult, stableHash, weekStartForDate } from '@/lib/import/normali
 import { formatTrackingId } from '@/lib/tracking-id';
 import { assertPermission, type Principal } from './authorization';
 import { buildAuditEvent } from './audit';
-import { requireDatabaseClient } from './database';
+import { getDatabasePool, requireDatabaseClient } from './database';
 
 const availabilityStatuses = ['yes', 'no', 'unknown', 'not_applicable'] as const;
 const treatmentStatuses = ['yes', 'no', 'unknown', 'unable_to_tell_without_triage', 'not_applicable'] as const;
@@ -69,6 +69,7 @@ export type CallEntryOption = { id: string; label: string; phone?: string | null
 
 export type CallLogRow = {
   id: string;
+  trackingGroupKey: string;
   trackingId: string;
   provider: string;
   outcome: string;
@@ -76,6 +77,31 @@ export type CallLogRow = {
   date: string;
   calledAt: string;
   caller: string;
+};
+
+export const callLogStatuses = ['Complete', 'Follow-up'] as const;
+
+export const callLogInputSchema = z.object({
+  query: z.string().trim().max(200).optional().transform((value) => value || undefined),
+  status: z.enum(callLogStatuses).optional(),
+  from: z.string().date().optional(),
+  to: z.string().date().optional(),
+  sort: z.enum(['date_desc', 'date_asc', 'provider']).default('date_desc'),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+}).strict().refine((value) => !value.from || !value.to || value.from <= value.to, {
+  path: ['from'],
+  message: 'The start date must be on or before the end date.',
+});
+
+export type CallLogInput = z.input<typeof callLogInputSchema>;
+
+export type CallLogPage = {
+  rows: CallLogRow[];
+  totalCalls: number;
+  totalGroups: number;
+  page: number;
+  pageSize: number;
 };
 
 export class CallRecordNotFoundError extends Error {
@@ -148,32 +174,154 @@ export async function getCallEntryOptions(principal: Principal) {
   };
 }
 
-export async function listCallLog(principal: Principal): Promise<CallLogRow[]> {
-  assertPermission(principal, 'operations:read');
-  const rows = await requireDatabaseClient().select({
-    id: calls.id,
-    authorizationId: authorizations.id,
-    facility: calls.facilitySnapshot,
-    resultCode: calls.resultCode,
-    resultPhrase: calls.resultPhrase,
-    callAt: calls.callAt,
-    callerName: sql<string>`coalesce(${users.displayName}, ${users.name}, ${calls.callerInitialsSnapshot}, 'Not recorded')`,
-  }).from(calls)
-    .leftJoin(authorizations, eq(calls.authorizationId, authorizations.id))
-    .leftJoin(users, eq(calls.callerUserId, users.id))
-    .orderBy(desc(calls.callAt))
-    .limit(500);
+type CallLogDatabaseRow = {
+  id: string;
+  tracking_group_key: string;
+  authorization_id: string | null;
+  facility: string;
+  result_code: string;
+  result_phrase: string;
+  call_at: Date;
+  caller_name: string;
+};
 
-  return rows.map((row) => ({
-    id: row.id,
-    trackingId: row.authorizationId ? formatTrackingId(row.authorizationId) : 'Not recorded',
-    provider: row.facility,
-    outcome: row.resultPhrase,
-    status: row.resultCode === 'unable_to_contact' ? 'Follow-up' : 'Complete',
-    date: row.callAt.toISOString().slice(0, 10),
-    calledAt: row.callAt.toISOString(),
-    caller: row.callerName,
-  }));
+type CallLogCountRow = {
+  total_calls: string;
+  total_groups: string;
+};
+
+export async function listCallLog(
+  principal: Principal,
+  input: CallLogInput = {},
+): Promise<CallLogPage> {
+  assertPermission(principal, 'operations:read');
+  const value = callLogInputSchema.parse(input);
+  const pool = getDatabasePool();
+  if (!pool) throw new Error('Database configuration is required for the call log.');
+
+  const groupOrderSql = value.sort === 'provider'
+    ? 'group_provider ASC, latest_call_at DESC, tracking_group_key'
+    : value.sort === 'date_asc'
+      ? 'earliest_call_at ASC, tracking_group_key'
+      : 'latest_call_at DESC, tracking_group_key';
+  const callOrderSql = value.sort === 'provider'
+    ? 'fc.facility ASC, fc.call_at DESC, fc.id'
+    : value.sort === 'date_asc'
+      ? 'fc.call_at ASC, fc.id'
+      : 'fc.call_at DESC, fc.id';
+  const parameters = [
+    value.query ? `%${value.query}%` : null,
+    value.status ?? null,
+    value.from ?? null,
+    value.to ?? null,
+  ];
+  const baseCallsSql = `
+    SELECT
+      c.id,
+      CASE
+        WHEN a.id IS NULL THEN 'call:' || c.id::text
+        ELSE 'tracking:' || a.id::text
+      END AS tracking_group_key,
+      a.id::text AS authorization_id,
+      c.facility_snapshot AS facility,
+      c.result_code::text AS result_code,
+      c.result_phrase,
+      c.call_at,
+      COALESCE(u.display_name, u.name, c.caller_initials_snapshot, 'Not recorded') AS caller_name,
+      c.lob_snapshot,
+      c.specialty_snapshot,
+      c.diagnosis_code_snapshot,
+      c.diagnosis_description_snapshot
+    FROM calls c
+    LEFT JOIN authorizations a ON a.id = c.authorization_id
+    LEFT JOIN users u ON u.id = c.caller_user_id`;
+  const callFiltersSql = `
+    ($1::text IS NULL OR concat_ws(' ',
+        CASE WHEN bc.authorization_id IS NULL THEN NULL ELSE 'PT-' || upper(bc.authorization_id) END,
+        bc.facility,
+        bc.result_phrase,
+        bc.lob_snapshot,
+        bc.specialty_snapshot,
+        bc.diagnosis_code_snapshot,
+        bc.diagnosis_description_snapshot,
+        bc.caller_name
+      ) ILIKE $1)
+      AND ($2::text IS NULL OR CASE
+        WHEN bc.result_code = 'unable_to_contact' THEN 'Follow-up'
+        ELSE 'Complete'
+      END = $2)
+      AND ($3::date IS NULL OR bc.call_at >= $3::date)
+      AND ($4::date IS NULL OR bc.call_at < $4::date + interval '1 day')`;
+
+  const [countResult, rowResult] = await Promise.all([
+    pool.query<CallLogCountRow>(`
+      WITH base_calls AS (${baseCallsSql}),
+      matched_group_keys AS (
+        SELECT DISTINCT bc.tracking_group_key
+        FROM base_calls bc
+        WHERE ${callFiltersSql}
+      )
+      SELECT
+        count(*)::text AS total_calls,
+        count(DISTINCT bc.tracking_group_key)::text AS total_groups
+      FROM base_calls bc
+      JOIN matched_group_keys mg ON mg.tracking_group_key = bc.tracking_group_key`, parameters),
+    pool.query<CallLogDatabaseRow>(`
+      WITH base_calls AS (${baseCallsSql}),
+      ranked_groups AS (
+        SELECT
+          bc.tracking_group_key,
+          min(bc.call_at) AS earliest_call_at,
+          max(bc.call_at) AS latest_call_at,
+          min(bc.facility) AS group_provider
+        FROM base_calls bc
+        WHERE ${callFiltersSql}
+        GROUP BY bc.tracking_group_key
+      ),
+      paged_groups AS (
+        SELECT
+          tracking_group_key,
+          row_number() OVER (ORDER BY ${groupOrderSql}) AS group_position
+        FROM ranked_groups
+        ORDER BY ${groupOrderSql}
+        LIMIT $5 OFFSET $6
+      )
+      SELECT
+        fc.id,
+        fc.tracking_group_key,
+        fc.authorization_id,
+        fc.facility,
+        fc.result_code,
+        fc.result_phrase,
+        fc.call_at,
+        fc.caller_name
+      FROM paged_groups pg
+      JOIN base_calls fc ON fc.tracking_group_key = pg.tracking_group_key
+      ORDER BY pg.group_position, ${callOrderSql}`, [
+      ...parameters,
+      value.pageSize,
+      (value.page - 1) * value.pageSize,
+    ]),
+  ]);
+  const counts = countResult.rows[0];
+
+  return {
+    rows: rowResult.rows.map((row) => ({
+      id: row.id,
+      trackingGroupKey: row.tracking_group_key,
+      trackingId: row.authorization_id ? formatTrackingId(row.authorization_id) : 'Not recorded',
+      provider: row.facility,
+      outcome: row.result_phrase,
+      status: row.result_code === 'unable_to_contact' ? 'Follow-up' : 'Complete',
+      date: row.call_at.toISOString().slice(0, 10),
+      calledAt: row.call_at.toISOString(),
+      caller: row.caller_name,
+    })),
+    totalCalls: Number(counts?.total_calls ?? 0),
+    totalGroups: Number(counts?.total_groups ?? 0),
+    page: value.page,
+    pageSize: value.pageSize,
+  };
 }
 
 export async function createCallRecord(

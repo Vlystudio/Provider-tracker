@@ -4,10 +4,22 @@ import { CallLogGroups } from '@/components/call-log-groups';
 import { EmptyState, InlineMessage, PageHeader } from '@/components/ui';
 import { can } from '@/lib/access-control';
 import { groupCallsByTrackingId } from '@/lib/call-log';
+import { callLogStatuses } from '@/server/call-service';
 import { getAppDataAdapter, getResolvedDataMode } from '@/server/data-layer';
 import { requirePagePermission } from '@/server/authorization';
 
-type CallLogSearchParams = { q?: string; status?: string; from?: string; to?: string; sort?: string; saved?: string };
+type CallLogSearchParams = { q?: string; status?: string; from?: string; to?: string; sort?: string; saved?: string; page?: string };
+
+function pageHref(params: CallLogSearchParams, page: number) {
+  const query = new URLSearchParams();
+  if (params.q) query.set('q', params.q);
+  if (params.status) query.set('status', params.status);
+  if (params.from) query.set('from', params.from);
+  if (params.to) query.set('to', params.to);
+  if (params.sort) query.set('sort', params.sort);
+  query.set('page', String(page));
+  return `/call-log?${query.toString()}`;
+}
 
 export default async function CallLogPage({ searchParams }: { searchParams?: Promise<CallLogSearchParams> }) {
   const principal = await requirePagePermission('operations:read');
@@ -17,24 +29,22 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
   const from = params.from?.trim() ?? '';
   const to = params.to?.trim() ?? '';
   const sort = params.sort === 'date_asc' || params.sort === 'provider' ? params.sort : 'date_desc';
+  const page = Math.max(1, Number.parseInt(params.page ?? '1', 10) || 1);
   const adapter = getAppDataAdapter();
   const dataMode = getResolvedDataMode();
-  const state = await adapter.getCallLog(principal, { q: query, status, from, to, sort });
-  const sourceRows = state.data ?? [];
-  const statuses = [...new Set(sourceRows.map((row) => row.status))].sort();
-  const rows = sourceRows
-    .filter((row) => {
-      const searchable = `${row.trackingId} ${row.provider} ${row.outcome}`.toLowerCase();
-      return (!query || searchable.includes(query))
-        && (!status || row.status === status)
-        && (!from || row.date >= from)
-        && (!to || row.date <= to);
-    })
-    .sort((left, right) => {
-      if (sort === 'provider') return left.provider.localeCompare(right.provider);
-      return sort === 'date_asc' ? left.date.localeCompare(right.date) : right.date.localeCompare(left.date);
-    });
+  const state = await adapter.getCallLog(principal, {
+    query: query || undefined,
+    status: callLogStatuses.includes(status as (typeof callLogStatuses)[number]) ? status as (typeof callLogStatuses)[number] : undefined,
+    from: from || undefined,
+    to: to || undefined,
+    sort,
+    page,
+    pageSize: 25,
+  });
+  const data = state.data ?? { rows: [], totalCalls: 0, totalGroups: 0, page, pageSize: 25 };
+  const rows = data.rows;
   const callGroups = groupCallsByTrackingId(rows);
+  const totalPages = Math.max(1, Math.ceil(data.totalGroups / data.pageSize));
   const activeFilters = [query, status, from, to, sort !== 'date_desc' ? sort : ''].filter(Boolean).length;
 
   return (
@@ -57,7 +67,7 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
             Status
             <select className="form-control" name="status" defaultValue={status}>
               <option value="">All statuses</option>
-              {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
+              {callLogStatuses.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
           <label className="form-label">
@@ -79,7 +89,7 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
         </div>
         <div className="filter-actions">
           <p className="text-sm text-slate-600" role="status">
-            {callGroups.length} {callGroups.length === 1 ? 'tracking group' : 'tracking groups'}, {rows.length} {rows.length === 1 ? 'call' : 'calls'}
+            {data.totalGroups} {data.totalGroups === 1 ? 'tracking group' : 'tracking groups'}, {data.totalCalls} {data.totalCalls === 1 ? 'call' : 'calls'}{activeFilters ? ' in matching groups' : ''}
             {activeFilters ? `, ${activeFilters} active ${activeFilters === 1 ? 'filter' : 'filters'}` : ''}
           </p>
           <div className="flex gap-2">
@@ -96,6 +106,13 @@ export default async function CallLogPage({ searchParams }: { searchParams?: Pro
             <p className="text-xs text-slate-500">Select a Tracking ID to view its calls</p>
           </div>
           <CallLogGroups groups={callGroups} />
+          {totalPages > 1 ? (
+            <nav className="flex items-center justify-between border-t border-slate-300 px-4 py-3" aria-label="Call log pages">
+              {data.page > 1 ? <Link className="button button-secondary" href={pageHref(params, data.page - 1)}>Previous</Link> : <span />}
+              <p className="text-xs text-slate-500">Page {data.page} of {totalPages}</p>
+              {data.page < totalPages ? <Link className="button button-secondary" href={pageHref(params, data.page + 1)}>Next</Link> : <span />}
+            </nav>
+          ) : null}
         </section>
       ) : state.ok ? (
         <EmptyState

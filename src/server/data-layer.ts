@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { groupCallsByTrackingId } from '@/lib/call-log';
 import { getDatabaseHealth, getDatabaseClient } from './database';
 import { getDemoCallLog, getDemoDashboard, getDemoFacilities, getDemoProviderResults, getDemoReports, getDemoReviewQueue } from './demo-data';
 import { getDataMode, getServerConfig } from './config';
 import { assertPermission, type Principal } from './authorization';
-import { listCallLog, type CallLogRow } from './call-service';
+import { callLogInputSchema, listCallLog, type CallLogInput, type CallLogPage, type CallLogRow } from './call-service';
 import { providerSearchInputSchema, searchProviders, type ProviderSearchPage } from './provider-search-service';
 import { facilityDirectoryInputSchema, listFacilities, type FacilityDirectoryPage } from './facility-directory-service';
 import { getOperationalReport, reportingInputSchema, type OperationalReport } from './provider-reporting-service';
@@ -24,7 +25,7 @@ export type DashboardPageState = DataState<ReturnType<typeof getDemoDashboard>>;
 export interface AppDataAdapter {
   getDashboard(principal: Principal): Promise<DashboardPageState>;
   getProviderSearch(principal: Principal, input: z.input<typeof providerSearchInputSchema>): Promise<DataState<ProviderSearchPage>>;
-  getCallLog(principal: Principal, input?: Record<string, string | number>): Promise<DataState<CallLogRow[]>>;
+  getCallLog(principal: Principal, input?: CallLogInput): Promise<DataState<CallLogPage>>;
   getFacilities(principal: Principal, input?: z.input<typeof facilityDirectoryInputSchema>): Promise<DataState<FacilityDirectoryPage>>;
   getReviewQueue(principal: Principal): Promise<DataState<ReturnType<typeof getDemoReviewQueue>>>;
   getReports(principal: Principal, input: ReportRange): Promise<DataState<OperationalReport>>;
@@ -79,19 +80,59 @@ class DemoDataAdapter implements AppDataAdapter {
     };
   }
 
-  async getCallLog(principal: Principal): Promise<DataState<CallLogRow[]>> {
+  async getCallLog(principal: Principal, input: CallLogInput = {}): Promise<DataState<CallLogPage>> {
     assertPermission(principal, 'operations:read');
+    const parsed = callLogInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        dataMode: 'demo',
+        databaseAvailable: false,
+        message: parsed.error.issues[0]?.message ?? 'Invalid call-log filters.',
+        data: { rows: [], totalCalls: 0, totalGroups: 0, page: 1, pageSize: 25 },
+      };
+    }
+    const value = parsed.data;
+    const sourceRows: CallLogRow[] = getDemoCallLog().map((row, index) => ({
+      ...row,
+      id: `demo-call-${index + 1}`,
+      trackingGroupKey: row.trackingId || `demo-call-${index + 1}`,
+      calledAt: `${row.date}T14:00:00.000Z`,
+      caller: 'Demo user',
+      status: row.status === 'Retry due' ? ('Follow-up' as const) : ('Complete' as const),
+    }));
+    const matchingRows = sourceRows.filter((row) => {
+      const searchable = `${row.trackingId} ${row.provider} ${row.outcome} ${row.caller}`.toLowerCase();
+      return (!value.query || searchable.includes(value.query.toLowerCase()))
+        && (!value.status || row.status === value.status)
+        && (!value.from || row.date >= value.from)
+        && (!value.to || row.date <= value.to);
+    }).sort((left, right) => {
+      if (value.sort === 'provider') return left.provider.localeCompare(right.provider);
+      return value.sort === 'date_asc'
+        ? left.calledAt.localeCompare(right.calledAt)
+        : right.calledAt.localeCompare(left.calledAt);
+    });
+    const groups = groupCallsByTrackingId(matchingRows);
+    const pageGroups = groups.slice((value.page - 1) * value.pageSize, value.page * value.pageSize);
+    const pageGroupKeys = pageGroups.map((group) => group.calls[0]?.trackingGroupKey).filter((key): key is string => Boolean(key));
+    const matchedGroupKeys = new Set(groups.map((group) => group.calls[0]?.trackingGroupKey).filter((key): key is string => Boolean(key)));
+    const rows = pageGroupKeys.flatMap((groupKey) => sourceRows
+      .filter((row) => row.trackingGroupKey === groupKey)
+      .sort((left, right) => value.sort === 'date_asc'
+        ? left.calledAt.localeCompare(right.calledAt)
+        : right.calledAt.localeCompare(left.calledAt)));
     return {
       ok: true,
       dataMode: 'demo',
       databaseAvailable: false,
-      data: getDemoCallLog().map((row, index) => ({
-        ...row,
-        id: `demo-call-${index + 1}`,
-        calledAt: `${row.date}T14:00:00.000Z`,
-        caller: 'Demo user',
-        status: row.status === 'Retry due' ? ('Follow-up' as const) : ('Complete' as const),
-      })),
+      data: {
+        rows,
+        totalCalls: sourceRows.filter((row) => matchedGroupKeys.has(row.trackingGroupKey)).length,
+        totalGroups: groups.length,
+        page: value.page,
+        pageSize: value.pageSize,
+      },
     };
   }
 
@@ -196,27 +237,38 @@ class DatabaseDataAdapter implements AppDataAdapter {
     }
   }
 
-  async getCallLog(principal: Principal): Promise<DataState<CallLogRow[]>> {
+  async getCallLog(principal: Principal, input: CallLogInput = {}): Promise<DataState<CallLogPage>> {
     assertPermission(principal, 'operations:read');
+    const parsed = callLogInputSchema.safeParse(input);
+    const emptyPage: CallLogPage = {
+      rows: [],
+      totalCalls: 0,
+      totalGroups: 0,
+      page: parsed.success ? parsed.data.page : 1,
+      pageSize: parsed.success ? parsed.data.pageSize : 25,
+    };
+    if (!parsed.success) {
+      return { ok: false, dataMode: 'database', databaseAvailable: true, message: parsed.error.issues[0]?.message, data: emptyPage };
+    }
     const health = await getDatabaseHealth();
     if (!health.ok) {
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: [] };
+      return { ok: false, dataMode: 'database', databaseAvailable: false, message: health.message, data: emptyPage };
     }
 
     const db = getDatabaseClient();
     if (!db) {
-      return { ok: false, dataMode: 'database', databaseAvailable: false, message: 'Database configuration is missing.', data: [] };
+      return { ok: false, dataMode: 'database', databaseAvailable: false, message: 'Database configuration is missing.', data: emptyPage };
     }
 
     try {
-      return { ok: true, dataMode: 'database', databaseAvailable: true, data: await listCallLog(principal) };
+      return { ok: true, dataMode: 'database', databaseAvailable: true, data: await listCallLog(principal, parsed.data) };
     } catch {
       return {
         ok: false,
         dataMode: 'database',
         databaseAvailable: false,
         message: 'The call log could not be loaded.',
-        data: [],
+        data: emptyPage,
       };
     }
   }
